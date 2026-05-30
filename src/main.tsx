@@ -62,6 +62,7 @@ function App() {
   });
   const [grades, setGrades] = useState<GradeCache>({});
   const [studentStatus, setStudentStatus] = useState<StudentStatus | null>(null);
+  const [activeDetail, setActiveDetail] = useState<{ tableKey: string; columnKey: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -116,6 +117,12 @@ function App() {
   const visibleColumns = useMemo(() => {
     return grades[exam]?.tables ?? [];
   }, [grades, exam]);
+
+  const handleToggleDetail = (tableKey: string, columnKey: string) => {
+    setActiveDetail((current) =>
+      current?.tableKey === tableKey && current.columnKey === columnKey ? null : { tableKey, columnKey }
+    );
+  };
 
   async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -201,28 +208,55 @@ function App() {
 
       {error && <InlineError message={error} />}
 
-      {studentStatus && <StatusBanner status={studentStatus} />}
-
       {loading && <div className="loading">Carregando notas...</div>}
 
       {!loading && visibleColumns.length > 0 && (
         <section className="grade-list">
-          {visibleColumns.filter(shouldShowTable).map((table) => (table.kind === 'summary' ? <SummaryTable table={table} key={table.key} /> : <GradeCard table={table} key={table.key} />))}
+          {visibleColumns.filter(shouldShowTable).map((table) =>
+            table.kind === 'summary' ? (
+              <SummaryTable table={table} key={table.key} />
+            ) : (
+              <GradeCard
+                table={table}
+                key={table.key}
+                activeDetail={activeDetail}
+                onToggleDetail={handleToggleDetail}
+              />
+            )
+          )}
         </section>
       )}
     </main>
   );
 }
 
-function GradeCard({ table }: { table: GradeTable }) {
+function GradeCard({
+  table,
+  activeDetail,
+  onToggleDetail,
+}: {
+  table: GradeTable;
+  activeDetail: { tableKey: string; columnKey: string } | null;
+  onToggleDetail: (tableKey: string, columnKey: string) => void;
+}) {
+  const activeKey = activeDetail?.tableKey === table.key ? activeDetail.columnKey : null;
   const comments = feedbackComments(table);
   return (
     <article className={`grade-table ${table.kind}`}>
       <header>
-        <h2>{table.label}</h2>
+        <div>
+          <h2>{table.label}</h2>
+        </div>
       </header>
-      {table.columns.filter(shouldShowColumn).map((column) => (
-        <GradeRow column={column} key={`${table.key}-${column.key}`} />
+      {table.columns.filter((column) => shouldShowMainColumn(column, table)).map((column) => (
+        <div key={`${table.key}-${column.key}`}>
+          <GradeRow
+            column={column}
+            expanded={activeKey === column.key}
+            onToggle={() => onToggleDetail(table.key, column.key)}
+          />
+          {activeKey === column.key && <GradeDetailPanel table={table} mainColumn={column} />}
+        </div>
       ))}
       {comments.length > 0 && (
         <section className="feedback-list">
@@ -243,35 +277,59 @@ function SummaryTable({ table }: { table: GradeTable }) {
   return (
     <article className="grade-table summary">
       <header>
-        <h2>Média AB1</h2>
+        <h2>{table.label}</h2>
       </header>
       <div className="summary-grid">
-        {table.columns.filter(shouldShowColumn).map((column) => (
-          <section className={`summary-score ${scoreTone(column)}`} key={`${table.key}-${column.key}`}>
-            <span>{normalized(column.label).includes('prova') ? 'Nota da prova' : 'Média da AB'}</span>
-            <strong>{displayValue(column)}</strong>
-            {column.comment && (
-              <p>
-                <MessageSquareText size={15} />
-                {column.comment}
-              </p>
-            )}
-          </section>
-        ))}
+        {table.columns.filter(shouldShowColumn).map((column) => {
+          const isAverage = isAverageColumn(column);
+          return (
+            <section
+              className={`summary-score ${isAverage ? 'highlight' : ''} ${isAverage ? scoreTone(column) : ''}`}
+              key={`${table.key}-${column.key}`}
+            >
+              <span>{normalized(column.label).includes('prova') ? 'Nota da prova' : isAverage ? 'Média da AB' : column.label}</span>
+              <strong>{displayValue(column)}</strong>
+              {column.comment && (
+                <p>
+                  <MessageSquareText size={15} />
+                  {column.comment}
+                </p>
+              )}
+            </section>
+          );
+        })}
       </div>
     </article>
   );
 }
 
-function GradeRow({ column }: { column: Column }) {
+function GradeRow({
+  column,
+  expanded,
+  onToggle,
+}: {
+  column: Column;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const clickable = isGradeColumn(column);
   return (
-    <section className={`grade-row ${scoreTone(column)}`}>
-      <div>
-        <span>{column.label}</span>
-        <strong>{displayValue(column)}</strong>
-      </div>
+    <section className={`grade-row ${expanded ? 'expanded' : ''} ${clickable ? 'clickable' : ''} ${scoreTone(column)}`}>
+      <button
+        type="button"
+        className="grade-row-trigger"
+        onClick={clickable ? onToggle : undefined}
+        aria-expanded={expanded}
+        disabled={!clickable}
+      >
+        <div>
+          <span>{column.label}</span>
+          <strong>{displayValue(column)}</strong>
+        </div>
+        {clickable && <ChevronRight size={18} className={expanded ? 'rotated' : ''} />}
+      </button>
       {column.comment && (
-        <p>
+        <p className="row-comment">
           <MessageSquareText size={15} />
           {column.comment}
         </p>
@@ -280,12 +338,67 @@ function GradeRow({ column }: { column: Column }) {
   );
 }
 
-function StatusBanner({ status }: { status: StudentStatus }) {
+function GradeDetailPanel({ table, mainColumn }: { table: GradeTable; mainColumn: Column }) {
+  const compositionItems = table.columns.filter(
+    (item) => shouldShowColumn(item) && item.key !== mainColumn.key && !isAverageColumn(item),
+  );
+
+  const parsedItems = compositionItems.map((item) => {
+    const obtained = parseScore(item.value);
+    const maxFromLabel = parseMaxFromLabel(item.label);
+    const maxFromValue = parseMaxFromValue(item.value);
+    const max = maxFromLabel ?? maxFromValue ?? 1;
+    const ratio = obtained !== null && max > 0 ? Math.min((obtained / max) * 100, 100) : 0;
+
+    return {
+      ...item,
+      obtained,
+      max,
+      ratio,
+    };
+  });
+
+  const comments = [mainColumn.comment, ...compositionItems.map((item) => item.comment)].filter(Boolean) as string[];
+
   return (
-    <section className={`status-banner ${status.approved ? 'approved' : 'pending'}`}>
-      <span>{status.approved ? 'Aprovado' : 'Media parcial'}</span>
-      <strong>{formatScore(status.average)}</strong>
-      <p>AB1 {formatScore(status.ab1)} + AB2 {formatScore(status.ab2)}</p>
+    <section className="detail-panel">
+      <div className="detail-header">
+        <div>
+          <span>Composição</span>
+          <strong>{mainColumn.label}</strong>
+        </div>
+        <div className="detail-score">
+          {displayValue(mainColumn)}
+          <small>nota total</small>
+        </div>
+      </div>
+      <div className="detail-items">
+        {parsedItems.map((item) => (
+          <article className="detail-item" key={item.key}>
+            <div className="detail-item-row">
+              <div>
+                <strong>{item.label}</strong>
+                <span>{item.value || '-'}</span>
+              </div>
+              {item.max ? (
+                <span className="badge">{item.obtained !== null ? `${formatScore(item.obtained)} / ${formatScore(item.max)}` : `Max ${formatScore(item.max)}`}</span>
+              ) : null}
+            </div>
+            <div className="detail-progress-bar" aria-hidden="true">
+              <div className="detail-progress-fill" style={{ width: `${item.ratio}%` }} />
+            </div>
+          </article>
+        ))}
+      </div>
+      {comments.length > 0 && (
+        <div className="comment-bubble">
+          <div className="comment-avatar">P</div>
+          <div>
+            <p>{comments[0]}</p>
+            <span>Professor</span>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -391,7 +504,32 @@ function displayValue(column: Column) {
 
 function isGradeColumn(column: Column) {
   const label = normalized(column.label);
-  return label === 'nota' || label.includes('prova') || label.includes('nota ab') || label === 'total' || label.startsWith('semana') || ['sgbd', 'dataset', 'crud', 'apresentacao'].includes(label);
+  return (
+    label === 'nota' ||
+    label.includes('prova') ||
+    label.includes('nota ab') ||
+    label === 'total' ||
+    label.startsWith('semana') ||
+    ['sgbd', 'dataset', 'crud', 'apresentacao', 'projeto'].includes(label)
+  );
+}
+
+function isAverageColumn(column: Column) {
+  const label = normalized(column.label);
+  return label.includes('média') || label.includes('media') || label.includes('média da ab') || label.includes('media da ab');
+}
+
+function parseMaxFromLabel(label: string) {
+  const match = label.match(/\[(\d+[.,]?\d*)\]/) || label.match(/\((\d+[.,]?\d*)\)/);
+  return match ? parseScore(match[1]) : null;
+}
+
+function parseMaxFromValue(value: string) {
+  if (!value.includes('/')) {
+    return null;
+  }
+  const [, max] = value.split('/').map((part) => part.trim());
+  return max ? parseScore(max) : null;
 }
 
 function formatScore(value: number) {
