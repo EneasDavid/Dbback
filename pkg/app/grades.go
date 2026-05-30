@@ -72,6 +72,7 @@ func (c *SheetsClient) GradeFor(ctx context.Context, exam string, user SessionUs
 		}
 	}
 	addAB1ScoreSum(&result)
+	addAB1ScoreAverage(&result)
 	addAB2ScoreAverage(&result)
 	if len(result.Tables) == 0 {
 		return GradeResult{}, NewHTTPError(404, "matricula nao encontrada em "+strings.ToUpper(strings.TrimSpace(exam)))
@@ -301,6 +302,91 @@ func addAB1ScoreSum(result *GradeResult) {
 		result.Tables[tableIdx].Cards = cards
 		return
 	}
+}
+
+func addAB1ScoreAverage(result *GradeResult) {
+	if strings.ToUpper(strings.TrimSpace(result.Exam)) != "AB1" {
+		return
+	}
+	for _, table := range result.Tables {
+		if table.Key == "media-ab1" || table.Kind == "ab1summary" {
+			return
+		}
+	}
+
+	total := 0.0
+	hasAny := false
+	
+	// First check for "Somatório AB" in summary
+	for _, table := range result.Tables {
+		if table.Kind != "summary" {
+			continue
+		}
+		for _, card := range table.Cards {
+			normalized := normalizeHeader(card.Label)
+			if strings.Contains(normalized, "somatorio") {
+				score, ok := parseScore(card.Value)
+				if ok {
+					total = score
+					hasAny = true
+					break
+				}
+			}
+		}
+		if hasAny {
+			break
+		}
+	}
+	
+	// If no "Somatório AB", sum all main score cards
+	if !hasAny {
+		for _, table := range result.Tables {
+			if table.Kind == "summary" || table.Kind == "ab1summary" {
+				continue
+			}
+			for _, card := range table.Cards {
+				if !ab1MainScoreCard(card) {
+					continue
+				}
+				score, ok := parseScore(card.Value)
+				if !ok {
+					continue
+				}
+				total += score
+				hasAny = true
+				break
+			}
+		}
+	}
+	
+	if !hasAny {
+		return
+	}
+	if total > 10 {
+		total = 10
+	}
+
+	result.Tables = append(result.Tables, TableResult{
+		Key:       "media-ab1",
+		Label:     "Média AB1",
+		SheetName: "Média AB1",
+		Kind:      "ab1summary",
+		Complete:  true,
+		Cards: []CardResult{
+			makeCard("media-ab1", "Média AB1", formatScore(total), "", "", nil),
+		},
+	})
+}
+
+func ab1MainScoreCard(card CardResult) bool {
+	label := normalizeHeader(card.Label)
+	return label == "nota" ||
+		label == "total" ||
+		label == "somatorio-ab" ||
+		strings.Contains(label, "somatório ab") ||
+		strings.Contains(label, "prova") ||
+		strings.Contains(label, "atividade") ||
+		strings.HasPrefix(label, "at.")
 }
 
 func addAB2ScoreAverage(result *GradeResult) {
