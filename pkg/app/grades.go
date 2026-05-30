@@ -373,7 +373,7 @@ func addAB1ScoreAverage(result *GradeResult) {
 		Kind:      "ab1summary",
 		Complete:  true,
 		Cards: []CardResult{
-			makeCard("media-ab1", "Média AB1", formatScore(total), "", "", nil),
+			makeCard("media-ab1", "", formatScore(total), "", "", nil),
 		},
 	}
 
@@ -448,7 +448,7 @@ func addAB2ScoreAverage(result *GradeResult) {
 		Kind:      "ab2summary",
 		Complete:  true,
 		Cards: []CardResult{
-			makeCard("media-ab2", "Média AB2", formatScore(total), "", "", nil),
+			makeCard("media-ab2", "", formatScore(total), "", "", nil),
 		},
 	})
 }

@@ -72,7 +72,7 @@ func TestAddAB1ScoreAverageAddsVisibleScoreCards(t *testing.T) {
 	if summary.Key != "media-ab1" || summary.Kind != "ab1summary" || summary.Label != "Média AB1" {
 		t.Fatalf("unexpected AB1 summary table: %#v", summary)
 	}
-	if len(summary.Cards) != 1 || summary.Cards[0].Label != "Média AB1" || summary.Cards[0].Value != "8,48" {
+	if len(summary.Cards) != 1 || summary.Cards[0].Label != "" || summary.Cards[0].Value != "8,48" {
 		t.Fatalf("unexpected AB1 summary card: %#v", summary.Cards)
 	}
 }
@@ -120,7 +120,7 @@ func TestAddAB2ScoreAverageAddsVisibleScoreCards(t *testing.T) {
 	if summary.Key != "media-ab2" || summary.Kind != "ab2summary" || summary.Label != "Média AB2" {
 		t.Fatalf("unexpected AB2 summary table: %#v", summary)
 	}
-	if len(summary.Cards) != 1 || summary.Cards[0].Label != "Média AB2" || summary.Cards[0].Value != "1,1" {
+	if len(summary.Cards) != 1 || summary.Cards[0].Label != "" || summary.Cards[0].Value != "1,1" {
 		t.Fatalf("unexpected AB2 summary card: %#v", summary.Cards)
 	}
 }
