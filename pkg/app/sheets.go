@@ -30,6 +30,7 @@ type TableResult struct {
 	Label     string         `json:"label"`
 	SheetName string         `json:"sheetName"`
 	Kind      string         `json:"kind"`
+	Complete  bool           `json:"complete"`
 	Columns   []ColumnResult `json:"columns"`
 }
 
@@ -173,7 +174,7 @@ func (c *SheetsClient) gradeTableFor(ctx context.Context, table TableConfig, use
 				Comment: comment,
 			})
 		}
-		return TableResult{Key: table.Key, Label: table.Label, SheetName: sheetName, Kind: table.Kind, Columns: columns}, true, nil
+		return TableResult{Key: table.Key, Label: table.Label, SheetName: sheetName, Kind: table.Kind, Complete: tableComplete(grid, table), Columns: columns}, true, nil
 	}
 	return TableResult{}, false, nil
 }
@@ -197,10 +198,10 @@ func (c *SheetsClient) enrichActivityScore(ctx context.Context, result *TableRes
 		if !matchesUser(row, nameIdx, matriculaIdx, user) {
 			continue
 		}
-		comment := ""
-		if rowIdx < len(grid.rowNotes) {
-			comment = noteAt(grid.rowNotes[rowIdx], scoreIdx)
-		}
+			comment := ""
+			if rowIdx < len(grid.rowNotes) {
+				comment = noteAt(grid.rowNotes[rowIdx], scoreIdx)
+			}
 		if comment == "" {
 			comment = noteAt(grid.notes, scoreIdx)
 		}
@@ -220,12 +221,7 @@ func activityTableFor(grid *sheetGrid, table TableConfig, user SessionUser) Tabl
 			if normalizePerson(value) != normalizePerson(user.Name) {
 				continue
 			}
-			group := table.Label
-			if colIdx < len(grid.headers) && strings.TrimSpace(grid.headers[colIdx]) != "" {
-				group = grid.headers[colIdx]
-			}
 			columns := []ColumnResult{
-				{Key: "grupo", Label: "Grupo", Value: group, Comment: noteAt(grid.notes, colIdx)},
 				{Key: "nome", Label: "Nome do Aluno(a)", Value: value},
 			}
 			if rowIdx < len(grid.rowNotes) {
@@ -233,10 +229,36 @@ func activityTableFor(grid *sheetGrid, table TableConfig, user SessionUser) Tabl
 					columns[0].Comment = comment
 				}
 			}
-			return TableResult{Key: table.Key, Label: table.Label, SheetName: table.SheetName, Kind: table.Kind, Columns: columns}
+			return TableResult{Key: table.Key, Label: table.Label, SheetName: table.SheetName, Kind: table.Kind, Complete: true, Columns: columns}
 		}
 	}
 	return TableResult{}
+}
+
+func tableComplete(grid *sheetGrid, table TableConfig) bool {
+	var idx int
+	switch table.Kind {
+	case "summary":
+		idx = totalABColumn(grid.headers)
+	case "project":
+		idx = totalColumn(grid.headers)
+	default:
+		return true
+	}
+	if idx < 0 {
+		return false
+	}
+	nameIdx := nameColumn(grid.headers)
+	matriculaIdx := matriculaColumn(grid.headers)
+	for _, row := range grid.rows {
+		if !studentRow(row, nameIdx, matriculaIdx) {
+			continue
+		}
+		if strings.TrimSpace(valueAt(row, idx)) == "" {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *SheetsClient) tablesForExam(exam string) ([]TableConfig, error) {
@@ -431,6 +453,25 @@ func summaryColumn(header string) bool {
 	return strings.Contains(normalized, "prova") && strings.Contains(normalized, "ab")
 }
 
+func totalABColumn(headers []string) int {
+	for idx, header := range headers {
+		normalized := normalizeHeader(header)
+		if strings.Contains(normalized, "nota") && strings.Contains(normalized, "ab") {
+			return idx
+		}
+	}
+	return -1
+}
+
+func totalColumn(headers []string) int {
+	for idx, header := range headers {
+		if normalizeHeader(header) == "total" {
+			return idx
+		}
+	}
+	return -1
+}
+
 func activityScoreColumn(headers []string, key string) int {
 	wanted := map[string][]string{
 		"at1": {"pesquisa"},
@@ -489,6 +530,16 @@ func matchesUser(row []string, nameIdx int, matriculaIdx int, user SessionUser) 
 		return true
 	}
 	if matriculaIdx >= 0 && matriculaIdx < len(row) && sameLookupValue(row[matriculaIdx], user.Matricula, false) {
+		return true
+	}
+	return false
+}
+
+func studentRow(row []string, nameIdx int, matriculaIdx int) bool {
+	if nameIdx >= 0 && strings.TrimSpace(valueAt(row, nameIdx)) != "" {
+		return true
+	}
+	if matriculaIdx >= 0 && strings.TrimSpace(valueAt(row, matriculaIdx)) != "" {
 		return true
 	}
 	return false
