@@ -65,6 +65,7 @@ type sheetGrid struct {
 	rowNoteAuthors [][]string
 	headerRow      int
 	rowIndices     []int
+	driveComments  []driveCellComment
 }
 
 type driveCellComment struct {

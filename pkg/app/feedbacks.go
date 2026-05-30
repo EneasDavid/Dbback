@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"strconv"
-	"strings"
 )
 
 func (c *SheetsClient) LoadSheetFeedbacks(ctx context.Context, sheetNames []string) (map[string][]SheetComment, error) {
@@ -22,7 +21,7 @@ func (g *sheetGrid) feedbacks() []SheetComment {
 	var comments []SheetComment
 	appendRow := func(rowIdx int, notes []string, authors []string) {
 		for colIdx, note := range notes {
-			note = strings.TrimSpace(note)
+			note = visibleFeedbackComment(note)
 			if note == "" {
 				continue
 			}

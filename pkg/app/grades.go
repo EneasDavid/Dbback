@@ -71,6 +71,7 @@ func (c *SheetsClient) GradeFor(ctx context.Context, exam string, user SessionUs
 			result.Tables = append(result.Tables, response.result)
 		}
 	}
+	addAB1ScoreSum(&result)
 	if len(result.Tables) == 0 {
 		return GradeResult{}, NewHTTPError(404, "matricula nao encontrada em "+strings.ToUpper(strings.TrimSpace(exam)))
 	}
@@ -228,12 +229,73 @@ func summaryCardOrder(label string) int {
 	switch {
 	case strings.Contains(normalized, "prova"):
 		return 0
-	case strings.Contains(normalized, "media"):
+	case strings.Contains(normalized, "somatorio"):
 		return 1
-	case strings.Contains(normalized, "at."):
+	case strings.Contains(normalized, "media"):
 		return 2
-	default:
+	case strings.Contains(normalized, "at."):
 		return 3
+	default:
+		return 4
+	}
+}
+
+func addAB1ScoreSum(result *GradeResult) {
+	if strings.ToUpper(strings.TrimSpace(result.Exam)) != "AB1" {
+		return
+	}
+
+	activityTotal := 0.0
+	hasActivity := false
+	for _, table := range result.Tables {
+		if table.Kind != "activity" {
+			continue
+		}
+		for _, card := range table.Cards {
+			if score, ok := parseScore(card.Value); ok {
+				activityTotal += score
+				hasActivity = true
+				break
+			}
+		}
+	}
+	if !hasActivity {
+		return
+	}
+
+	for tableIdx := range result.Tables {
+		if result.Tables[tableIdx].Kind != "summary" {
+			continue
+		}
+		cards := result.Tables[tableIdx].Cards
+		proofIdx := -1
+		for idx, card := range cards {
+			normalized := normalizeHeader(card.Label)
+			if strings.Contains(normalized, "somatorio") {
+				return
+			}
+			if strings.Contains(normalized, "prova") {
+				proofIdx = idx
+			}
+		}
+		if proofIdx < 0 {
+			continue
+		}
+		proofScore, ok := parseScore(cards[proofIdx].Value)
+		if !ok {
+			continue
+		}
+		total := proofScore + activityTotal
+		if total > 10 {
+			total = 10
+		}
+		sumCard := makeCard("somatorio-ab", "Somatório AB", formatScore(total), "", "", nil)
+		cards = append(cards, sumCard)
+		sort.SliceStable(cards, func(i, j int) bool {
+			return summaryCardOrder(cards[i].Label) < summaryCardOrder(cards[j].Label)
+		})
+		result.Tables[tableIdx].Cards = cards
+		return
 	}
 }
 

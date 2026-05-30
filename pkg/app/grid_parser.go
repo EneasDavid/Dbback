@@ -64,11 +64,17 @@ func applyMergedRanges(values [][]string, notes [][]string, merges []*sheets.Gri
 }
 
 func (g *sheetGrid) applyDriveComments(comments []driveCellComment, sheetID int64, merges []*sheets.GridRange) {
+	g.driveComments = nil
 	for _, comment := range comments {
 		// Drive anchors for Sheets comments can expose uid:0 even when the target sheet has another sheetId.
 		if comment.HasSheetID && comment.SheetID != 0 && comment.SheetID != sheetID {
 			continue
 		}
+		comment.Text = visibleFeedbackComment(comment.Text)
+		if strings.TrimSpace(comment.Text) == "" {
+			continue
+		}
+		g.driveComments = append(g.driveComments, comment)
 		if strings.TrimSpace(comment.Text) == "" || strings.TrimSpace(comment.QuotedText) == "" {
 			continue
 		}
@@ -188,6 +194,10 @@ func (g *sheetGrid) noteAuthorAtAbsolute(rowIdx int, colIdx int) string {
 }
 
 func (g *sheetGrid) setNoteAtAbsolute(rowIdx int, colIdx int, comment string, author string) {
+	comment = visibleFeedbackComment(comment)
+	if comment == "" {
+		return
+	}
 	author = authorDisplayName(author)
 	if rowIdx == g.headerRow {
 		g.notes = setAt(g.notes, colIdx, comment)

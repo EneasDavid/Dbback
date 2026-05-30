@@ -34,6 +34,7 @@ func parseActivityRubric(grid *sheetGrid, table TableConfig, user SessionUser) (
 		}
 		comment, commentAuthor := activityComment(grid, maxRowIdx, studentRowIdx, colIdx)
 		items = append(items, activityItem{
+			ColIdx:          colIdx,
 			Key:             fmt.Sprintf("i%d", colIdx),
 			Subtopic:        subtopic,
 			NotaMaxima:      maximum,
@@ -53,6 +54,7 @@ func parseActivityRubric(grid *sheetGrid, table TableConfig, user SessionUser) (
 			incompleteCount++
 		}
 	}
+	fillActivityCommentsFromDriveSequence(items, grid.driveComments)
 
 	status := "Encerrado"
 	if incompleteCount > 0 {
@@ -85,6 +87,74 @@ func activityComment(grid *sheetGrid, maxRowIdx int, studentRowIdx int, colIdx i
 		}
 	}
 	return noteAt(grid.notes, colIdx), noteAt(grid.noteAuthors, colIdx)
+}
+
+func fillActivityCommentsFromDriveSequence(items []activityItem, comments []driveCellComment) {
+	targets := activityCommentTargets(items)
+	if len(targets) == 0 || len(comments) < len(targets) {
+		return
+	}
+
+	for start := 0; start+len(targets) <= len(comments); start++ {
+		if applyActivityCommentSequence(items, targets, comments[start:start+len(targets)], false) {
+			return
+		}
+		if applyActivityCommentSequence(items, targets, comments[start:start+len(targets)], true) {
+			return
+		}
+	}
+}
+
+func activityCommentTargets(items []activityItem) []int {
+	targets := make([]int, 0, len(items))
+	for idx, item := range items {
+		if normalizeHeader(item.Subtopic) == "total" || strings.TrimSpace(item.NotaAlcancada) == "" {
+			continue
+		}
+		targets = append(targets, idx)
+	}
+	return targets
+}
+
+func applyActivityCommentSequence(items []activityItem, targets []int, comments []driveCellComment, reverse bool) bool {
+	if len(targets) != len(comments) {
+		return false
+	}
+	matched := make([]driveCellComment, len(targets))
+	for offset, itemIdx := range targets {
+		commentIdx := offset
+		if reverse {
+			commentIdx = len(comments) - 1 - offset
+		}
+		comment := comments[commentIdx]
+		if !sameQuotedCellValue(comment.QuotedText, items[itemIdx].NotaAlcancada) {
+			return false
+		}
+		if visibleFeedbackComment(comment.Text) == "" {
+			return false
+		}
+		matched[offset] = comment
+	}
+	for offset, itemIdx := range targets {
+		comment := matched[offset]
+		items[itemIdx].Comentario = visibleFeedbackComment(comment.Text)
+		items[itemIdx].ComentarioAutor = authorDisplayName(comment.Author)
+	}
+	return true
+}
+
+func sameQuotedCellValue(left string, right string) bool {
+	left = strings.TrimSpace(left)
+	right = strings.TrimSpace(right)
+	if left == "" || right == "" {
+		return false
+	}
+	if normalizeID(left) == normalizeID(right) {
+		return true
+	}
+	leftScore, leftOK := parseScore(left)
+	rightScore, rightOK := parseScore(right)
+	return leftOK && rightOK && formatScore(leftScore) == formatScore(rightScore)
 }
 
 func findMaxRow(rows [][]string) int {

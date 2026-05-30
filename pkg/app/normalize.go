@@ -61,7 +61,19 @@ func noteAt(notes []string, idx int) string {
 	if idx < 0 || idx >= len(notes) {
 		return ""
 	}
-	return strings.TrimSpace(notes[idx])
+	return visibleFeedbackComment(notes[idx])
+}
+
+func visibleFeedbackComment(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	normalized := normalizeHeader(value)
+	if strings.Contains(normalized, "montante maximo das atividades") && strings.Contains(normalized, "prova vale") {
+		return ""
+	}
+	return value
 }
 
 func authorDisplayName(author string) string {

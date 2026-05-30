@@ -8,6 +8,7 @@ import (
 )
 
 type activityItem struct {
+	ColIdx          int
 	Key             string
 	Subtopic        string
 	NotaMaxima      string
@@ -391,6 +392,7 @@ func isGradeLabel(label string) bool {
 	return normalized == "nota" ||
 		strings.Contains(normalized, "prova") ||
 		strings.Contains(normalized, "nota ab") ||
+		strings.Contains(normalized, "somatorio") ||
 		normalized == "total" ||
 		strings.Contains(normalized, "media") ||
 		strings.Contains(normalized, "projeto") ||
