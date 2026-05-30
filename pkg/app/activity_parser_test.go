@@ -111,6 +111,40 @@ func TestSummaryPayloadKeepsCommonGradeColumns(t *testing.T) {
 	}
 }
 
+func TestSummaryPayloadKeepsUnexpectedGradeHeaders(t *testing.T) {
+	grid := &sheetGrid{
+		headers: []string{"Nome", "Matricula", "Banco de Dados"},
+		rows: [][]string{
+			{"Alice", "123", "9,5"},
+		},
+		rowNotes: [][]string{
+			{"", "", ""},
+		},
+		rowNoteAuthors: [][]string{
+			{"", "", ""},
+		},
+	}
+
+	table, found, err := parseStudentTable(grid, TableConfig{
+		Key:       "prova",
+		Label:     "Prova AB1",
+		SheetName: "Notas AB1",
+		Kind:      "summary",
+	}, SessionUser{Name: "Alice", Matricula: "123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("student row was not found")
+	}
+	if len(table.Cards) != 1 {
+		t.Fatalf("cards len = %d, want 1: %#v", len(table.Cards), table.Cards)
+	}
+	if table.Cards[0].Label != "Banco de Dados" || table.Cards[0].Value != "9,5" {
+		t.Fatalf("unexpected fallback summary card: %#v", table.Cards[0])
+	}
+}
+
 func activityGrid(studentNote string, detailNote string, headerNote string) *sheetGrid {
 	return &sheetGrid{
 		headers:     []string{"Aluno", "Critério"},

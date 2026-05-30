@@ -6,7 +6,8 @@ import { EmptyState, ExamSwitch, GradeCard, InlineError, LoginView, SummaryTable
 import type { GradeCache, GradeResult, GradeTable, SessionUser } from './types';
 import './styles.scss';
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
+const EMPTY_STATE_MS = 5_000;
 
 function App() {
   const [matricula, setMatricula] = useState('');
@@ -19,6 +20,7 @@ function App() {
   const gradesRef = useRef<GradeCache>({});
   const [activeDetail, setActiveDetail] = useState<{ tableKey: string; cardKey: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showEmptyState, setShowEmptyState] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -27,9 +29,16 @@ function App() {
 
   useEffect(() => {
     if (!error) return;
-    const timeout = window.setTimeout(() => setError(''), 10_000);
+    const timeout = window.setTimeout(() => setError(''), EMPTY_STATE_MS);
     return () => window.clearTimeout(timeout);
   }, [error]);
+
+  useEffect(() => {
+    document.documentElement.dataset.screen = session ? 'app' : 'login';
+    return () => {
+      delete document.documentElement.dataset.screen;
+    };
+  }, [session]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -108,6 +117,16 @@ function App() {
   const summaryTables = useMemo(() => visibleTables.filter((table) => isSummaryTable(table.kind) && cardsFor(table).length > 0), [visibleTables]);
   const hasRenderableTables = activityTables.length + summaryTables.length > 0;
 
+  useEffect(() => {
+    if (!session || loading || hasRenderableTables) {
+      setShowEmptyState(false);
+      return;
+    }
+    setShowEmptyState(true);
+    const timeout = window.setTimeout(() => setShowEmptyState(false), EMPTY_STATE_MS);
+    return () => window.clearTimeout(timeout);
+  }, [session, loading, hasRenderableTables, exam]);
+
   const handleToggleDetail = (tableKey: string, cardKey: string) => {
     setActiveDetail((current) =>
       current?.tableKey === tableKey && current.cardKey === cardKey ? null : { tableKey, cardKey }
@@ -173,7 +192,7 @@ function App() {
           ))}
         </section>
       ) : (
-        !loading && <EmptyState exam={exam} />
+        !loading && showEmptyState && <EmptyState exam={exam} />
       )}
     </main>
   );

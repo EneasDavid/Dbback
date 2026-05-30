@@ -155,7 +155,7 @@ func cardsForStudentCells(table TableConfig, cells []studentCell) []CardResult {
 	if table.Kind == "summary" || table.Kind == "ab2summary" {
 		cards := make([]CardResult, 0, len(cells))
 		for _, cell := range cells {
-			if !shouldShowMainCard(cell.Header) {
+			if !shouldShowSummaryCard(cell) {
 				continue
 			}
 			if isAverageColumn(cell.Header) && isPendingValue(cell.Value) {
@@ -180,7 +180,29 @@ func cardsForStudentCells(table TableConfig, cells []studentCell) []CardResult {
 	if len(cards) == 0 && len(details) > 0 {
 		cards = append(cards, makeCard("detalhes", "Detalhes", "", "", "", details))
 	}
+	if len(cards) == 0 {
+		cards = fallbackCards(cells)
+	}
 	return cards
+}
+
+func shouldShowSummaryCard(cell studentCell) bool {
+	return shouldShowColumn(cell.Header) && hasVisibleCellData(cell)
+}
+
+func fallbackCards(cells []studentCell) []CardResult {
+	cards := make([]CardResult, 0, len(cells))
+	for _, cell := range cells {
+		if !shouldShowColumn(cell.Header) || !hasVisibleCellData(cell) {
+			continue
+		}
+		cards = append(cards, makeCard(cell.Key, cardLabel(cell.Header), cell.Value, cell.Comment, cell.CommentAuthor, nil))
+	}
+	return cards
+}
+
+func hasVisibleCellData(cell studentCell) bool {
+	return strings.TrimSpace(cell.Value) != "" || strings.TrimSpace(cell.Comment) != ""
 }
 
 func summaryCardOrder(label string) int {

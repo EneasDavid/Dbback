@@ -90,6 +90,20 @@ body {
     linear-gradient(180deg, var(--page), color-mix(in srgb, var(--page) 94%, #f8fafc 12%));
 }
 
+:root[data-screen="login"],
+:root[data-screen="login"] body,
+:root[data-screen="login"] #root {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+:root[data-screen="login"] body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+}
+
 button,
 input {
   font: inherit;
@@ -132,6 +146,9 @@ input:focus-visible {
 .login-shell {
   display: grid;
   place-items: center;
+  height: 100svh;
+  min-height: 100svh;
+  overflow: hidden;
   padding: 24px 16px;
   background:
     radial-gradient(circle at 50% 18%, color-mix(in srgb, var(--brand) 18%, transparent), transparent 18rem),
