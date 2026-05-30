@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/xuri/excelize/v2"
 	"google.golang.org/api/sheets/v4"
 )
 
@@ -60,6 +61,16 @@ func applyMergedRanges(values [][]string, notes [][]string, merges []*sheets.Gri
 				}
 			}
 		}
+	}
+}
+
+func (g *sheetGrid) applyComments(comments map[string]cellComment) {
+	for cell, comment := range comments {
+		rowIdx, colIdx, ok := parseCellRef(cell)
+		if !ok || strings.TrimSpace(comment.Text) == "" {
+			continue
+		}
+		g.setNoteAtAbsolute(rowIdx, colIdx, comment.Text, comment.Author)
 	}
 }
 
@@ -147,6 +158,14 @@ func setAt(values []string, idx int, value string) []string {
 	}
 	values[idx] = value
 	return values
+}
+
+func parseCellRef(cell string) (int, int, bool) {
+	col, row, err := excelize.CellNameToCoordinates(strings.TrimSpace(cell))
+	if err != nil || row <= 0 || col <= 0 {
+		return 0, 0, false
+	}
+	return row - 1, col - 1, true
 }
 
 func bestHeaderIndex(rows [][]string) int {

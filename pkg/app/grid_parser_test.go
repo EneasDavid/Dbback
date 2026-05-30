@@ -1,8 +1,6 @@
 package app
 
 import (
-	"errors"
-	"os"
 	"testing"
 
 	"google.golang.org/api/sheets/v4"
@@ -35,12 +33,6 @@ func TestParseGridPropagatesMergedCellNotes(t *testing.T) {
 	}
 	if got := valueAt(grid.headers, 2); got != "Critério" {
 		t.Fatalf("merged value = %q, want %q", got, "Critério")
-	}
-}
-
-func TestXLSXCommentParserIsRemoved(t *testing.T) {
-	if _, err := os.Stat("xlsx_comments.go"); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("xlsx comment parser should not exist, stat err = %v", err)
 	}
 }
 

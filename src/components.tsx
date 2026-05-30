@@ -70,10 +70,10 @@ export function Topbar({
         <strong>{session.name || 'Aluno'}</strong>
       </div>
       <div className="topbar-actions">
+        <ThemeButton theme={theme} setTheme={setTheme} compact />
         <button className="icon-button danger-button" type="button" onClick={onLogout} aria-label="Sair">
           <LogOut size={18} />
         </button>
-        <ThemeButton theme={theme} setTheme={setTheme} compact />
       </div>
     </header>
   );
@@ -245,7 +245,6 @@ function GradeDetailPanel({ tableKey, card }: { tableKey: string; card: GradeCar
     <section className="detail-panel" id={detailPanelId(tableKey, card.key)}>
       <div className="detail-header">
         <div>
-          <span>{card.label}</span>
           <strong>Critérios avaliados</strong>
         </div>
       </div>

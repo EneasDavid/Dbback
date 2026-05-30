@@ -2,6 +2,10 @@ package app
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -16,11 +20,13 @@ import (
 )
 
 type SheetsClient struct {
-	cfg     Config
-	service *sheets.Service
-	mu      sync.Mutex
-	cache   map[string]cachedGrid
-	group   singleflight.Group
+	cfg        Config
+	service    *sheets.Service
+	httpClient *http.Client
+	mu         sync.Mutex
+	cache      map[string]cachedGrid
+	comments   cachedComments
+	group      singleflight.Group
 }
 
 type cachedGrid struct {
@@ -33,6 +39,7 @@ func NewSheetsClient(ctx context.Context, cfg Config) (*SheetsClient, error) {
 		ctx,
 		[]byte(cfg.ServiceJSON),
 		sheets.SpreadsheetsReadonlyScope,
+		driveReadonlyScope,
 	)
 	if err != nil {
 		return nil, err
@@ -42,13 +49,14 @@ func NewSheetsClient(ctx context.Context, cfg Config) (*SheetsClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &SheetsClient{cfg: cfg, service: svc, cache: map[string]cachedGrid{}}, nil
+	return &SheetsClient{cfg: cfg, service: svc, httpClient: httpClient, cache: map[string]cachedGrid{}}, nil
 }
 
 func (c *SheetsClient) ClearCache() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cache = map[string]cachedGrid{}
+	c.comments = cachedComments{}
 }
 
 func (c *SheetsClient) loadSheet(ctx context.Context, sheetName string) (*sheetGrid, error) {
@@ -78,6 +86,15 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 			return nil, nil
 		}
 
+		comments := map[string]map[string]cellComment{}
+		if c.requiresXLSXComments(missing) {
+			var commentsErr error
+			comments, commentsErr = c.commentsForSheets(ctx, missing)
+			if commentsErr != nil {
+				return nil, NewHTTPError(503, "não conseguiu exportar comentários do Google Sheets: "+commentsErr.Error())
+			}
+		}
+
 		ranges := make([]string, 0, len(missing))
 		for _, sheetName := range missing {
 			ranges = append(ranges, quoteSheetName(sheetName))
@@ -104,6 +121,10 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 				continue
 			}
 			grid := parseGrid(sheet.Data[0].RowData, sheet.Merges)
+			if sheetComments := comments[name]; len(sheetComments) > 0 {
+				grid.applyComments(sheetComments)
+				grid.applyCommentMerges(sheet.Merges)
+			}
 			c.cache[name] = cachedGrid{expires: now.Add(c.cfg.CacheTTL), grid: grid}
 			found[name] = true
 		}
@@ -118,6 +139,15 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 		return err
 	}
 	return nil
+}
+
+func (c *SheetsClient) requiresXLSXComments(sheetNames []string) bool {
+	for _, sheetName := range sheetNames {
+		if strings.TrimSpace(sheetName) != "" && sheetName != c.cfg.LoginSheet {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *SheetsClient) cachedSheet(sheetName string) (cachedGrid, bool) {
@@ -163,3 +193,26 @@ func containsString(values []string, target string) bool {
 var sheetsGridFields = googleapi.Field(
 	"sheets(properties(title),merges(startRowIndex,endRowIndex,startColumnIndex,endColumnIndex),data(startRow,startColumn,rowData(values(formattedValue,note,userEnteredValue))))",
 )
+
+func exportMimeTypeXLSX() string {
+	return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+}
+
+func (c *SheetsClient) exportSpreadsheetXLSX(ctx context.Context) ([]byte, error) {
+	exportURL := fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/export?format=xlsx", url.PathEscape(c.cfg.SpreadsheetID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, exportURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("export retornou HTTP %d", resp.StatusCode)
+	}
+	return io.ReadAll(resp.Body)
+}
+
+const driveReadonlyScope = "https://www.googleapis.com/auth/drive.readonly"

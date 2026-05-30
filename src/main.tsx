@@ -6,7 +6,7 @@ import { EmptyState, ExamSwitch, GradeCard, InlineError, LoginView, SummaryTable
 import type { GradeCache, GradeResult, GradeTable, SessionUser } from './types';
 import './styles.scss';
 
-const CACHE_VERSION = 'v5';
+const CACHE_VERSION = 'v6';
 const EMPTY_STATE_MS = 5_000;
 
 type LegacyColumn = {
@@ -64,7 +64,7 @@ function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#020617' : '#0f172a');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#182131' : '#eef2f8');
     window.localStorage.setItem('theme', theme);
   }, [theme]);
 

@@ -1,5 +1,7 @@
 package app
 
+import "time"
+
 type GradeResult struct {
 	Exam          string         `json:"exam"`
 	Matricula     string         `json:"matricula"`
@@ -63,4 +65,20 @@ type sheetGrid struct {
 	rowNoteAuthors [][]string
 	headerRow      int
 	rowIndices     []int
+}
+
+type cellComment struct {
+	Text   string
+	Author string
+}
+
+type SheetComment struct {
+	Cell   string
+	Text   string
+	Author string
+}
+
+type cachedComments struct {
+	expires time.Time
+	bySheet map[string]map[string]cellComment
 }
