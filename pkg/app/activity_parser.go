@@ -54,7 +54,7 @@ func parseActivityRubric(grid *sheetGrid, table TableConfig, user SessionUser) (
 			incompleteCount++
 		}
 	}
-	fillActivityCommentsFromDriveSequence(items, grid.driveComments)
+	fillActivityCommentsFromDriveSequence(items, grid, maxRowIdx, studentRowIdx)
 
 	status := "Encerrado"
 	if incompleteCount > 0 {
@@ -89,58 +89,201 @@ func activityComment(grid *sheetGrid, maxRowIdx int, studentRowIdx int, colIdx i
 	return noteAt(grid.notes, colIdx), noteAt(grid.noteAuthors, colIdx)
 }
 
-func fillActivityCommentsFromDriveSequence(items []activityItem, comments []driveCellComment) {
-	targets := activityCommentTargets(items)
-	if len(targets) == 0 || len(comments) < len(targets) {
+func fillActivityCommentsFromDriveSequence(items []activityItem, grid *sheetGrid, maxRowIdx int, studentRowIdx int) {
+	rows := activityCommentRows(items, grid, maxRowIdx)
+	studentRow, ok := activityCommentRowByIndex(rows, studentRowIdx)
+	if !ok || len(studentRow.ItemIndexes) < 2 || len(grid.driveComments) < 2 {
 		return
 	}
 
-	for start := 0; start+len(targets) <= len(comments); start++ {
-		if applyActivityCommentSequence(items, targets, comments[start:start+len(targets)], false) {
-			return
-		}
-		if applyActivityCommentSequence(items, targets, comments[start:start+len(targets)], true) {
-			return
+	usedItems := map[int]bool{}
+	usedComments := map[int]bool{}
+	maxLength := minInt(len(studentRow.ItemIndexes), len(grid.driveComments))
+	for length := maxLength; length >= minActivityCommentSequenceLength(maxLength); length-- {
+		matches := activityCommentSequenceMatches(rows, grid.driveComments, length)
+		for _, match := range matches {
+			if match.RowIdx != studentRowIdx || !activityCommentMatchIsUnique(match, matches) {
+				continue
+			}
+			if activityCommentMatchUsed(match, usedItems, usedComments) {
+				continue
+			}
+			applyActivityCommentMatch(items, match)
+			for _, itemIdx := range match.ItemIndexes {
+				usedItems[itemIdx] = true
+			}
+			for commentIdx := match.CommentStart; commentIdx < match.CommentStart+match.Length; commentIdx++ {
+				usedComments[commentIdx] = true
+			}
 		}
 	}
 }
 
-func activityCommentTargets(items []activityItem) []int {
-	targets := make([]int, 0, len(items))
-	for idx, item := range items {
-		if normalizeHeader(item.Subtopic) == "total" || strings.TrimSpace(item.NotaAlcancada) == "" {
-			continue
-		}
-		targets = append(targets, idx)
-	}
-	return targets
+type activityCommentRow struct {
+	RowIdx      int
+	ItemIndexes []int
+	Scores      []string
 }
 
-func applyActivityCommentSequence(items []activityItem, targets []int, comments []driveCellComment, reverse bool) bool {
-	if len(targets) != len(comments) {
-		return false
+type activityCommentMatch struct {
+	RowIdx       int
+	CommentStart int
+	Length       int
+	ItemIndexes  []int
+	Comments     []driveCellComment
+}
+
+func activityCommentRows(items []activityItem, grid *sheetGrid, maxRowIdx int) []activityCommentRow {
+	rows := make([]activityCommentRow, 0, len(grid.rows))
+	for rowIdx := maxRowIdx + 1; rowIdx < len(grid.rows); rowIdx++ {
+		row := activityCommentRow{RowIdx: rowIdx}
+		for itemIdx, item := range items {
+			if !activityItemCanReceiveDriveComment(item) {
+				continue
+			}
+			score := valueAt(grid.rows[rowIdx], item.ColIdx)
+			if strings.TrimSpace(score) == "" {
+				continue
+			}
+			row.ItemIndexes = append(row.ItemIndexes, itemIdx)
+			row.Scores = append(row.Scores, score)
+		}
+		if len(row.ItemIndexes) >= 2 {
+			rows = append(rows, row)
+		}
 	}
-	matched := make([]driveCellComment, len(targets))
-	for offset, itemIdx := range targets {
+	return rows
+}
+
+func activityItemCanReceiveDriveComment(item activityItem) bool {
+	return normalizeHeader(item.Subtopic) != "total" && strings.TrimSpace(item.NotaAlcancada) != ""
+}
+
+func activityCommentRowByIndex(rows []activityCommentRow, rowIdx int) (activityCommentRow, bool) {
+	for _, row := range rows {
+		if row.RowIdx == rowIdx {
+			return row, true
+		}
+	}
+	return activityCommentRow{}, false
+}
+
+func activityCommentSequenceMatches(rows []activityCommentRow, comments []driveCellComment, length int) []activityCommentMatch {
+	if length < minActivityCommentSequenceLength(length) {
+		return nil
+	}
+	var matches []activityCommentMatch
+	for _, row := range rows {
+		for segmentStart := 0; segmentStart+length <= len(row.ItemIndexes); segmentStart++ {
+			scores := row.Scores[segmentStart : segmentStart+length]
+			itemIndexes := row.ItemIndexes[segmentStart : segmentStart+length]
+			for commentStart := 0; commentStart+length <= len(comments); commentStart++ {
+				window := comments[commentStart : commentStart+length]
+				if matched, ok := activityCommentWindowMatch(scores, itemIndexes, window, false); ok {
+					matched.RowIdx = row.RowIdx
+					matched.CommentStart = commentStart
+					matched.Length = length
+					matches = append(matches, matched)
+				}
+				if matched, ok := activityCommentWindowMatch(scores, itemIndexes, window, true); ok {
+					matched.RowIdx = row.RowIdx
+					matched.CommentStart = commentStart
+					matched.Length = length
+					matches = append(matches, matched)
+				}
+			}
+		}
+	}
+	return matches
+}
+
+func activityCommentWindowMatch(scores []string, itemIndexes []int, comments []driveCellComment, reverse bool) (activityCommentMatch, bool) {
+	if len(scores) != len(comments) || len(scores) != len(itemIndexes) {
+		return activityCommentMatch{}, false
+	}
+	matched := activityCommentMatch{
+		ItemIndexes: append([]int(nil), itemIndexes...),
+		Comments:    make([]driveCellComment, len(comments)),
+	}
+	for offset, score := range scores {
 		commentIdx := offset
 		if reverse {
 			commentIdx = len(comments) - 1 - offset
 		}
 		comment := comments[commentIdx]
-		if !sameQuotedCellValue(comment.QuotedText, items[itemIdx].NotaAlcancada) {
-			return false
+		if !sameQuotedCellValue(comment.QuotedText, score) || visibleFeedbackComment(comment.Text) == "" {
+			return activityCommentMatch{}, false
 		}
-		if visibleFeedbackComment(comment.Text) == "" {
-			return false
-		}
-		matched[offset] = comment
+		matched.Comments[offset] = comment
 	}
-	for offset, itemIdx := range targets {
-		comment := matched[offset]
+	return matched, true
+}
+
+func activityCommentMatchIsUnique(match activityCommentMatch, matches []activityCommentMatch) bool {
+	sameCommentWindowForRow := 0
+	sameTargetSegment := 0
+	for _, candidate := range matches {
+		if candidate.RowIdx == match.RowIdx && candidate.CommentStart == match.CommentStart && candidate.Length == match.Length {
+			sameCommentWindowForRow++
+		}
+		if candidate.RowIdx == match.RowIdx && sameIntSlice(candidate.ItemIndexes, match.ItemIndexes) {
+			sameTargetSegment++
+		}
+	}
+	return sameCommentWindowForRow == 1 && sameTargetSegment == 1
+}
+
+func activityCommentMatchUsed(match activityCommentMatch, usedItems map[int]bool, usedComments map[int]bool) bool {
+	for _, itemIdx := range match.ItemIndexes {
+		if usedItems[itemIdx] {
+			return true
+		}
+	}
+	for commentIdx := match.CommentStart; commentIdx < match.CommentStart+match.Length; commentIdx++ {
+		if usedComments[commentIdx] {
+			return true
+		}
+	}
+	return false
+}
+
+func applyActivityCommentMatch(items []activityItem, match activityCommentMatch) {
+	for offset, itemIdx := range match.ItemIndexes {
+		comment := match.Comments[offset]
 		items[itemIdx].Comentario = visibleFeedbackComment(comment.Text)
 		items[itemIdx].ComentarioAutor = authorDisplayName(comment.Author)
 	}
+}
+
+func sameIntSlice(left []int, right []int) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for idx := range left {
+		if left[idx] != right[idx] {
+			return false
+		}
+	}
 	return true
+}
+
+func minActivityCommentSequenceLength(maxLength int) int {
+	if maxLength < 3 {
+		return 2
+	}
+	return 3
+}
+
+func minInt(left int, right int) int {
+	if left < right {
+		return left
+	}
+	return right
+}
+
+func isNumericCellText(value string) bool {
+	_, ok := parseNumber(value)
+	return ok
 }
 
 func sameQuotedCellValue(left string, right string) bool {

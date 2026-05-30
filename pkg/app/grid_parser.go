@@ -78,6 +78,9 @@ func (g *sheetGrid) applyDriveComments(comments []driveCellComment, sheetID int6
 		if strings.TrimSpace(comment.Text) == "" || strings.TrimSpace(comment.QuotedText) == "" {
 			continue
 		}
+		if comment.HasSheetID && comment.SheetID == 0 && isNumericCellText(comment.QuotedText) {
+			continue
+		}
 		rowIdx, colIdx, ok := g.uniqueCellForQuotedText(comment.QuotedText, merges)
 		if !ok || g.noteAtAbsolute(rowIdx, colIdx) != "" {
 			continue

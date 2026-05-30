@@ -145,7 +145,7 @@ func TestActivityCommentsUseDriveRowSequenceWhenScoresRepeat(t *testing.T) {
 	grid := parseGrid([]*sheets.RowData{
 		rowData(cellData("Aluno", ""), cellData("Organização", ""), cellData("Q.1", ""), cellData("Q.2", ""), cellData("Q.3", ""), cellData("Q.4", ""), cellData("Q.5", ""), cellData("Q.6", "")),
 		rowData(cellData("Nota maxima", ""), cellData("0,5", ""), cellData("1,5", ""), cellData("1", ""), cellData("1,5", ""), cellData("2", ""), cellData("1,5", ""), cellData("2", "")),
-		rowData(cellData("Bob", ""), cellData("0,3", ""), cellData("1", ""), cellData("0,75", ""), cellData("0,85", ""), cellData("1,2", ""), cellData("1,1", ""), cellData("1,3", "")),
+		rowData(cellData("Bob", ""), cellData("0,3", ""), cellData("0,9", ""), cellData("0,75", ""), cellData("0,85", ""), cellData("1,2", ""), cellData("1,1", ""), cellData("1,3", "")),
 		rowData(cellData("Alice", ""), cellData("0,3", ""), cellData("1", ""), cellData("0,75", ""), cellData("0,85", ""), cellData("1,2", ""), cellData("1,1", ""), cellData("1,3", "")),
 	}, nil)
 	grid.applyDriveComments([]driveCellComment{
@@ -191,6 +191,41 @@ func TestActivityCommentsUseDriveRowSequenceWhenScoresRepeat(t *testing.T) {
 	for _, detail := range table.Cards[0].Details {
 		if got := detail.Comment; got != want[detail.Label] {
 			t.Fatalf("detail %q comment = %q, want %q", detail.Label, got, want[detail.Label])
+		}
+	}
+}
+
+func TestActivityCommentsIgnoreAmbiguousDriveRowSequence(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Aluno", ""), cellData("Organização", ""), cellData("Q.1", ""), cellData("Q.2", "")),
+		rowData(cellData("Nota maxima", ""), cellData("0,5", ""), cellData("1,5", ""), cellData("1", "")),
+		rowData(cellData("Bob", ""), cellData("0,4", ""), cellData("1", ""), cellData("0,75", "")),
+		rowData(cellData("Alice", ""), cellData("0,3", ""), cellData("1", ""), cellData("0,75", "")),
+	}, nil)
+	grid.applyDriveComments([]driveCellComment{
+		{Text: "outro comentario q2", Author: "Professor", QuotedText: "0,75", SheetID: 0, HasSheetID: true},
+		{Text: "outro comentario q1", Author: "Professor", QuotedText: "1", SheetID: 0, HasSheetID: true},
+		{Text: "outro comentario organizacao", Author: "Professor", QuotedText: "0,3", SheetID: 0, HasSheetID: true},
+		{Text: "comentario q2", Author: "Professor", QuotedText: "0,75", SheetID: 0, HasSheetID: true},
+		{Text: "comentario q1", Author: "Professor", QuotedText: "1", SheetID: 0, HasSheetID: true},
+		{Text: "comentario organizacao", Author: "Professor", QuotedText: "0,3", SheetID: 0, HasSheetID: true},
+	}, 123, nil)
+
+	table, found, err := parseActivityRubric(grid, TableConfig{
+		Key:       "at3",
+		Label:     "AT. 3",
+		SheetName: "AT. 3",
+		Kind:      "activity",
+	}, SessionUser{Name: "Alice", Matricula: "2024001339"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("student row was not found")
+	}
+	for _, detail := range table.Cards[0].Details {
+		if strings.TrimSpace(detail.Comment) != "" {
+			t.Fatalf("ambiguous detail %q got comment %q", detail.Label, detail.Comment)
 		}
 	}
 }
