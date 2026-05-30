@@ -198,10 +198,10 @@ func (c *SheetsClient) enrichActivityScore(ctx context.Context, result *TableRes
 		if !matchesUser(row, nameIdx, matriculaIdx, user) {
 			continue
 		}
-			comment := ""
-			if rowIdx < len(grid.rowNotes) {
-				comment = noteAt(grid.rowNotes[rowIdx], scoreIdx)
-			}
+		comment := ""
+		if rowIdx < len(grid.rowNotes) {
+			comment = noteAt(grid.rowNotes[rowIdx], scoreIdx)
+		}
 		if comment == "" {
 			comment = noteAt(grid.notes, scoreIdx)
 		}

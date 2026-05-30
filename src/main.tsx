@@ -27,6 +27,7 @@ type GradeTable = {
   label: string;
   sheetName: string;
   kind: string;
+  complete: boolean;
   columns: Column[];
 };
 
@@ -36,6 +37,8 @@ type StudentStatus = {
   average: number;
   approved: boolean;
 };
+
+type GradeCache = Partial<Record<'ab1' | 'ab2', GradeResult>>;
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -57,7 +60,7 @@ function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return window.localStorage.getItem('theme') === 'dark' ? 'dark' : 'light';
   });
-  const [grade, setGrade] = useState<GradeResult | null>(null);
+  const [grades, setGrades] = useState<GradeCache>({});
   const [studentStatus, setStudentStatus] = useState<StudentStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -78,21 +81,11 @@ function App() {
     if (!session) return;
     setLoading(true);
     setError('');
-    api<GradeResult>(`/api/grades?exam=${exam}`)
-      .then(setGrade)
-      .catch((err) => {
-        setGrade(null);
-        setError(err.message);
-      })
-      .finally(() => setLoading(false));
-  }, [session, exam]);
-
-  useEffect(() => {
-    if (!session) return;
     Promise.all([api<GradeResult>('/api/grades?exam=ab1'), api<GradeResult>('/api/grades?exam=ab2')])
       .then(([ab1, ab2]) => {
-        const ab1Total = findScore(ab1, (table, column) => table.kind === 'summary' && normalized(column.label).includes('nota') && normalized(column.label).includes('ab'));
-        const ab2Total = findScore(ab2, (table, column) => table.key === 'projeto' && normalized(column.label) === 'total');
+        setGrades({ ab1, ab2 });
+        const ab1Total = findScore(ab1, (table, column) => table.complete && table.kind === 'summary' && normalized(column.label).includes('nota') && normalized(column.label).includes('ab'));
+        const ab2Total = findScore(ab2, (table, column) => table.complete && table.key === 'projeto' && normalized(column.label) === 'total');
         if (ab1Total === null || ab2Total === null) {
           setStudentStatus(null);
           return;
@@ -100,12 +93,17 @@ function App() {
         const average = (ab1Total + ab2Total) / 2;
         setStudentStatus({ ab1: ab1Total, ab2: ab2Total, average, approved: average >= 7 });
       })
-      .catch(() => setStudentStatus(null));
+      .catch((err) => {
+        setGrades({});
+        setStudentStatus(null);
+        setError(err instanceof Error ? err.message : 'Erro ao carregar as notas.');
+      })
+      .finally(() => setLoading(false));
   }, [session]);
 
   const visibleColumns = useMemo(() => {
-    return grade?.tables ?? [];
-  }, [grade]);
+    return grades[exam]?.tables ?? [];
+  }, [grades, exam]);
 
   async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -128,7 +126,7 @@ function App() {
   async function handleLogout() {
     await api('/api/logout', { method: 'POST' }).catch(() => null);
     setSession(null);
-    setGrade(null);
+    setGrades({});
     setStudentStatus(null);
     setError('');
   }
@@ -193,41 +191,80 @@ function App() {
 
       {studentStatus && <StatusBanner status={studentStatus} />}
 
-      <section className="result-head">
-        <span>{exam === 'ab1' ? 'Atividades e Notas AB1' : 'Atividades e Projeto AB2'}</span>
-        <h1>{exam.toUpperCase()}</h1>
-      </section>
-
       {loading && <div className="loading">Carregando notas...</div>}
 
       {!loading && visibleColumns.length > 0 && (
         <section className="grade-list">
-          {visibleColumns.map((table) => (
-            <article className={`grade-table ${table.kind}`} key={table.key}>
-              <header>
-                <h2>{table.label}</h2>
-              </header>
-              {table.columns
-                .filter(shouldShowColumn)
-                .map((column) => (
-                  <section className={`grade-row ${scoreTone(column)}`} key={`${table.key}-${column.key}`}>
-                    <div>
-                      <span>{column.label}</span>
-                      <strong>{column.value || '-'}</strong>
-                    </div>
-                    {column.comment && (
-                      <p>
-                        <MessageSquareText size={15} />
-                        {column.comment}
-                      </p>
-                    )}
-                  </section>
-                ))}
-            </article>
-          ))}
+          {visibleColumns.filter(shouldShowTable).map((table) => (table.kind === 'summary' ? <SummaryTable table={table} key={table.key} /> : <GradeCard table={table} key={table.key} />))}
         </section>
       )}
     </main>
+  );
+}
+
+function GradeCard({ table }: { table: GradeTable }) {
+  const comments = feedbackComments(table);
+  return (
+    <article className={`grade-table ${table.kind}`}>
+      <header>
+        <h2>{table.label}</h2>
+      </header>
+      {table.columns.filter(shouldShowColumn).map((column) => (
+        <GradeRow column={column} key={`${table.key}-${column.key}`} />
+      ))}
+      {comments.length > 0 && (
+        <section className="feedback-list">
+          <span>Feedback</span>
+          {comments.map((comment, index) => (
+            <p key={`${table.key}-comment-${index}`}>
+              <MessageSquareText size={15} />
+              {comment}
+            </p>
+          ))}
+        </section>
+      )}
+    </article>
+  );
+}
+
+function SummaryTable({ table }: { table: GradeTable }) {
+  return (
+    <article className="grade-table summary">
+      <header>
+        <h2>Média AB1</h2>
+      </header>
+      <div className="summary-grid">
+        {table.columns.filter(shouldShowColumn).map((column) => (
+          <section className={`summary-score ${scoreTone(column)}`} key={`${table.key}-${column.key}`}>
+            <span>{normalized(column.label).includes('prova') ? 'Nota da prova' : 'Média da AB'}</span>
+            <strong>{displayValue(column)}</strong>
+            {column.comment && (
+              <p>
+                <MessageSquareText size={15} />
+                {column.comment}
+              </p>
+            )}
+          </section>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function GradeRow({ column }: { column: Column }) {
+  return (
+    <section className={`grade-row ${scoreTone(column)}`}>
+      <div>
+        <span>{column.label}</span>
+        <strong>{displayValue(column)}</strong>
+      </div>
+      {column.comment && (
+        <p>
+          <MessageSquareText size={15} />
+          {column.comment}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -270,7 +307,24 @@ function InlineError({ message }: { message: string }) {
 
 function shouldShowColumn(column: Column) {
   const label = normalized(column.label);
-  return label !== '' && !label.includes('matricula') && !label.includes('nome do aluno') && label !== 'nome' && label !== 'aluno';
+  return label !== '' && label !== 'grupo' && !label.includes('matricula') && !label.includes('nome do aluno') && label !== 'nome' && label !== 'aluno';
+}
+
+function shouldShowTable(table: GradeTable) {
+  return table.kind === 'summary' || table.columns.some(shouldShowColumn) || feedbackComments(table).length > 0;
+}
+
+function feedbackComments(table: GradeTable) {
+  const seen = new Set<string>();
+  const comments: string[] = [];
+  for (const column of table.columns) {
+    const comment = column.comment?.trim();
+    if (comment && !seen.has(comment)) {
+      seen.add(comment);
+      comments.push(comment);
+    }
+  }
+  return comments;
 }
 
 function scoreTone(column: Column) {
@@ -287,7 +341,8 @@ function findScore(grade: GradeResult, predicate: (table: GradeTable, column: Co
   for (const table of grade.tables) {
     for (const column of table.columns) {
       if (predicate(table, column)) {
-        return parseScore(column.value);
+        const score = parseScore(column.value);
+        return score !== null && score > 0 ? score : null;
       }
     }
   }
@@ -297,6 +352,21 @@ function findScore(grade: GradeResult, predicate: (table: GradeTable, column: Co
 function parseScore(value: string) {
   const parsed = Number(value.replace(',', '.').replace(/[^\d.-]/g, ''));
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function displayValue(column: Column) {
+  if (isGradeColumn(column)) {
+    const score = parseScore(column.value);
+    if (score === null) {
+      return 'Não corrigida ainda';
+    }
+  }
+  return column.value || '-';
+}
+
+function isGradeColumn(column: Column) {
+  const label = normalized(column.label);
+  return label === 'nota' || label.includes('prova') || label.includes('nota ab') || label === 'total' || label.startsWith('semana') || ['sgbd', 'dataset', 'crud', 'apresentacao'].includes(label);
 }
 
 function formatScore(value: number) {

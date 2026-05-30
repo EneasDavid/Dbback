@@ -193,8 +193,9 @@ input {
 }
 
 .topbar span,
-.result-head span,
-.grade-row span {
+.grade-row span,
+.summary-score span,
+.feedback-list span {
   color: var(--muted);
   font-size: 0.8rem;
   font-weight: 800;
@@ -264,19 +265,8 @@ input {
   box-shadow: 0 6px 14px rgba(15, 23, 42, 0.1);
 }
 
-.result-head {
-  padding: 26px 0 16px;
-}
-
-.result-head h1 {
-  margin-top: 4px;
-  color: var(--text);
-  font-size: 2.35rem;
-  line-height: 1;
-  letter-spacing: 0;
-}
-
 .grade-list {
+  margin-top: 16px;
   display: grid;
   gap: 10px;
 }
@@ -340,6 +330,37 @@ input {
   background: color-mix(in srgb, var(--panel) 86%, var(--brand) 14%);
 }
 
+.summary-grid {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.summary-score {
+  display: grid;
+  gap: 6px;
+  padding: 13px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.summary-score strong {
+  color: var(--text);
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.summary-score p,
+.feedback-list p {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.42;
+}
+
 .grade-row {
   padding: 13px 0;
   border-bottom: 1px solid var(--border-soft);
@@ -365,7 +386,8 @@ input {
   overflow-wrap: anywhere;
 }
 
-.grade-row.score-danger {
+.grade-row.score-danger,
+.summary-score.score-danger {
   margin: 10px -8px 0;
   padding: 13px 8px;
   border-radius: 8px;
@@ -373,7 +395,15 @@ input {
   background: var(--danger-bg);
 }
 
-.grade-row.score-warning {
+.summary-score.score-danger,
+.summary-score.score-warning,
+.summary-score.score-success {
+  margin: 0;
+  padding: 13px;
+}
+
+.grade-row.score-warning,
+.summary-score.score-warning {
   margin: 10px -8px 0;
   padding: 13px 8px;
   border-radius: 8px;
@@ -381,7 +411,8 @@ input {
   background: var(--warning-bg);
 }
 
-.grade-row.score-success {
+.grade-row.score-success,
+.summary-score.score-success {
   margin: 10px -8px 0;
   padding: 13px 8px;
   border-radius: 8px;
@@ -391,7 +422,10 @@ input {
 
 .grade-row.score-danger strong,
 .grade-row.score-warning strong,
-.grade-row.score-success strong {
+.grade-row.score-success strong,
+.summary-score.score-danger strong,
+.summary-score.score-warning strong,
+.summary-score.score-success strong {
   color: currentColor;
 }
 
@@ -408,6 +442,27 @@ input {
 }
 
 .grade-row p svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--brand);
+}
+
+.feedback-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.feedback-list p {
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.feedback-list svg,
+.summary-score svg {
   flex: 0 0 auto;
   margin-top: 2px;
   color: var(--brand);

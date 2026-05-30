@@ -1,4 +1,4 @@
-# Feedback de Notas
+# dbBack
 
 Aplicacao Go + React para consulta mobile de notas por matricula em uma planilha do Google Sheets.
 
@@ -11,7 +11,7 @@ Aplicacao Go + React para consulta mobile de notas por matricula em uma planilha
 - Selecao entre `AB1` e `AB2`.
 - Cada AB pode consultar varias abas/tabelas da mesma planilha.
 - Retorno apenas das linhas do nome vinculado a matricula logada.
-- Comentarios por coluna sao lidos das notas das celulas do cabecalho de cada aba.
+- Feedbacks das atividades sao lidos das notas das celulas quando a API do Sheets expõe esse dado.
 
 ## Variaveis de ambiente
 
@@ -41,27 +41,13 @@ Se a aba nao tiver nome, usa matricula como fallback.
 ```bash
 npm install
 go mod download
-npm run dev
-```
-
-A Vite dev server abre apenas o frontend. Para testar frontend e API Go juntos:
-
-```bash
 npm run dev:full
 ```
 
-Para testar as rotas Go localmente com a Vercel:
+O comando `dev:full` compila o frontend e sobe a API Go junto em `http://localhost:8080`.
 
-```bash
-npx vercel dev
-```
+`npm run dev` continua disponivel para abrir apenas o frontend Vite.
 
 ## Deploy
 
-O projeto esta pronto para Vercel. Configure as variaveis acima no projeto e conecte o repositorio.
-
-O workflow `.github/workflows/ci.yml` roda lint, build, testes Go e deploy com a Vercel CLI quando os secrets abaixo existirem:
-
-- `VERCEL_TOKEN`
-- `VERCEL_ORG_ID`
-- `VERCEL_PROJECT_ID`
+O workflow `.github/workflows/ci.yml` roda somente lint, build e testes Go. Deploy em Vercel ou outro provedor fica opcional e fora do CI padrao.
