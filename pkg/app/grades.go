@@ -354,10 +354,29 @@ func addAB1ScoreAverage(result *GradeResult) {
 		}
 	}
 
-	// If no "Somatório AB", sum all main score cards
+	// If no "Somatório AB", sum prova + activity scores
 	if !hasAny {
+		activityTotal := 0.0
+		hasActivity := false
+		proofScore := 0.0
+		hasProof := false
+
 		for _, table := range result.Tables {
-			if table.Kind == "summary" || table.Kind == "ab1summary" {
+			if table.Kind == "summary" {
+				for _, card := range table.Cards {
+					normalized := normalizeHeader(card.Label)
+					if strings.Contains(normalized, "prova") {
+						score, ok := parseScore(card.Value)
+						if ok {
+							proofScore = score
+							hasProof = true
+							break
+						}
+					}
+				}
+				continue
+			}
+			if table.Kind == "ab1summary" || table.Kind == "ab2summary" {
 				continue
 			}
 			for _, card := range table.Cards {
@@ -368,11 +387,17 @@ func addAB1ScoreAverage(result *GradeResult) {
 				if !ok {
 					continue
 				}
-				total += score
-				hasAny = true
+				activityTotal += score
+				hasActivity = true
 				break
 			}
 		}
+
+		total = activityTotal
+		if hasProof {
+			total += proofScore
+		}
+		hasAny = hasActivity || hasProof
 	}
 
 	if !hasAny {
