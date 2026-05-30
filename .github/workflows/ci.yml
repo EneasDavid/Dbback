@@ -18,8 +18,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - run: go test $(go list ./... | grep -v /node_modules/)
       - run: npm ci
-      - run: go test ./...
       - run: npm run lint
       - run: npm run build
 

@@ -35,7 +35,13 @@ go mod download
 npm run dev
 ```
 
-A Vite dev server abre o frontend. Para testar as rotas Go localmente com a Vercel:
+A Vite dev server abre apenas o frontend. Para testar frontend e API Go juntos:
+
+```bash
+npm run dev:full
+```
+
+Para testar as rotas Go localmente com a Vercel:
 
 ```bash
 npx vercel dev

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"feedback/internal/app"
+	"feedback/pkg/app"
 )
 
 type loginRequest struct {
