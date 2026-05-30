@@ -115,6 +115,9 @@ func parseStudentTable(grid *sheetGrid, table TableConfig, user SessionUser) (Ta
 				comment = noteAt(grid.rowNotes[rowIdx], colIdx)
 				commentAuthor = noteAt(grid.rowNoteAuthors[rowIdx], colIdx)
 			}
+			if comment == "" {
+				comment, commentAuthor = grid.driveCommentForUserCell(rowIdx, colIdx)
+			}
 			cells = append(cells, studentCell{
 				ColIdx:        colIdx,
 				Key:           fmt.Sprintf("c%d", colIdx),

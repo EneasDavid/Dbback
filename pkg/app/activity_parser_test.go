@@ -286,6 +286,84 @@ func TestProjectPayloadKeepsAllSubtopicsInDropdown(t *testing.T) {
 	}
 }
 
+func TestProjectDetailCommentComesFromMergedDriveScore(t *testing.T) {
+	merges := []*sheets.GridRange{
+		{StartRowIndex: 1, EndRowIndex: 3, StartColumnIndex: 4, EndColumnIndex: 5},
+	}
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Nome", ""), cellData("Matricula", ""), cellData("Total", ""), cellData("SGBD", ""), cellData("Dataset", "")),
+		rowData(cellData("Alice", ""), cellData("18113089", ""), cellData("0,45", ""), cellData("0,25", ""), cellData("0,2", "")),
+		rowData(cellData("Colega", ""), cellData("2024000000", ""), cellData("", ""), cellData("", ""), cellData("", "")),
+	}, merges)
+	grid.applyDriveComments([]driveCellComment{
+		{Text: "Subiram atrasado a info do dataset", Author: "Professor (Enéas)", QuotedText: "0,2", SheetID: 0, HasSheetID: true},
+	}, 123, merges)
+
+	table, found, err := parseStudentTable(grid, TableConfig{
+		Key:       "projeto",
+		Label:     "Projeto AB2",
+		SheetName: "Projeto AB2",
+		Kind:      "project",
+	}, SessionUser{Name: "Alice", Matricula: "18113089"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("student row was not found")
+	}
+	if len(table.Cards) != 1 {
+		t.Fatalf("cards len = %d, want 1: %#v", len(table.Cards), table.Cards)
+	}
+	for _, detail := range table.Cards[0].Details {
+		if detail.Label != "Dataset" {
+			continue
+		}
+		if got := detail.Comment; got != "Subiram atrasado a info do dataset" {
+			t.Fatalf("dataset comment = %q, want merged Drive comment", got)
+		}
+		if got := detail.CommentAuthor; got != "Enéas" {
+			t.Fatalf("dataset comment author = %q, want Enéas", got)
+		}
+		return
+	}
+	t.Fatalf("Dataset detail not found: %#v", table.Cards[0].Details)
+}
+
+func TestProjectDetailCommentComesFromTeamBlockDriveScore(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Equipe", ""), cellData("Matricula", ""), cellData("Nome", ""), cellData("Semana 1", ""), cellData("Total", "")),
+		rowData(cellData("Equipe 6", ""), cellData("21110819", ""), cellData("Colega 1", ""), cellData("0,2", ""), cellData("0,45", "")),
+		rowData(cellData("Equipe 6", ""), cellData("18113089", ""), cellData("Alice", ""), cellData("0,2", ""), cellData("0,45", "")),
+		rowData(cellData("Equipe 6", ""), cellData("20113988", ""), cellData("Colega 2", ""), cellData("0,2", ""), cellData("0,45", "")),
+	}, nil)
+	grid.applyDriveComments([]driveCellComment{
+		{Text: "Subiram atrasado a info do dataset", Author: "Professor (Enéas)", QuotedText: "0,2", SheetID: 0, HasSheetID: true},
+	}, 123, nil)
+
+	table, found, err := parseStudentTable(grid, TableConfig{
+		Key:       "projeto",
+		Label:     "Projeto AB2",
+		SheetName: "Projeto AB2",
+		Kind:      "project",
+	}, SessionUser{Name: "Alice", Matricula: "18113089"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("student row was not found")
+	}
+	for _, detail := range table.Cards[0].Details {
+		if detail.Label != "Semana 1" {
+			continue
+		}
+		if got := detail.Comment; got != "Subiram atrasado a info do dataset" {
+			t.Fatalf("semana 1 comment = %q, want team Drive comment", got)
+		}
+		return
+	}
+	t.Fatalf("Semana 1 detail not found: %#v", table.Cards[0].Details)
+}
+
 func TestSummaryPayloadKeepsCommonGradeColumns(t *testing.T) {
 	grid := &sheetGrid{
 		headers: []string{"Nome", "Matricula", "Prova", "Média"},

@@ -85,6 +85,16 @@ func nameColumn(headers []string) int {
 	return -1
 }
 
+func groupColumn(headers []string) int {
+	for idx, header := range headers {
+		normalized := normalizeHeader(header)
+		if normalized == "grupo" || normalized == "equipe" || strings.Contains(normalized, "grupo") || strings.Contains(normalized, "equipe") {
+			return idx
+		}
+	}
+	return -1
+}
+
 func exactNameColumn(headers []string) int {
 	candidates := []string{"nome", "aluno", "estudante", "discente", "nome completo", "nome do aluno", "nome do aluno(a)"}
 	for idx, header := range headers {

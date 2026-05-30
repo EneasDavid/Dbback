@@ -65,7 +65,15 @@ type sheetGrid struct {
 	rowNoteAuthors [][]string
 	headerRow      int
 	rowIndices     []int
+	merges         []mergedRange
 	driveComments  []driveCellComment
+}
+
+type mergedRange struct {
+	startRow int
+	endRow   int
+	startCol int
+	endCol   int
 }
 
 type driveCellComment struct {
