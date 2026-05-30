@@ -396,13 +396,15 @@ function GradeDetailPanel({ table, mainColumn }: { table: GradeTable; mainColumn
     };
   });
 
+  const isAt4Detail = /\bat\.?\s*4\b/.test(normalized(mainColumn.label)) || normalized(mainColumn.label).includes('atividade 4');
+  const detailTitle = isAt4Detail ? `Detalhes ${humanizeLabel(mainColumn.label)}` : 'Composição';
   const comments = [mainColumn.comment, ...compositionItems.map((item) => item.comment)].filter(Boolean) as string[];
 
   return (
     <section className="detail-panel">
       <div className="detail-header">
         <div>
-          <span>Composição</span>
+          <span>{detailTitle}</span>
           <strong>{mainColumn.label}</strong>
         </div>
         <div className="detail-score">
@@ -425,6 +427,12 @@ function GradeDetailPanel({ table, mainColumn }: { table: GradeTable; mainColumn
             <div className="detail-progress-bar" aria-hidden="true">
               <div className="detail-progress-fill" style={{ width: `${item.ratio}%` }} />
             </div>
+            {item.comment ? (
+              <p className="detail-item-comment">
+                <MessageSquareText size={14} />
+                {item.comment}
+              </p>
+            ) : null}
           </article>
         ))}
       </div>

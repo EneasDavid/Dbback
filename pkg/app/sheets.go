@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -263,23 +264,89 @@ func (c *SheetsClient) enrichActivityScore(ctx context.Context, result *TableRes
 }
 
 func activityTableFor(grid *sheetGrid, table TableConfig, user SessionUser) TableResult {
+	matchRow := -1
 	for rowIdx, row := range grid.rows {
-		for colIdx, value := range row {
-			if normalizePerson(value) != normalizePerson(user.Name) {
-				continue
+		for _, value := range row {
+			if normalizePerson(value) == normalizePerson(user.Name) || normalizeID(value) == normalizeID(user.Matricula) {
+				matchRow = rowIdx
+				break
 			}
-			columns := []ColumnResult{
-				{Key: "nome", Label: "Nome do Aluno(a)", Value: value},
-			}
-			if rowIdx < len(grid.rowNotes) {
-				if comment := noteAt(grid.rowNotes[rowIdx], colIdx); comment != "" {
-					columns[0].Comment = comment
-				}
-			}
-			return TableResult{Key: table.Key, Label: table.Label, SheetName: table.SheetName, Kind: table.Kind, Complete: true, Columns: columns}
+		}
+		if matchRow >= 0 {
+			break
 		}
 	}
-	return TableResult{}
+	if matchRow < 0 {
+		return TableResult{}
+	}
+
+	row := grid.rows[matchRow]
+	columns := make([]ColumnResult, 0, len(grid.headers))
+	hasMain := false
+	for colIdx, header := range grid.headers {
+		if strings.TrimSpace(header) == "" {
+			continue
+		}
+		value := valueAt(row, colIdx)
+		comment := ""
+		if matchRow < len(grid.rowNotes) {
+			comment = noteAt(grid.rowNotes[matchRow], colIdx)
+		}
+		if comment == "" {
+			comment = noteAt(grid.notes, colIdx)
+		}
+		column := ColumnResult{
+			Key:     fmt.Sprintf("c%d", colIdx),
+			Label:   header,
+			Value:   value,
+			Comment: comment,
+		}
+		if isMainScoreColumn(header) {
+			hasMain = true
+		}
+		columns = append(columns, column)
+	}
+
+	if !hasMain {
+		total := 0.0
+		hasAny := false
+		for _, column := range columns {
+			if normalizeHeader(column.Label) == "nome" || normalizeHeader(column.Label) == "matricula" {
+				continue
+			}
+			if value, ok := parseNumber(column.Value); ok {
+				total += value
+				hasAny = true
+			}
+		}
+		if hasAny {
+			columns = append([]ColumnResult{{
+				Key:   "nota",
+				Label: "Nota",
+				Value: fmt.Sprintf("%.2f", total),
+				Comment: "Total calculado a partir das subnotas",
+			}}, columns...)
+		}
+	}
+
+	return TableResult{Key: table.Key, Label: table.Label, SheetName: table.SheetName, Kind: table.Kind, Complete: true, Columns: columns}
+}
+
+func isMainScoreColumn(header string) bool {
+	normalized := normalizeHeader(header)
+	return normalized == "nota" || normalized == "total" || strings.Contains(normalized, "nota") || strings.Contains(normalized, "media") || strings.Contains(normalized, "média")
+}
+
+func parseNumber(value string) (float64, bool) {
+	text := strings.TrimSpace(strings.ReplaceAll(value, ",", "."))
+	if text == "" {
+		return 0, false
+	}
+	parsed, err := strconv.ParseFloat(text, 64)
+	if err != nil {
+		return 0, false
+	}
+	return parsed, true
 }
 
 func tableComplete(grid *sheetGrid, table TableConfig) bool {
