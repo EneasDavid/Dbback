@@ -24,6 +24,7 @@ type TableConfig struct {
 	Key       string
 	Label     string
 	SheetName string
+	Kind      string
 }
 
 func LoadConfig() Config {
@@ -31,14 +32,14 @@ func LoadConfig() Config {
 		SpreadsheetID: firstNonEmpty(os.Getenv("GOOGLE_SHEET_ID"), "12zXd1oCQOdBhI88JWMrZ2req0c3XfFLJcVPXQ9CaKT8"),
 		LoginSheet:    firstNonEmpty(os.Getenv("LOGIN_SHEET_NAME"), "Base de dados"),
 		AB1Tables: []TableConfig{
-			tableFromEnv("pesquisa", "Pesquisa", "SHEET_AB1_PESQUISA", "AT. 1"),
-			tableFromEnv("artigo", "Artigo", "SHEET_AB1_ARTIGO", "AT. 2"),
-			tableFromEnv("lista", "Lista", "SHEET_AB1_LISTA", "AT. 3"),
-			tableFromEnv("prova", "Prova", "SHEET_AB1_PROVA", firstNonEmpty(os.Getenv("SHEET_AB1_NAME"), "Notas AB1")),
+			tableFromEnv("at1", "AT. 1", "SHEET_AB1_PESQUISA", "AT. 1", "activity"),
+			tableFromEnv("at2", "AT. 2", "SHEET_AB1_ARTIGO", "AT. 2", "activity"),
+			tableFromEnv("at3", "AT. 3", "SHEET_AB1_LISTA", "AT. 3", "activity"),
+			tableFromEnv("prova", "Prova AB1", "SHEET_AB1_PROVA", firstNonEmpty(os.Getenv("SHEET_AB1_NAME"), "Notas AB1"), "summary"),
 		},
 		AB2Tables: []TableConfig{
-			tableFromEnv("lista", "Lista", "SHEET_AB2_LISTA", "AT. 4"),
-			tableFromEnv("projeto", "Projeto", "SHEET_AB2_PROJETO", firstNonEmpty(os.Getenv("SHEET_AB2_NAME"), "Projeto AB2")),
+			tableFromEnv("at4", "AT. 4", "SHEET_AB2_LISTA", "AT. 4", "activity"),
+			tableFromEnv("projeto", "Projeto AB2", "SHEET_AB2_PROJETO", firstNonEmpty(os.Getenv("SHEET_AB2_NAME"), "Projeto AB2"), "project"),
 		},
 		SessionSecret: os.Getenv("SESSION_SECRET"),
 		CookieSecure:  strings.EqualFold(firstNonEmpty(os.Getenv("COOKIE_SECURE"), "true"), "true"),
@@ -70,11 +71,12 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func tableFromEnv(key string, label string, envName string, fallback string) TableConfig {
+func tableFromEnv(key string, label string, envName string, fallback string, kind string) TableConfig {
 	return TableConfig{
 		Key:       key,
 		Label:     label,
 		SheetName: firstNonEmpty(os.Getenv(envName), fallback),
+		Kind:      kind,
 	}
 }
 

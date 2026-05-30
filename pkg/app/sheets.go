@@ -29,6 +29,7 @@ type TableResult struct {
 	Key       string         `json:"key"`
 	Label     string         `json:"label"`
 	SheetName string         `json:"sheetName"`
+	Kind      string         `json:"kind"`
 	Columns   []ColumnResult `json:"columns"`
 }
 
@@ -129,24 +130,25 @@ func (c *SheetsClient) gradeTableFor(ctx context.Context, table TableConfig, use
 	if err != nil {
 		return TableResult{}, false, err
 	}
-	idx := nameColumn(grid.headers)
-	searchValue := user.Name
-	matchByName := true
-	if idx < 0 {
-		idx = matriculaColumn(grid.headers)
-		searchValue = user.Matricula
-		matchByName = false
+	if table.Kind == "activity" {
+		result := activityTableFor(grid, table, user)
+		return result, result.Columns != nil, nil
 	}
-	if idx < 0 {
+	nameIdx := nameColumn(grid.headers)
+	matriculaIdx := matriculaColumn(grid.headers)
+	if nameIdx < 0 && matriculaIdx < 0 {
 		return TableResult{}, false, NewHTTPError(500, "coluna de nome ou matricula nao encontrada na aba "+sheetName)
 	}
 	for _, row := range grid.rows {
-		if idx >= len(row) || !sameLookupValue(row[idx], searchValue, matchByName) {
+		if !matchesUser(row, nameIdx, matriculaIdx, user) {
 			continue
 		}
 		columns := make([]ColumnResult, 0, len(grid.headers))
 		for colIdx, header := range grid.headers {
 			if strings.TrimSpace(header) == "" {
+				continue
+			}
+			if table.Kind == "summary" && !summaryColumn(header) {
 				continue
 			}
 			value := ""
@@ -164,9 +166,44 @@ func (c *SheetsClient) gradeTableFor(ctx context.Context, table TableConfig, use
 				Comment: comment,
 			})
 		}
-		return TableResult{Key: table.Key, Label: table.Label, SheetName: sheetName, Columns: columns}, true, nil
+		return TableResult{Key: table.Key, Label: table.Label, SheetName: sheetName, Kind: table.Kind, Columns: columns}, true, nil
 	}
 	return TableResult{}, false, nil
+}
+
+func activityTableFor(grid *sheetGrid, table TableConfig, user SessionUser) TableResult {
+	for rowIdx, row := range grid.rows {
+		for colIdx, value := range row {
+			if normalizePerson(value) != normalizePerson(user.Name) {
+				continue
+			}
+			group := table.Label
+			if colIdx < len(grid.headers) && strings.TrimSpace(grid.headers[colIdx]) != "" {
+				group = grid.headers[colIdx]
+			}
+			columns := []ColumnResult{
+				{Key: "atividade", Label: "Atividade", Value: table.Label},
+				{Key: "grupo", Label: "Grupo", Value: group, Comment: noteAt(grid.notes, colIdx)},
+				{Key: "nome", Label: "Nome do Aluno(a)", Value: value},
+			}
+			if max := activityMaxValue(grid.rows, rowIdx, colIdx); max != "" {
+				columns = append(columns, ColumnResult{Key: "nota_maxima", Label: "Nota maxima", Value: max})
+			}
+			return TableResult{Key: table.Key, Label: table.Label, SheetName: table.SheetName, Kind: table.Kind, Columns: columns}
+		}
+	}
+	return TableResult{}
+}
+
+func activityMaxValue(rows [][]string, matchRow int, colIdx int) string {
+	if matchRow <= 0 || len(rows) == 0 || colIdx >= len(rows[0]) {
+		return ""
+	}
+	value := strings.TrimSpace(rows[0][colIdx])
+	if value == "" || normalizePerson(value) == normalizePerson(rows[matchRow][colIdx]) {
+		return ""
+	}
+	return value
 }
 
 func (c *SheetsClient) tablesForExam(exam string) ([]TableConfig, error) {
@@ -207,7 +244,8 @@ func (c *SheetsClient) loadSheet(ctx context.Context, sheetName string) (*sheetG
 }
 
 func parseGrid(rows []*sheets.RowData) *sheetGrid {
-	grid := &sheetGrid{}
+	allValues := make([][]string, 0, len(rows))
+	allNotes := make([][]string, 0, len(rows))
 	for _, row := range rows {
 		values := make([]string, len(row.Values))
 		notes := make([]string, len(row.Values))
@@ -215,12 +253,34 @@ func parseGrid(rows []*sheets.RowData) *sheetGrid {
 			values[idx] = cellText(cell)
 			notes[idx] = strings.TrimSpace(cell.Note)
 		}
-		if grid.headers == nil && hasAny(values) {
-			grid.headers = values
-			grid.notes = notes
-			continue
+		allValues = append(allValues, values)
+		allNotes = append(allNotes, notes)
+	}
+
+	headerIdx := -1
+	bestScore := 0
+	for idx, values := range allValues {
+		score := headerScore(values)
+		if score > bestScore {
+			bestScore = score
+			headerIdx = idx
 		}
-		if grid.headers != nil && hasAny(values) {
+	}
+	if headerIdx < 0 {
+		for idx, values := range allValues {
+			if hasAny(values) {
+				headerIdx = idx
+				break
+			}
+		}
+	}
+	if headerIdx < 0 {
+		return &sheetGrid{}
+	}
+
+	grid := &sheetGrid{headers: allValues[headerIdx], notes: allNotes[headerIdx]}
+	for _, values := range allValues[headerIdx+1:] {
+		if hasAny(values) {
 			grid.rows = append(grid.rows, values)
 		}
 	}
@@ -298,10 +358,56 @@ func nameColumn(headers []string) int {
 	return -1
 }
 
+func exactNameColumn(headers []string) int {
+	candidates := []string{"nome", "aluno", "estudante", "discente", "nome completo", "nome do aluno", "nome do aluno(a)"}
+	for idx, header := range headers {
+		normalized := normalizeHeader(header)
+		for _, candidate := range candidates {
+			if normalized == normalizeHeader(candidate) {
+				return idx
+			}
+		}
+	}
+	return -1
+}
+
+func headerScore(headers []string) int {
+	score := 0
+	if matriculaColumn(headers) >= 0 {
+		score += 3
+	}
+	if exactNameColumn(headers) >= 0 {
+		score += 4
+	} else if nameColumn(headers) >= 0 {
+		score++
+	}
+	for _, header := range headers {
+		if summaryColumn(header) {
+			score += 2
+		}
+	}
+	return score
+}
+
+func summaryColumn(header string) bool {
+	normalized := normalizeHeader(header)
+	if strings.Contains(normalized, "nota") && strings.Contains(normalized, "ab") {
+		return true
+	}
+	return strings.Contains(normalized, "prova") && strings.Contains(normalized, "ab")
+}
+
 func normalizeHeader(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	replacer := strings.NewReplacer("á", "a", "à", "a", "ã", "a", "â", "a", "é", "e", "ê", "e", "í", "i", "ó", "o", "ô", "o", "õ", "o", "ú", "u", "ç", "c")
 	return replacer.Replace(value)
+}
+
+func noteAt(notes []string, idx int) string {
+	if idx < 0 || idx >= len(notes) {
+		return ""
+	}
+	return strings.TrimSpace(notes[idx])
 }
 
 func valueAt(row []string, idx int) string {
@@ -325,4 +431,14 @@ func sameLookupValue(left string, right string, person bool) bool {
 		return normalizePerson(left) == normalizePerson(right)
 	}
 	return normalizeID(left) == normalizeID(right)
+}
+
+func matchesUser(row []string, nameIdx int, matriculaIdx int, user SessionUser) bool {
+	if nameIdx >= 0 && nameIdx < len(row) && sameLookupValue(row[nameIdx], user.Name, true) {
+		return true
+	}
+	if matriculaIdx >= 0 && matriculaIdx < len(row) && sameLookupValue(row[matriculaIdx], user.Matricula, false) {
+		return true
+	}
+	return false
 }
