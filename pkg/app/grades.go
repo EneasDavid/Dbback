@@ -316,7 +316,7 @@ func addAB1ScoreAverage(result *GradeResult) {
 
 	total := 0.0
 	hasAny := false
-	
+
 	// First check for "Somatório AB" in summary
 	for _, table := range result.Tables {
 		if table.Kind != "summary" {
@@ -337,7 +337,7 @@ func addAB1ScoreAverage(result *GradeResult) {
 			break
 		}
 	}
-	
+
 	// If no "Somatório AB", sum all main score cards
 	if !hasAny {
 		for _, table := range result.Tables {
@@ -358,7 +358,7 @@ func addAB1ScoreAverage(result *GradeResult) {
 			}
 		}
 	}
-	
+
 	if !hasAny {
 		return
 	}
