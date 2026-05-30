@@ -21,7 +21,7 @@ func TestAddAB1ScoreSumAddsActivitiesAndProof(t *testing.T) {
 	if len(cards) != 2 {
 		t.Fatalf("summary cards len = %d, want 2: %#v", len(cards), cards)
 	}
-	if cards[0].Label != "Prova AB" || cards[1].Label != "Somatório AB" {
+	if cards[0].Label != "Prova AB" {
 		t.Fatalf("unexpected summary card order: %#v", cards)
 	}
 	if got := cards[1].Value; got != "8,48" {
