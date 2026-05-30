@@ -24,6 +24,9 @@
   --success-bg: #E5F4EA;
   --warning: #A36417;
   --warning-bg: #FEF3DD;
+  --score-badge-bg: rgba(20, 122, 82, 0.1);
+  --score-badge-text: #145943;
+  --score-badge-border: rgba(20, 122, 82, 0.16);
   --shadow: 0 20px 50px rgba(17, 34, 29, 0.1);
   --shadow-soft: 0 10px 28px rgba(17, 34, 29, 0.08);
   --focus: 0 0 0 4px rgba(20, 122, 82, 0.22);
@@ -60,6 +63,9 @@
   --success-bg: rgba(20, 83, 45, 0.42);
   --warning: #fde68a;
   --warning-bg: rgba(113, 63, 18, 0.42);
+  --score-badge-bg: rgba(226, 232, 240, 0.1);
+  --score-badge-text: #e5edf8;
+  --score-badge-border: rgba(226, 232, 240, 0.16);
   --shadow: 0 28px 70px rgba(0, 0, 0, 0.32);
   --shadow-soft: 0 14px 34px rgba(0, 0, 0, 0.26);
   --focus: 0 0 0 4px rgba(96, 165, 250, 0.3);
@@ -346,7 +352,7 @@ input:focus-visible {
 .grade-list {
   margin-top: 16px;
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .status-banner {
@@ -432,6 +438,11 @@ input:focus-visible {
 .grade-table.summary {
   border-color: rgba(20, 122, 82, 0.15);
   background: var(--panel);
+}
+
+.grade-table.final-average {
+  margin-top: 2px;
+  border-color: color-mix(in srgb, var(--success) 20%, var(--border-soft));
 }
 
 .summary-grid {
@@ -568,15 +579,6 @@ input:focus-visible {
   background: var(--danger-bg);
 }
 
-.grade-row.score-danger,
-.summary-score.score-danger {
-  margin: 10px -8px 0;
-  padding: 13px 8px;
-  border-radius: 8px;
-  color: var(--danger);
-  background: var(--danger-bg);
-}
-
 .summary-score.score-danger,
 .summary-score.score-warning,
 .summary-score.score-success {
@@ -630,18 +632,20 @@ input:focus-visible {
 }
 
 .detail-panel {
-  margin: 0 0 16px;
-  padding: 16px;
-  border-radius: 20px;
+  margin: -1px 0 16px;
+  padding: 0;
+  border-radius: 0 0 20px 20px;
   background: var(--panel-soft);
   border: 1px solid var(--border);
+  border-top-color: var(--border-soft);
+  overflow: hidden;
 }
 
 .detail-header {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
-  margin-bottom: 16px;
+  display: block;
+  margin: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-soft);
   align-items: center;
 }
 
@@ -654,51 +658,45 @@ input:focus-visible {
 }
 
 .detail-header strong {
+  display: block;
+  margin-top: 3px;
   color: var(--text);
   font-size: 1.05rem;
 }
 
-.detail-score {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  color: var(--brand);
-  font-weight: 800;
-}
-
-.detail-score small {
-  font-size: 0.72rem;
-  color: var(--muted);
-}
-
 .detail-items {
   display: grid;
-  gap: 12px;
+  gap: 0;
 }
 
 .detail-item {
   display: grid;
   gap: 12px;
   padding: 16px;
-  border-radius: 18px;
+  border-radius: 0;
   background: var(--panel);
-  border: 1px solid var(--border-soft);
-  box-shadow: var(--shadow-soft);
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  box-shadow: none;
+}
+
+.detail-item:last-child {
+  border-bottom: 0;
 }
 
 .detail-item.score-danger {
   border-color: var(--danger-border);
-  background: color-mix(in srgb, var(--danger-bg) 58%, var(--panel));
+  background: color-mix(in srgb, var(--danger-bg) 32%, var(--panel));
 }
 
 .detail-item.score-warning {
   border-color: color-mix(in srgb, var(--warning) 36%, var(--border-soft));
-  background: color-mix(in srgb, var(--warning-bg) 58%, var(--panel));
+  background: color-mix(in srgb, var(--warning-bg) 34%, var(--panel));
 }
 
 .detail-item.score-success {
   border-color: color-mix(in srgb, var(--success) 32%, var(--border-soft));
-  background: color-mix(in srgb, var(--success-bg) 58%, var(--panel));
+  background: color-mix(in srgb, var(--success-bg) 34%, var(--panel));
 }
 
 .detail-item-row {
@@ -719,10 +717,10 @@ input:focus-visible {
   display: grid;
   grid-template-columns: 20px 1fr;
   gap: 10px;
-  margin: 0;
+  margin: 2px 0 0;
   padding-left: 2px;
-  color: var(--muted-strong);
-  font-size: 0.9rem;
+  color: var(--muted);
+  font-size: 0.92rem;
   line-height: 1.5;
 }
 
@@ -737,10 +735,12 @@ input:focus-visible {
   gap: 6px;
   padding: 0.45em 0.75em;
   border-radius: 999px;
-  background: rgba(20, 122, 82, 0.1);
-  color: var(--brand);
+  border: 1px solid var(--score-badge-border, rgba(20, 122, 82, 0.16));
+  background: var(--score-badge-bg, rgba(20, 122, 82, 0.1));
+  color: var(--score-badge-text, var(--brand));
   font-size: 0.8rem;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .detail-progress-bar {
@@ -808,6 +808,12 @@ input:focus-visible {
   gap: 8px;
   margin-top: 12px;
   padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.inline-feedback {
+  margin: 0;
+  padding: 14px 16px 16px;
   border-top: 1px solid var(--border-soft);
 }
 

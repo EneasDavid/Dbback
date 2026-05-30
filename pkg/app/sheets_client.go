@@ -77,6 +77,7 @@ func (c *SheetsClient) loadSheet(ctx context.Context, sheetName string) (*sheetG
 		grid := parseGrid(resp.Sheets[0].Data[0].RowData, resp.Sheets[0].Merges)
 		if comments, err := c.commentsForSheet(ctx, sheetName); err == nil {
 			grid.applyComments(comments)
+			grid.applyCommentMerges(resp.Sheets[0].Merges)
 		}
 		c.mu.Lock()
 		c.cache[sheetName] = cachedGrid{expires: time.Now().Add(c.cfg.CacheTTL), grid: grid}

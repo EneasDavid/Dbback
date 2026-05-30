@@ -1,7 +1,7 @@
 import { StrictMode, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { api } from './api';
-import { AB2Summary, ExamSwitch, GradeCard, InlineError, LoginView, SummaryTable, Topbar } from './components';
+import { AverageCard, ExamSwitch, GradeCard, InlineError, LoginView, SummaryTable, Topbar } from './components';
 import { computeStudentStatus, normalizeGrade, shouldShowTable } from './gradeUtils';
 import type { GradeCache, GradeResult, SessionUser, StudentStatus } from './types';
 import './styles.scss';
@@ -103,6 +103,9 @@ function App() {
     return grades[exam]?.tables ?? [];
   }, [grades, exam]);
 
+  const activityTables = useMemo(() => visibleColumns.filter((table) => table.kind !== 'summary' && shouldShowTable(table)), [visibleColumns]);
+  const summaryTables = useMemo(() => visibleColumns.filter((table) => table.kind === 'summary' && shouldShowTable(table)), [visibleColumns]);
+
   const handleToggleDetail = (tableKey: string, columnKey: string) => {
     setActiveDetail((current) =>
       current?.tableKey === tableKey && current.columnKey === columnKey ? null : { tableKey, columnKey }
@@ -160,19 +163,13 @@ function App() {
 
       {!loading && visibleColumns.length > 0 && (
         <section className="grade-list">
-          {exam === 'ab2' && studentStatus && <AB2Summary status={studentStatus} />}
-          {visibleColumns.filter(shouldShowTable).map((table) =>
-            table.kind === 'summary' ? (
-              <SummaryTable table={table} key={table.key} exam={exam} status={studentStatus} />
-            ) : (
-              <GradeCard
-                table={table}
-                key={table.key}
-                activeDetail={activeDetail}
-                onToggleDetail={handleToggleDetail}
-              />
-            )
-          )}
+          {activityTables.map((table) => (
+            <GradeCard table={table} key={table.key} activeDetail={activeDetail} onToggleDetail={handleToggleDetail} />
+          ))}
+          {summaryTables.map((table) => (
+            <SummaryTable table={table} key={table.key} exam={exam} />
+          ))}
+          {studentStatus && <AverageCard exam={exam} status={studentStatus} />}
         </section>
       )}
     </main>

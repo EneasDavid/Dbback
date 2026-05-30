@@ -88,6 +88,11 @@ export function shouldShowMainColumn(column: Column) {
   return label === 'nota' || label.includes('prova') || label === 'total' || label.includes('média') || isActivityColumn(column) || label.includes('projeto') || label === 'ab1' || label === 'ab2';
 }
 
+export function isFinalAverageColumn(column: Column) {
+  const label = normalized(column.label);
+  return label.includes('nota') && label.includes('ab') && !label.includes('prova');
+}
+
 export function shouldShowTable(table: GradeTable) {
   return table.kind === 'summary' || table.columns.some(shouldShowMainColumn) || Boolean(table.items?.length) || feedbackComments(table).length > 0;
 }

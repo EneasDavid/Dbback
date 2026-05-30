@@ -99,6 +99,52 @@ func (g *sheetGrid) applyComments(comments map[string]string) {
 	}
 }
 
+func (g *sheetGrid) applyCommentMerges(merges []*sheets.GridRange) {
+	for _, merged := range merges {
+		startRow := int(merged.StartRowIndex)
+		endRow := int(merged.EndRowIndex)
+		startCol := int(merged.StartColumnIndex)
+		endCol := int(merged.EndColumnIndex)
+		if startRow < 0 || startCol < 0 || endRow <= startRow || endCol <= startCol {
+			continue
+		}
+		comment := g.noteAtAbsolute(startRow, startCol)
+		if comment == "" {
+			continue
+		}
+		for rowIdx := startRow; rowIdx < endRow; rowIdx++ {
+			for colIdx := startCol; colIdx < endCol; colIdx++ {
+				g.setNoteAtAbsolute(rowIdx, colIdx, comment)
+			}
+		}
+	}
+}
+
+func (g *sheetGrid) noteAtAbsolute(rowIdx int, colIdx int) string {
+	if rowIdx == g.headerRow {
+		return noteAt(g.notes, colIdx)
+	}
+	for idx, actualRow := range g.rowIndices {
+		if actualRow == rowIdx {
+			return noteAt(g.rowNotes[idx], colIdx)
+		}
+	}
+	return ""
+}
+
+func (g *sheetGrid) setNoteAtAbsolute(rowIdx int, colIdx int, comment string) {
+	if rowIdx == g.headerRow {
+		g.notes = setAt(g.notes, colIdx, comment)
+		return
+	}
+	for idx, actualRow := range g.rowIndices {
+		if actualRow == rowIdx {
+			g.rowNotes[idx] = setAt(g.rowNotes[idx], colIdx, comment)
+			return
+		}
+	}
+}
+
 func setAt(values []string, idx int, value string) []string {
 	for len(values) <= idx {
 		values = append(values, "")

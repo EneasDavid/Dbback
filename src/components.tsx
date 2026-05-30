@@ -1,4 +1,3 @@
-import type { ReactElement } from 'react';
 import { AlertCircle, BookOpenCheck, ChevronRight, LogOut, MessageSquareText, Moon, Search, Sun } from 'lucide-react';
 import {
   displayValue,
@@ -10,6 +9,7 @@ import {
   humanizeLabel,
   isActivityColumn,
   isAverageColumn,
+  isFinalAverageColumn,
   isGradeColumn,
   normalized,
   scoreTone,
@@ -108,16 +108,17 @@ export function ExamSwitch({ exam, setExam }: { exam: 'ab1' | 'ab2'; setExam: (e
   );
 }
 
-export function AB2Summary({ status }: { status: StudentStatus }) {
+export function AverageCard({ exam, status }: { exam: 'ab1' | 'ab2'; status: StudentStatus }) {
+  const value = exam === 'ab1' ? status.ab1 : status.ab2;
   return (
-    <article className="grade-table summary">
+    <article className="grade-table activity final-average">
       <header>
-        <h2>Média AB2</h2>
+        <h2>{`Média ${exam.toUpperCase()}`}</h2>
       </header>
       <div className="summary-grid">
-        <section className={`summary-score highlight ${status.ab2 < 5 ? 'score-danger' : status.ab2 < 7 ? 'score-warning' : 'score-success'}`}>
+        <section className={`summary-score highlight ${value < 5 ? 'score-danger' : value < 7 ? 'score-warning' : 'score-success'}`}>
           <span>Média da AB</span>
-          <strong>{formatScore(status.ab2)}</strong>
+          <strong>{formatScore(value)}</strong>
         </section>
       </div>
     </article>
@@ -134,7 +135,6 @@ export function GradeCard({
   onToggleDetail: (tableKey: string, columnKey: string) => void;
 }) {
   const activeKey = activeDetail?.tableKey === table.key ? activeDetail.columnKey : null;
-  const comments = feedbackComments(table);
   return (
     <article className={`grade-table ${table.kind}`}>
       <header>
@@ -148,23 +148,12 @@ export function GradeCard({
           {activeKey === column.key && <GradeDetailPanel table={table} mainColumn={column} />}
         </div>
       ))}
-      {comments.length > 0 && (
-        <section className="feedback-list">
-          <span>Feedback</span>
-          {comments.map((comment, index) => (
-            <p key={`${table.key}-comment-${index}`}>
-              <MessageSquareText size={15} />
-              {comment}
-            </p>
-          ))}
-        </section>
-      )}
     </article>
   );
 }
 
-export function SummaryTable({ table, exam, status }: { table: GradeTable; exam: 'ab1' | 'ab2'; status: StudentStatus | null }) {
-  const sortedColumns = [...table.columns.filter(shouldShowMainColumn)].sort((a, b) => {
+export function SummaryTable({ table, exam }: { table: GradeTable; exam: 'ab1' | 'ab2' }) {
+  const sortedColumns = [...table.columns.filter((column) => shouldShowMainColumn(column) && !isFinalAverageColumn(column))].sort((a, b) => {
     const labelA = normalized(a.label);
     const labelB = normalized(b.label);
 
@@ -183,43 +172,25 @@ export function SummaryTable({ table, exam, status }: { table: GradeTable; exam:
         <h2>{table.label}</h2>
       </header>
       <div className="summary-grid">
-        {(() => {
-          let insertedAvg = false;
-          return sortedColumns.flatMap((column) => {
-            const isAverage = isAverageColumn(column);
-            const isAT4 = /\bat\.?\s*4\b/.test(normalized(column.label)) || normalized(column.label).includes('atividade 4');
-            const parts: ReactElement[] = [
-              <section className={`summary-score ${isAverage ? 'highlight' : ''} ${isAverage ? scoreTone(column) : ''}`} key={`${table.key}-${column.key}`}>
-                <div className="summary-score-title">
-                  <span>{getSummaryLabel(column)}</span>
-                  {isAT4 && exam === 'ab2' ? <span className="at4-badge">AT.4</span> : null}
-                </div>
-                <strong>{displayValue(column)}</strong>
-                {column.comment && (
-                  <p>
-                    <MessageSquareText size={15} />
-                    {column.comment}
-                  </p>
-                )}
-              </section>,
-            ];
-
-            if (!insertedAvg && normalized(column.label).includes('prova') && status) {
-              const avgValue = exam === 'ab1' ? status.ab1 : exam === 'ab2' ? status.ab2 : null;
-              if (avgValue !== null && avgValue !== undefined) {
-                insertedAvg = true;
-                parts.push(
-                  <section className="summary-score highlight" key={`${table.key}-ab-average`}>
-                    <span>{`Média ${exam.toUpperCase()}`}</span>
-                    <strong>{formatScore(avgValue)}</strong>
-                  </section>,
-                );
-              }
-            }
-
-            return parts;
-          });
-        })()}
+        {sortedColumns.map((column) => {
+          const isAverage = isAverageColumn(column);
+          const isAT4 = /\bat\.?\s*4\b/.test(normalized(column.label)) || normalized(column.label).includes('atividade 4');
+          return (
+            <section className={`summary-score ${isAverage ? 'highlight' : ''} ${isAverage ? scoreTone(column) : ''}`} key={`${table.key}-${column.key}`}>
+              <div className="summary-score-title">
+                <span>{getSummaryLabel(column)}</span>
+                {isAT4 && exam === 'ab2' ? <span className="at4-badge">AT.4</span> : null}
+              </div>
+              <strong>{displayValue(column)}</strong>
+              {column.comment && (
+                <p>
+                  <MessageSquareText size={15} />
+                  {column.comment}
+                </p>
+              )}
+            </section>
+          );
+        })}
       </div>
     </article>
   );
@@ -278,17 +249,14 @@ function GradeDetailPanel({ table, mainColumn }: { table: GradeTable; mainColumn
   const isAt4Detail = /\bat\.?\s*4\b/.test(normalized(mainColumn.label)) || normalized(mainColumn.label).includes('atividade 4');
   const detailTitle = isAt4Detail ? `Detalhes ${humanizeLabel(mainColumn.label)}` : 'Composição';
   const mainComment = mainColumn.comment?.trim();
+  const orphanComments = feedbackComments(table).filter((comment) => !parsedItems.some((item) => item.comment === comment));
 
   return (
     <section className="detail-panel">
       <div className="detail-header">
         <div>
           <span>{detailTitle}</span>
-          <strong>{mainColumn.label}</strong>
-        </div>
-        <div className="detail-score">
-          {displayValue(mainColumn)}
-          <small>nota total</small>
+          <strong>Critérios avaliados</strong>
         </div>
       </div>
       <div className="detail-items">
@@ -320,6 +288,17 @@ function GradeDetailPanel({ table, mainColumn }: { table: GradeTable; mainColumn
             <span>Comentário geral</span>
           </div>
         </div>
+      )}
+      {orphanComments.length > 0 && (
+        <section className="feedback-list inline-feedback">
+          <span>Feedback geral</span>
+          {orphanComments.map((comment, index) => (
+            <p key={`${table.key}-detail-comment-${index}`}>
+              <MessageSquareText size={15} />
+              {comment}
+            </p>
+          ))}
+        </section>
       )}
     </section>
   );
