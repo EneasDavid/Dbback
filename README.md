@@ -22,6 +22,8 @@ Crie as variaveis na Vercel e no ambiente local:
 - `SESSION_SECRET`: chave longa e aleatoria para assinar a sessao.
 - `COOKIE_SECURE`: `true` em producao, `false` em dev local sem HTTPS.
 - `GOOGLE_SERVICE_ACCOUNT_JSON`: JSON completo da service account.
+- `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64`: alternativa ao JSON direto, boa para CI.
+- `GOOGLE_SERVICE_ACCOUNT_FILE`: caminho local para o arquivo JSON da service account.
 
 Compartilhe a planilha com o e-mail `client_email` da service account como leitor.
 

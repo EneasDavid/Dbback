@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"strings"
@@ -15,6 +16,7 @@ type Config struct {
 	SessionSecret string
 	CookieSecure  bool
 	ServiceJSON   string
+	ServiceFile   string
 	CacheTTL      time.Duration
 }
 
@@ -26,7 +28,8 @@ func LoadConfig() Config {
 		AB2Sheet:      firstNonEmpty(os.Getenv("SHEET_AB2_NAME"), "Projeto AB2"),
 		SessionSecret: os.Getenv("SESSION_SECRET"),
 		CookieSecure:  strings.EqualFold(firstNonEmpty(os.Getenv("COOKIE_SECURE"), "true"), "true"),
-		ServiceJSON:   os.Getenv("GOOGLE_SERVICE_ACCOUNT_JSON"),
+		ServiceJSON:   serviceAccountJSON(),
+		ServiceFile:   os.Getenv("GOOGLE_SERVICE_ACCOUNT_FILE"),
 		CacheTTL:      90 * time.Second,
 	}
 }
@@ -48,6 +51,25 @@ func firstNonEmpty(values ...string) string {
 	for _, value := range values {
 		if strings.TrimSpace(value) != "" {
 			return value
+		}
+	}
+	return ""
+}
+
+func serviceAccountJSON() string {
+	if raw := strings.TrimSpace(os.Getenv("GOOGLE_SERVICE_ACCOUNT_JSON")); raw != "" {
+		return raw
+	}
+	if encoded := strings.TrimSpace(os.Getenv("GOOGLE_SERVICE_ACCOUNT_JSON_BASE64")); encoded != "" {
+		decoded, err := base64.StdEncoding.DecodeString(encoded)
+		if err == nil {
+			return string(decoded)
+		}
+	}
+	if path := strings.TrimSpace(os.Getenv("GOOGLE_SERVICE_ACCOUNT_FILE")); path != "" {
+		content, err := os.ReadFile(path)
+		if err == nil {
+			return string(content)
 		}
 	}
 	return ""

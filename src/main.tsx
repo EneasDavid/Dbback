@@ -1,6 +1,6 @@
 import { StrictMode, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AlertCircle, BookOpenCheck, ChevronRight, LogOut, MessageSquareText, Search } from 'lucide-react';
+import { AlertCircle, BookOpenCheck, ChevronRight, LogOut, MessageSquareText, Moon, Search, Sun } from 'lucide-react';
 import './styles.css';
 
 type Column = {
@@ -34,9 +34,18 @@ function App() {
   const [matricula, setMatricula] = useState('');
   const [session, setSession] = useState<string | null>(null);
   const [exam, setExam] = useState<'ab1' | 'ab2'>('ab1');
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    return window.localStorage.getItem('theme') === 'dark' ? 'dark' : 'light';
+  });
   const [grade, setGrade] = useState<GradeResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#020617' : '#0f172a');
+    window.localStorage.setItem('theme', theme);
+  }, [theme]);
 
   useEffect(() => {
     api<{ matricula: string }>('/api/me')
@@ -89,6 +98,7 @@ function App() {
   if (!session) {
     return (
       <main className="shell login-shell">
+        <ThemeButton theme={theme} setTheme={setTheme} />
         <section className="login-panel">
           <div className="brand-mark">
             <BookOpenCheck size={34} strokeWidth={2.2} />
@@ -129,6 +139,7 @@ function App() {
         <button className="icon-button" type="button" onClick={handleLogout} aria-label="Sair">
           <LogOut size={18} />
         </button>
+        <ThemeButton theme={theme} setTheme={setTheme} compact />
       </header>
 
       <section className="exam-switch" aria-label="Selecionar avaliacao">
@@ -168,6 +179,24 @@ function App() {
         </section>
       )}
     </main>
+  );
+}
+
+function ThemeButton({
+  theme,
+  setTheme,
+  compact = false,
+}: {
+  theme: 'light' | 'dark';
+  setTheme: (theme: 'light' | 'dark') => void;
+  compact?: boolean;
+}) {
+  const next = theme === 'dark' ? 'light' : 'dark';
+  return (
+    <button className={compact ? 'icon-button theme-compact' : 'theme-button'} type="button" onClick={() => setTheme(next)} aria-label="Alternar modo noturno">
+      {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+      {!compact && <span>{theme === 'dark' ? 'Modo claro' : 'Modo noturno'}</span>}
+    </button>
   );
 }
 
