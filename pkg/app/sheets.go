@@ -46,9 +46,10 @@ type cachedGrid struct {
 }
 
 type sheetGrid struct {
-	headers []string
-	notes   []string
-	rows    [][]string
+	headers  []string
+	notes    []string
+	rows     [][]string
+	rowNotes [][]string
 }
 
 type LoginIdentity struct {
@@ -132,6 +133,9 @@ func (c *SheetsClient) gradeTableFor(ctx context.Context, table TableConfig, use
 	}
 	if table.Kind == "activity" {
 		result := activityTableFor(grid, table, user)
+		if result.Columns != nil && strings.EqualFold(table.SheetName, table.Label) && strings.HasPrefix(table.Key, "at") {
+			c.enrichActivityScore(ctx, &result, table, user)
+		}
 		return result, result.Columns != nil, nil
 	}
 	nameIdx := nameColumn(grid.headers)
@@ -139,7 +143,7 @@ func (c *SheetsClient) gradeTableFor(ctx context.Context, table TableConfig, use
 	if nameIdx < 0 && matriculaIdx < 0 {
 		return TableResult{}, false, NewHTTPError(500, "coluna de nome ou matricula nao encontrada na aba "+sheetName)
 	}
-	for _, row := range grid.rows {
+	for rowIdx, row := range grid.rows {
 		if !matchesUser(row, nameIdx, matriculaIdx, user) {
 			continue
 		}
@@ -156,8 +160,11 @@ func (c *SheetsClient) gradeTableFor(ctx context.Context, table TableConfig, use
 				value = row[colIdx]
 			}
 			comment := ""
-			if colIdx < len(grid.notes) {
-				comment = grid.notes[colIdx]
+			if rowIdx < len(grid.rowNotes) {
+				comment = noteAt(grid.rowNotes[rowIdx], colIdx)
+			}
+			if comment == "" {
+				comment = noteAt(grid.notes, colIdx)
 			}
 			columns = append(columns, ColumnResult{
 				Key:     fmt.Sprintf("c%d", colIdx),
@@ -171,6 +178,42 @@ func (c *SheetsClient) gradeTableFor(ctx context.Context, table TableConfig, use
 	return TableResult{}, false, nil
 }
 
+func (c *SheetsClient) enrichActivityScore(ctx context.Context, result *TableResult, table TableConfig, user SessionUser) {
+	if table.Key != "at1" && table.Key != "at2" && table.Key != "at3" {
+		return
+	}
+	summarySheet := c.cfg.AB1Tables[len(c.cfg.AB1Tables)-1].SheetName
+	grid, err := c.loadSheet(ctx, summarySheet)
+	if err != nil {
+		return
+	}
+	nameIdx := nameColumn(grid.headers)
+	matriculaIdx := matriculaColumn(grid.headers)
+	scoreIdx := activityScoreColumn(grid.headers, table.Key)
+	if scoreIdx < 0 {
+		return
+	}
+	for rowIdx, row := range grid.rows {
+		if !matchesUser(row, nameIdx, matriculaIdx, user) {
+			continue
+		}
+		comment := ""
+		if rowIdx < len(grid.rowNotes) {
+			comment = noteAt(grid.rowNotes[rowIdx], scoreIdx)
+		}
+		if comment == "" {
+			comment = noteAt(grid.notes, scoreIdx)
+		}
+		result.Columns = append(result.Columns, ColumnResult{
+			Key:     "nota",
+			Label:   "Nota",
+			Value:   valueAt(row, scoreIdx),
+			Comment: comment,
+		})
+		return
+	}
+}
+
 func activityTableFor(grid *sheetGrid, table TableConfig, user SessionUser) TableResult {
 	for rowIdx, row := range grid.rows {
 		for colIdx, value := range row {
@@ -182,28 +225,18 @@ func activityTableFor(grid *sheetGrid, table TableConfig, user SessionUser) Tabl
 				group = grid.headers[colIdx]
 			}
 			columns := []ColumnResult{
-				{Key: "atividade", Label: "Atividade", Value: table.Label},
 				{Key: "grupo", Label: "Grupo", Value: group, Comment: noteAt(grid.notes, colIdx)},
 				{Key: "nome", Label: "Nome do Aluno(a)", Value: value},
 			}
-			if max := activityMaxValue(grid.rows, rowIdx, colIdx); max != "" {
-				columns = append(columns, ColumnResult{Key: "nota_maxima", Label: "Nota maxima", Value: max})
+			if rowIdx < len(grid.rowNotes) {
+				if comment := noteAt(grid.rowNotes[rowIdx], colIdx); comment != "" {
+					columns[0].Comment = comment
+				}
 			}
 			return TableResult{Key: table.Key, Label: table.Label, SheetName: table.SheetName, Kind: table.Kind, Columns: columns}
 		}
 	}
 	return TableResult{}
-}
-
-func activityMaxValue(rows [][]string, matchRow int, colIdx int) string {
-	if matchRow <= 0 || len(rows) == 0 || colIdx >= len(rows[0]) {
-		return ""
-	}
-	value := strings.TrimSpace(rows[0][colIdx])
-	if value == "" || normalizePerson(value) == normalizePerson(rows[matchRow][colIdx]) {
-		return ""
-	}
-	return value
 }
 
 func (c *SheetsClient) tablesForExam(exam string) ([]TableConfig, error) {
@@ -279,9 +312,10 @@ func parseGrid(rows []*sheets.RowData) *sheetGrid {
 	}
 
 	grid := &sheetGrid{headers: allValues[headerIdx], notes: allNotes[headerIdx]}
-	for _, values := range allValues[headerIdx+1:] {
+	for idx, values := range allValues[headerIdx+1:] {
 		if hasAny(values) {
 			grid.rows = append(grid.rows, values)
+			grid.rowNotes = append(grid.rowNotes, allNotes[headerIdx+1+idx])
 		}
 	}
 	return grid
@@ -395,6 +429,23 @@ func summaryColumn(header string) bool {
 		return true
 	}
 	return strings.Contains(normalized, "prova") && strings.Contains(normalized, "ab")
+}
+
+func activityScoreColumn(headers []string, key string) int {
+	wanted := map[string][]string{
+		"at1": {"pesquisa"},
+		"at2": {"artigo"},
+		"at3": {"lista"},
+	}[key]
+	for idx, header := range headers {
+		normalized := normalizeHeader(header)
+		for _, item := range wanted {
+			if normalized == item || strings.Contains(normalized, item) {
+				return idx
+			}
+		}
+	}
+	return -1
 }
 
 func normalizeHeader(value string) string {

@@ -26,7 +26,15 @@ type GradeTable = {
   key: string;
   label: string;
   sheetName: string;
+  kind: string;
   columns: Column[];
+};
+
+type StudentStatus = {
+  ab1: number;
+  ab2: number;
+  average: number;
+  approved: boolean;
 };
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -50,6 +58,7 @@ function App() {
     return window.localStorage.getItem('theme') === 'dark' ? 'dark' : 'light';
   });
   const [grade, setGrade] = useState<GradeResult | null>(null);
+  const [studentStatus, setStudentStatus] = useState<StudentStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -78,6 +87,22 @@ function App() {
       .finally(() => setLoading(false));
   }, [session, exam]);
 
+  useEffect(() => {
+    if (!session) return;
+    Promise.all([api<GradeResult>('/api/grades?exam=ab1'), api<GradeResult>('/api/grades?exam=ab2')])
+      .then(([ab1, ab2]) => {
+        const ab1Total = findScore(ab1, (table, column) => table.kind === 'summary' && normalized(column.label).includes('nota') && normalized(column.label).includes('ab'));
+        const ab2Total = findScore(ab2, (table, column) => table.key === 'projeto' && normalized(column.label) === 'total');
+        if (ab1Total === null || ab2Total === null) {
+          setStudentStatus(null);
+          return;
+        }
+        const average = (ab1Total + ab2Total) / 2;
+        setStudentStatus({ ab1: ab1Total, ab2: ab2Total, average, approved: average >= 7 });
+      })
+      .catch(() => setStudentStatus(null));
+  }, [session]);
+
   const visibleColumns = useMemo(() => {
     return grade?.tables ?? [];
   }, [grade]);
@@ -104,6 +129,7 @@ function App() {
     await api('/api/logout', { method: 'POST' }).catch(() => null);
     setSession(null);
     setGrade(null);
+    setStudentStatus(null);
     setError('');
   }
 
@@ -115,10 +141,10 @@ function App() {
           <div className="brand-mark">
             <BookOpenCheck size={34} strokeWidth={2.2} />
           </div>
-          <h1>Feedback de Notas</h1>
-          <p>Acesse com a sua matricula para consultar AB1 ou AB2.</p>
+          <h1>dbBack</h1>
+          <p>Use sua matricula da UFAL para acessar suas notas e feedbacks das atividades.</p>
           <form onSubmit={handleLogin}>
-            <label htmlFor="matricula">Matricula</label>
+            <label htmlFor="matricula">Matricula UFAL</label>
             <div className="field">
               <Search size={18} />
               <input
@@ -165,6 +191,8 @@ function App() {
 
       {error && <InlineError message={error} />}
 
+      {studentStatus && <StatusBanner status={studentStatus} />}
+
       <section className="result-head">
         <span>{exam === 'ab1' ? 'Atividades e Notas AB1' : 'Atividades e Projeto AB2'}</span>
         <h1>{exam.toUpperCase()}</h1>
@@ -175,15 +203,14 @@ function App() {
       {!loading && visibleColumns.length > 0 && (
         <section className="grade-list">
           {visibleColumns.map((table) => (
-            <article className="grade-table" key={table.key}>
+            <article className={`grade-table ${table.kind}`} key={table.key}>
               <header>
-                <span>{table.sheetName}</span>
                 <h2>{table.label}</h2>
               </header>
               {table.columns
-                .filter((column) => column.label.trim() !== '')
+                .filter(shouldShowColumn)
                 .map((column) => (
-                  <section className="grade-row" key={`${table.key}-${column.key}`}>
+                  <section className={`grade-row ${scoreTone(column)}`} key={`${table.key}-${column.key}`}>
                     <div>
                       <span>{column.label}</span>
                       <strong>{column.value || '-'}</strong>
@@ -201,6 +228,16 @@ function App() {
         </section>
       )}
     </main>
+  );
+}
+
+function StatusBanner({ status }: { status: StudentStatus }) {
+  return (
+    <section className={`status-banner ${status.approved ? 'approved' : 'pending'}`}>
+      <span>{status.approved ? 'Aprovado' : 'Media parcial'}</span>
+      <strong>{formatScore(status.average)}</strong>
+      <p>AB1 {formatScore(status.ab1)} + AB2 {formatScore(status.ab2)}</p>
+    </section>
   );
 }
 
@@ -229,6 +266,49 @@ function InlineError({ message }: { message: string }) {
       <span>{message}</span>
     </div>
   );
+}
+
+function shouldShowColumn(column: Column) {
+  const label = normalized(column.label);
+  return label !== '' && !label.includes('matricula') && !label.includes('nome do aluno') && label !== 'nome' && label !== 'aluno';
+}
+
+function scoreTone(column: Column) {
+  const label = normalized(column.label);
+  if (!label.includes('nota ab')) return '';
+  const value = parseScore(column.value);
+  if (value === null) return '';
+  if (value < 5) return 'score-danger';
+  if (value < 7) return 'score-warning';
+  return 'score-success';
+}
+
+function findScore(grade: GradeResult, predicate: (table: GradeTable, column: Column) => boolean) {
+  for (const table of grade.tables) {
+    for (const column of table.columns) {
+      if (predicate(table, column)) {
+        return parseScore(column.value);
+      }
+    }
+  }
+  return null;
+}
+
+function parseScore(value: string) {
+  const parsed = Number(value.replace(',', '.').replace(/[^\d.-]/g, ''));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatScore(value: number) {
+  return value.toLocaleString('pt-BR', { maximumFractionDigits: 2, minimumFractionDigits: value % 1 === 0 ? 0 : 1 });
+}
+
+function normalized(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .trim();
 }
 
 createRoot(document.getElementById('root')!).render(
