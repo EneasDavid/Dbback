@@ -8,8 +8,9 @@ Aplicacao Go + React para consulta mobile de notas por matricula em uma planilha
 - Sessao em cookie HTTP-only assinado.
 - Consulta somente leitura via Google Sheets API.
 - Selecao entre `AB1` e `AB2`.
-- Retorno apenas da linha da matricula logada.
-- Comentarios por coluna sao lidos das notas das celulas do cabecalho da aba.
+- Cada AB pode consultar varias abas/tabelas da mesma planilha.
+- Retorno apenas das linhas da matricula logada.
+- Comentarios por coluna sao lidos das notas das celulas do cabecalho de cada aba.
 
 ## Variaveis de ambiente
 
@@ -17,8 +18,12 @@ Crie as variaveis na Vercel e no ambiente local:
 
 - `GOOGLE_SHEET_ID`: id da planilha.
 - `LOGIN_SHEET_NAME`: aba com a base de matriculas.
-- `SHEET_AB1_NAME`: aba de notas AB1.
-- `SHEET_AB2_NAME`: aba de notas AB2.
+- `SHEET_AB1_PESQUISA`: aba da pesquisa AB1.
+- `SHEET_AB1_ARTIGO`: aba do artigo AB1.
+- `SHEET_AB1_LISTA`: aba da lista AB1.
+- `SHEET_AB1_PROVA`: aba da prova/notas AB1.
+- `SHEET_AB2_LISTA`: aba da lista AB2.
+- `SHEET_AB2_PROJETO`: aba do projeto AB2.
 - `SESSION_SECRET`: chave longa e aleatoria para assinar a sessao.
 - `COOKIE_SECURE`: `true` em producao, `false` em dev local sem HTTPS.
 - `GOOGLE_SERVICE_ACCOUNT_JSON`: JSON completo da service account.

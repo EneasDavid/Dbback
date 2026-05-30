@@ -12,8 +12,14 @@ type Column = {
 
 type GradeResult = {
   exam: string;
-  sheetName: string;
   matricula: string;
+  tables: GradeTable[];
+};
+
+type GradeTable = {
+  key: string;
+  label: string;
+  sheetName: string;
   columns: Column[];
 };
 
@@ -67,7 +73,7 @@ function App() {
   }, [session, exam]);
 
   const visibleColumns = useMemo(() => {
-    return grade?.columns.filter((column) => column.label.trim() !== '') ?? [];
+    return grade?.tables ?? [];
   }, [grade]);
 
   async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
@@ -154,7 +160,7 @@ function App() {
       {error && <InlineError message={error} />}
 
       <section className="result-head">
-        <span>{grade?.sheetName || (exam === 'ab1' ? 'Notas AB1' : 'Projeto AB2')}</span>
+        <span>{exam === 'ab1' ? 'Atividades e Notas AB1' : 'Atividades e Projeto AB2'}</span>
         <h1>{exam.toUpperCase()}</h1>
       </section>
 
@@ -162,18 +168,28 @@ function App() {
 
       {!loading && visibleColumns.length > 0 && (
         <section className="grade-list">
-          {visibleColumns.map((column) => (
-            <article className="grade-row" key={column.key}>
-              <div>
-                <span>{column.label}</span>
-                <strong>{column.value || '-'}</strong>
-              </div>
-              {column.comment && (
-                <p>
-                  <MessageSquareText size={15} />
-                  {column.comment}
-                </p>
-              )}
+          {visibleColumns.map((table) => (
+            <article className="grade-table" key={table.key}>
+              <header>
+                <span>{table.sheetName}</span>
+                <h2>{table.label}</h2>
+              </header>
+              {table.columns
+                .filter((column) => column.label.trim() !== '')
+                .map((column) => (
+                  <section className="grade-row" key={`${table.key}-${column.key}`}>
+                    <div>
+                      <span>{column.label}</span>
+                      <strong>{column.value || '-'}</strong>
+                    </div>
+                    {column.comment && (
+                      <p>
+                        <MessageSquareText size={15} />
+                        {column.comment}
+                      </p>
+                    )}
+                  </section>
+                ))}
             </article>
           ))}
         </section>

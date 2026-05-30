@@ -11,8 +11,8 @@ import (
 type Config struct {
 	SpreadsheetID string
 	LoginSheet    string
-	AB1Sheet      string
-	AB2Sheet      string
+	AB1Tables     []TableConfig
+	AB2Tables     []TableConfig
 	SessionSecret string
 	CookieSecure  bool
 	ServiceJSON   string
@@ -20,12 +20,26 @@ type Config struct {
 	CacheTTL      time.Duration
 }
 
+type TableConfig struct {
+	Key       string
+	Label     string
+	SheetName string
+}
+
 func LoadConfig() Config {
 	return Config{
 		SpreadsheetID: firstNonEmpty(os.Getenv("GOOGLE_SHEET_ID"), "12zXd1oCQOdBhI88JWMrZ2req0c3XfFLJcVPXQ9CaKT8"),
 		LoginSheet:    firstNonEmpty(os.Getenv("LOGIN_SHEET_NAME"), "Base de dados"),
-		AB1Sheet:      firstNonEmpty(os.Getenv("SHEET_AB1_NAME"), "Notas AB1"),
-		AB2Sheet:      firstNonEmpty(os.Getenv("SHEET_AB2_NAME"), "Projeto AB2"),
+		AB1Tables: []TableConfig{
+			tableFromEnv("pesquisa", "Pesquisa", "SHEET_AB1_PESQUISA", "AT. 1"),
+			tableFromEnv("artigo", "Artigo", "SHEET_AB1_ARTIGO", "AT. 2"),
+			tableFromEnv("lista", "Lista", "SHEET_AB1_LISTA", "AT. 3"),
+			tableFromEnv("prova", "Prova", "SHEET_AB1_PROVA", firstNonEmpty(os.Getenv("SHEET_AB1_NAME"), "Notas AB1")),
+		},
+		AB2Tables: []TableConfig{
+			tableFromEnv("lista", "Lista", "SHEET_AB2_LISTA", "AT. 4"),
+			tableFromEnv("projeto", "Projeto", "SHEET_AB2_PROJETO", firstNonEmpty(os.Getenv("SHEET_AB2_NAME"), "Projeto AB2")),
+		},
 		SessionSecret: os.Getenv("SESSION_SECRET"),
 		CookieSecure:  strings.EqualFold(firstNonEmpty(os.Getenv("COOKIE_SECURE"), "true"), "true"),
 		ServiceJSON:   serviceAccountJSON(),
@@ -54,6 +68,14 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func tableFromEnv(key string, label string, envName string, fallback string) TableConfig {
+	return TableConfig{
+		Key:       key,
+		Label:     label,
+		SheetName: firstNonEmpty(os.Getenv(envName), fallback),
+	}
 }
 
 func serviceAccountJSON() string {

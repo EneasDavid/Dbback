@@ -19,9 +19,15 @@ type ColumnResult struct {
 }
 
 type GradeResult struct {
-	Exam      string         `json:"exam"`
+	Exam      string        `json:"exam"`
+	Matricula string        `json:"matricula"`
+	Tables    []TableResult `json:"tables"`
+}
+
+type TableResult struct {
+	Key       string         `json:"key"`
+	Label     string         `json:"label"`
 	SheetName string         `json:"sheetName"`
-	Matricula string         `json:"matricula"`
 	Columns   []ColumnResult `json:"columns"`
 }
 
@@ -69,17 +75,38 @@ func (c *SheetsClient) MatriculaExists(ctx context.Context, matricula string) (b
 }
 
 func (c *SheetsClient) GradeFor(ctx context.Context, exam string, matricula string) (GradeResult, error) {
-	sheetName, err := c.sheetForExam(exam)
+	tables, err := c.tablesForExam(exam)
 	if err != nil {
 		return GradeResult{}, err
 	}
+	result := GradeResult{Exam: strings.ToUpper(strings.TrimSpace(exam)), Matricula: matricula}
+	for _, table := range tables {
+		if strings.TrimSpace(table.SheetName) == "" {
+			continue
+		}
+		tableResult, found, err := c.gradeTableFor(ctx, table, matricula)
+		if err != nil {
+			return GradeResult{}, err
+		}
+		if found {
+			result.Tables = append(result.Tables, tableResult)
+		}
+	}
+	if len(result.Tables) == 0 {
+		return GradeResult{}, NewHTTPError(404, "matricula nao encontrada em "+strings.ToUpper(strings.TrimSpace(exam)))
+	}
+	return result, nil
+}
+
+func (c *SheetsClient) gradeTableFor(ctx context.Context, table TableConfig, matricula string) (TableResult, bool, error) {
+	sheetName := table.SheetName
 	grid, err := c.loadSheet(ctx, sheetName)
 	if err != nil {
-		return GradeResult{}, err
+		return TableResult{}, false, err
 	}
 	idx := matriculaColumn(grid.headers)
 	if idx < 0 {
-		return GradeResult{}, NewHTTPError(500, "coluna de matricula nao encontrada na aba "+sheetName)
+		return TableResult{}, false, NewHTTPError(500, "coluna de matricula nao encontrada na aba "+sheetName)
 	}
 	for _, row := range grid.rows {
 		if idx >= len(row) || normalizeID(row[idx]) != normalizeID(matricula) {
@@ -105,19 +132,19 @@ func (c *SheetsClient) GradeFor(ctx context.Context, exam string, matricula stri
 				Comment: comment,
 			})
 		}
-		return GradeResult{Exam: strings.ToUpper(exam), SheetName: sheetName, Matricula: matricula, Columns: columns}, nil
+		return TableResult{Key: table.Key, Label: table.Label, SheetName: sheetName, Columns: columns}, true, nil
 	}
-	return GradeResult{}, NewHTTPError(404, "matricula nao encontrada em "+sheetName)
+	return TableResult{}, false, nil
 }
 
-func (c *SheetsClient) sheetForExam(exam string) (string, error) {
+func (c *SheetsClient) tablesForExam(exam string) ([]TableConfig, error) {
 	switch strings.ToLower(strings.TrimSpace(exam)) {
 	case "ab1":
-		return c.cfg.AB1Sheet, nil
+		return c.cfg.AB1Tables, nil
 	case "ab2":
-		return c.cfg.AB2Sheet, nil
+		return c.cfg.AB2Tables, nil
 	default:
-		return "", NewHTTPError(400, "avaliacao invalida")
+		return nil, NewHTTPError(400, "avaliacao invalida")
 	}
 }
 

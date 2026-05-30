@@ -269,11 +269,33 @@ input {
   gap: 10px;
 }
 
-.grade-row {
+.grade-table {
   padding: 15px;
   border: 1px solid var(--border-soft);
   border-radius: 8px;
   background: var(--panel);
+}
+
+.grade-table header {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.grade-table h2 {
+  margin: 4px 0 0;
+  color: var(--text);
+  font-size: 1.05rem;
+  letter-spacing: 0;
+}
+
+.grade-row {
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.grade-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
 }
 
 .grade-row div {
