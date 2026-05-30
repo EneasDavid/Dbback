@@ -61,6 +61,21 @@ func TestDriveCommentOnMergedCellPropagatesToMergedColumns(t *testing.T) {
 	}
 }
 
+func TestDriveCommentWithZeroSheetIDUsesQuotedText(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Nome", ""), cellData("Critério", "")),
+		rowData(cellData("Alice", ""), cellData("0,3", "")),
+	}, nil)
+
+	grid.applyDriveComments([]driveCellComment{
+		{Text: "feedback do Drive", Author: "Professor", QuotedText: "0,3", SheetID: 0, HasSheetID: true},
+	}, 987654321, nil)
+
+	if got := noteAt(grid.rowNotes[0], 1); got != "feedback do Drive" {
+		t.Fatalf("drive note = %q, want feedback do Drive", got)
+	}
+}
+
 func rowData(cells ...*sheets.CellData) *sheets.RowData {
 	return &sheets.RowData{Values: cells}
 }

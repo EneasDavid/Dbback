@@ -65,7 +65,8 @@ func applyMergedRanges(values [][]string, notes [][]string, merges []*sheets.Gri
 
 func (g *sheetGrid) applyDriveComments(comments []driveCellComment, sheetID int64, merges []*sheets.GridRange) {
 	for _, comment := range comments {
-		if comment.HasSheetID && comment.SheetID != sheetID {
+		// Drive anchors for Sheets comments can expose uid:0 even when the target sheet has another sheetId.
+		if comment.HasSheetID && comment.SheetID != 0 && comment.SheetID != sheetID {
 			continue
 		}
 		if strings.TrimSpace(comment.Text) == "" || strings.TrimSpace(comment.QuotedText) == "" {
