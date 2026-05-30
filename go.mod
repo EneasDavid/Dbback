@@ -2,7 +2,10 @@ module feedback
 
 go 1.23.0
 
-require google.golang.org/api v0.235.0
+require (
+	golang.org/x/sync v0.14.0
+	google.golang.org/api v0.235.0
+)
 
 require (
 	cloud.google.com/go/auth v0.16.1 // indirect

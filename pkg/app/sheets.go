@@ -3,10 +3,12 @@ package app
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
 	"google.golang.org/api/option"
 	"google.golang.org/api/sheets/v4"
 )
@@ -39,6 +41,7 @@ type SheetsClient struct {
 	service *sheets.Service
 	mu      sync.Mutex
 	cache   map[string]cachedGrid
+	group   singleflight.Group
 }
 
 type cachedGrid struct {
@@ -63,7 +66,7 @@ func NewSheetsClient(ctx context.Context, cfg Config) (*SheetsClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &SheetsClient{cfg: cfg, service: svc, cache: map[string]cachedGrid{}}, nil
+	return &SheetsClient{cfg: cfg, service: svc, cache: map[string]cachedGrid{}, group: singleflight.Group{}}, nil
 }
 
 func (c *SheetsClient) MatriculaExists(ctx context.Context, matricula string) (bool, error) {
@@ -108,18 +111,62 @@ func (c *SheetsClient) GradeFor(ctx context.Context, exam string, user SessionUs
 		return GradeResult{}, err
 	}
 	result := GradeResult{Exam: strings.ToUpper(strings.TrimSpace(exam)), Matricula: user.Matricula, Name: user.Name}
-	for _, table := range tables {
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	type tableResponse struct {
+		idx    int
+		result TableResult
+		found  bool
+	}
+
+	responses := make([]tableResponse, len(tables))
+	var wg sync.WaitGroup
+	errCh := make(chan error, 1)
+	maxWorkers := runtime.GOMAXPROCS(0)
+	if maxWorkers < 1 {
+		maxWorkers = 4
+	}
+	sem := make(chan struct{}, maxWorkers)
+
+	for idx, table := range tables {
 		if strings.TrimSpace(table.SheetName) == "" {
 			continue
 		}
-		tableResult, found, err := c.gradeTableFor(ctx, table, user)
-		if err != nil {
-			return GradeResult{}, err
-		}
-		if found {
-			result.Tables = append(result.Tables, tableResult)
+
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(idx int, table TableConfig) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			tableResult, found, err := c.gradeTableFor(ctx, table, user)
+			if err != nil {
+				select {
+				case errCh <- err:
+				default:
+				}
+				cancel()
+				return
+			}
+			responses[idx] = tableResponse{idx: idx, result: tableResult, found: found}
+		}(idx, table)
+	}
+
+	wg.Wait()
+	select {
+	case err := <-errCh:
+		return GradeResult{}, err
+	default:
+	}
+
+	for _, response := range responses {
+		if response.found {
+			result.Tables = append(result.Tables, response.result)
 		}
 	}
+
 	if len(result.Tables) == 0 {
 		return GradeResult{}, NewHTTPError(404, "matricula nao encontrada em "+strings.ToUpper(strings.TrimSpace(exam)))
 	}
@@ -280,22 +327,28 @@ func (c *SheetsClient) loadSheet(ctx context.Context, sheetName string) (*sheetG
 	}
 	c.mu.Unlock()
 
-	resp, err := c.service.Spreadsheets.Get(c.cfg.SpreadsheetID).
-		IncludeGridData(true).
-		Ranges("'" + strings.ReplaceAll(sheetName, "'", "''") + "'").
-		Context(ctx).
-		Do()
+	v, err, _ := c.group.Do(sheetName, func() (interface{}, error) {
+		resp, err := c.service.Spreadsheets.Get(c.cfg.SpreadsheetID).
+			IncludeGridData(true).
+			Ranges("'" + strings.ReplaceAll(sheetName, "'", "''") + "'").
+			Context(ctx).
+			Do()
+		if err != nil {
+			return nil, err
+		}
+		if len(resp.Sheets) == 0 || len(resp.Sheets[0].Data) == 0 {
+			return nil, NewHTTPError(404, "aba nao encontrada: "+sheetName)
+		}
+		grid := parseGrid(resp.Sheets[0].Data[0].RowData)
+		c.mu.Lock()
+		c.cache[sheetName] = cachedGrid{expires: time.Now().Add(c.cfg.CacheTTL), grid: grid}
+		c.mu.Unlock()
+		return grid, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	if len(resp.Sheets) == 0 || len(resp.Sheets[0].Data) == 0 {
-		return nil, NewHTTPError(404, "aba nao encontrada: "+sheetName)
-	}
-	grid := parseGrid(resp.Sheets[0].Data[0].RowData)
-	c.mu.Lock()
-	c.cache[sheetName] = cachedGrid{expires: time.Now().Add(c.cfg.CacheTTL), grid: grid}
-	c.mu.Unlock()
-	return grid, nil
+	return v.(*sheetGrid), nil
 }
 
 func parseGrid(rows []*sheets.RowData) *sheetGrid {

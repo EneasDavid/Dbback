@@ -38,7 +38,7 @@ func LoadConfig() Config {
 			tableFromEnv("prova", "Prova AB1", "SHEET_AB1_PROVA", firstNonEmpty(os.Getenv("SHEET_AB1_NAME"), "Notas AB1"), "summary"),
 		},
 		AB2Tables: []TableConfig{
-			tableFromEnv("at4", "AT. 4", "SHEET_AB2_LISTA", "AT. 4", "activity"),
+			tableFromEnv("at4", "AT. 4", "SHEET_AB1_LISTA", "AT. 4", "activity"),
 			tableFromEnv("projeto", "Projeto AB2", "SHEET_AB2_PROJETO", firstNonEmpty(os.Getenv("SHEET_AB2_NAME"), "Projeto AB2"), "project"),
 		},
 		SessionSecret: os.Getenv("SESSION_SECRET"),
