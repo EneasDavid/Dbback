@@ -7,7 +7,7 @@ Aplicação Go + React para consulta mobile de notas e feedbacks por matrícula,
 - Login por matrícula validada na aba `Base de dados`.
 - Sessão de 7 horas em cookie assinado, `HttpOnly`, `SameSite=Lax` e `Secure` em produção.
 - Consulta individual de AB1 e AB2.
-- Feedbacks lidos das notas simples da célula e dos comentários exportados do Google Sheets.
+- Feedbacks lidos diretamente da Google Sheets API, usando as notas da célula (`note`).
 - Payload render-ready: o backend retorna `tables[].cards[].details[]`, reduzindo cálculo no aparelho.
 - Cache no backend e no navegador para diminuir latência, tráfego e risco de rate limit.
 
@@ -25,14 +25,14 @@ Fluxo principal:
 ```text
 Aluno -> React -> /api/login -> Google Sheets Base de dados
 Aluno -> React -> /api/grades?exam=ab1|ab2 -> SheetsClient -> Google Sheets
-Google Sheets -> valores + notes + export .xlsx -> parser Go -> cards/details -> React
+Google Sheets -> valores + notes -> parser Go -> cards/details -> React
 ```
 
 ## Dados e regras
 
-- A service account usa `spreadsheets.readonly` para valores/notas simples e `drive.readonly` para autenticar a exportação da planilha como `.xlsx`.
+- A service account usa apenas `spreadsheets.readonly`.
 - O backend busca abas em lote por exame, deduplica nomes de abas e aplica `Fields(...)` para retornar só `formattedValue`, `userEnteredValue`, `note`, `merges` e `properties.title`.
-- Para comentários ricos do Google Sheets, o backend exporta a planilha em memória como `.xlsx` pelo endpoint de exportação do Google Sheets e aplica os comentários às mesmas células antes do parsing.
+- A Google Sheets API não expõe comentários ricos/threaded como comentários de célula. Para o app mostrar feedbacks usando somente a API de Planilhas, os feedbacks precisam estar como **Notas** da célula.
 - A planilha é normalizada em memória como `sheetGrid`: cabeçalhos, linhas, notas e índices reais.
 - Células mescladas são expandidas antes do parsing.
 - Comentários dos subtópicos seguem esta precedência:
@@ -90,9 +90,9 @@ Alternativas para credenciais:
 
 Compartilhe a planilha com o `client_email` da service account como **Visualizador**.
 
-Os feedbacks das células são carregados em produção exportando a planilha do Google como `.xlsx` e lendo os comentários com `excelize`. O Vercel não depende de arquivo `.xlsx` local.
+Os feedbacks das células são carregados em produção diretamente pela Google Sheets API. O Vercel não depende de arquivo `.xlsx` local.
 
-Se os comentários não aparecerem no Vercel, confira se a credencial cadastrada em `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` pertence ao mesmo `client_email` compartilhado na planilha.
+Se os comentários ricos do Google Sheets precisarem ser lidos sem virar nota da célula, não há aumento de escopo na Sheets API que resolva isso: é necessário usar a Google Drive API com escopo `https://www.googleapis.com/auth/drive.readonly`. Como este projeto está configurado para usar somente a API de Planilhas, converta esses feedbacks para **Notas** nas células.
 
 ### Vercel
 
@@ -122,11 +122,10 @@ go mod download
 npm run dev:full
 ```
 
-Dependências usadas para carregar `.env` no utilitário local e ler os comentários do `.xlsx` exportado em memória:
+Dependência usada para carregar `.env` no utilitário local:
 
 ```bash
 go get github.com/joho/godotenv
-go get github.com/xuri/excelize/v2
 ```
 
 Para verificar, com as mesmas variáveis de ambiente do app, quais comentários estão chegando pela service account:
@@ -135,7 +134,7 @@ Para verificar, com as mesmas variáveis de ambiente do app, quais comentários 
 go run ./cmd/comments
 ```
 
-Esse comando usa `GOOGLE_SERVICE_ACCOUNT_FILE` ou `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64`, `GOOGLE_SHEET_ID` e as variáveis `SHEET_*` do `.env`, exporta a planilha do Google como `.xlsx` e imprime célula, autor e texto de cada comentário. A exportação em `.xlsx` é importante porque é esse formato que preserva os comentários ricos antes de o Go fazer a leitura com `excelize`.
+Esse comando usa `GOOGLE_SERVICE_ACCOUNT_FILE` ou `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64`, `GOOGLE_SHEET_ID` e as variáveis `SHEET_*` do `.env`, consulta a Google Sheets API e imprime célula e texto de cada nota/feedback.
 
 Se o comando retornar zero feedbacks, a própria service account não está enxergando notas/comentários nas abas configuradas; nesse caso o Vercel também não terá como renderizá-los até que esses feedbacks estejam na planilha online acessível por essa credencial.
 

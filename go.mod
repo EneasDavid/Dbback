@@ -4,7 +4,6 @@ go 1.25.10
 
 require (
 	github.com/joho/godotenv v1.5.1
-	github.com/xuri/excelize/v2 v2.10.1
 	golang.org/x/oauth2 v0.30.0
 	golang.org/x/sync v0.20.0
 	google.golang.org/api v0.235.0
@@ -21,11 +20,6 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.2 // indirect
-	github.com/richardlehane/mscfb v1.0.6 // indirect
-	github.com/richardlehane/msoleps v1.0.6 // indirect
-	github.com/tiendc/go-deepcopy v1.7.2 // indirect
-	github.com/xuri/efp v0.0.1 // indirect
-	github.com/xuri/nfp v0.0.2-0.20250530014748-2ddeb826f9a9 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.60.0 // indirect
 	go.opentelemetry.io/otel v1.35.0 // indirect

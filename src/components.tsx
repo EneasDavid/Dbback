@@ -1,5 +1,5 @@
 import { AlertCircle, BookOpenCheck, ChevronRight, LogOut, MessageSquareText, Moon, Search, Sun } from 'lucide-react';
-import type { FormEvent } from 'react';
+import type { CSSProperties, FormEvent } from 'react';
 import type { GradeCard as GradeCardData, GradeDetail, GradeTable, SessionUser } from './types';
 
 export function LoginView({
@@ -275,9 +275,7 @@ function DetailItem({ item }: { item: GradeDetail }) {
         </div>
         <span className="badge">{item.displayScore}</span>
       </div>
-      <div className="detail-progress-bar" aria-hidden="true">
-        <div className="detail-progress-fill" style={{ width: `${item.ratio}%` }} />
-      </div>
+      <ProgressBar value={item.ratio} />
       {item.comment ? (
         <p className="detail-item-comment">
           <MessageSquareText size={14} />
@@ -288,6 +286,15 @@ function DetailItem({ item }: { item: GradeDetail }) {
         </p>
       ) : null}
     </article>
+  );
+}
+
+function ProgressBar({ value }: { value: number }) {
+  const progress = Math.min(Math.max(Number.isFinite(value) ? value : 0, 0), 100);
+  return (
+    <div className="progress-bar" aria-hidden="true" style={{ '--progress-value': `${progress}%` } as CSSProperties}>
+      <div className="progress-fill" />
+    </div>
   );
 }
 

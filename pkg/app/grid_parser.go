@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/xuri/excelize/v2"
 	"google.golang.org/api/sheets/v4"
 )
 
@@ -62,68 +61,6 @@ func applyMergedRanges(values [][]string, notes [][]string, merges []*sheets.Gri
 			}
 		}
 	}
-}
-
-func (g *sheetGrid) applyComments(comments map[string]cellComment) {
-	for cell, comment := range comments {
-		rowIdx, colIdx, ok := parseCellRef(cell)
-		if !ok || strings.TrimSpace(comment.Text) == "" {
-			continue
-		}
-		g.setNoteAtAbsolute(rowIdx, colIdx, comment.Text, comment.Author)
-	}
-}
-
-func (g *sheetGrid) applyDriveComments(comments []driveCellComment, sheetID int64) {
-	for _, comment := range comments {
-		if comment.HasSheetID && comment.SheetID != sheetID {
-			continue
-		}
-		if strings.TrimSpace(comment.Text) == "" || strings.TrimSpace(comment.QuotedText) == "" {
-			continue
-		}
-		rowIdx, colIdx, ok := g.uniqueCellForValue(comment.QuotedText)
-		if !ok || g.noteAtAbsolute(rowIdx, colIdx) != "" {
-			continue
-		}
-		g.setNoteAtAbsolute(rowIdx, colIdx, comment.Text, comment.Author)
-	}
-}
-
-func (g *sheetGrid) uniqueCellForValue(value string) (int, int, bool) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return 0, 0, false
-	}
-	foundRow := 0
-	foundCol := 0
-	found := false
-	ambiguous := false
-	check := func(rowIdx int, row []string) {
-		for colIdx, cell := range row {
-			if strings.TrimSpace(cell) != value {
-				continue
-			}
-			if found {
-				ambiguous = true
-				return
-			}
-			found = true
-			foundRow = rowIdx
-			foundCol = colIdx
-		}
-	}
-	check(g.headerRow, g.headers)
-	for idx, row := range g.rows {
-		if ambiguous {
-			break
-		}
-		check(g.rowIndices[idx], row)
-	}
-	if !found || ambiguous {
-		return 0, 0, false
-	}
-	return foundRow, foundCol, true
 }
 
 func matrixValue(values [][]string, rowIdx int, colIdx int) string {
@@ -211,14 +148,6 @@ func setAt(values []string, idx int, value string) []string {
 	}
 	values[idx] = value
 	return values
-}
-
-func parseCellRef(cell string) (int, int, bool) {
-	col, row, err := excelize.CellNameToCoordinates(strings.TrimSpace(cell))
-	if err != nil || row <= 0 || col <= 0 {
-		return 0, 0, false
-	}
-	return row - 1, col - 1, true
 }
 
 func bestHeaderIndex(rows [][]string) int {
