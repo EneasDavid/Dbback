@@ -788,10 +788,11 @@ input:focus-visible {
 .detail-panel {
   margin: 8px 0 18px;
   padding: 14px;
+  max-width: 100%;
   border-radius: 24px;
   background: color-mix(in srgb, var(--panel-soft) 76%, var(--panel));
   border: 1px solid var(--border);
-  overflow: visible;
+  overflow: hidden;
   box-shadow: 0 16px 30px color-mix(in srgb, var(--text) 6%, transparent), var(--inner-highlight);
 }
 
@@ -813,15 +814,20 @@ input:focus-visible {
 .detail-items {
   display: grid;
   gap: 12px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .detail-item {
   display: grid;
   gap: 14px;
+  min-width: 0;
+  max-width: 100%;
   padding: 17px;
   border-radius: 20px;
   background: color-mix(in srgb, var(--panel) 90%, transparent);
   border: 1px solid var(--border-soft);
+  overflow: hidden;
   box-shadow: var(--inner-highlight);
 }
 
@@ -855,7 +861,14 @@ input:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 16px;
+  min-width: 0;
+}
+
+.detail-item-row > div {
+  flex: 1 1 10rem;
+  min-width: 0;
 }
 
 .detail-item-row strong {
@@ -864,17 +877,20 @@ input:focus-visible {
   margin-bottom: 0;
   font-size: 1rem;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .detail-item-comment {
   display: grid;
   grid-template-columns: 20px 1fr;
   gap: 10px;
+  min-width: 0;
   margin: 2px 0 0;
   padding-left: 2px;
   color: var(--muted);
   font-size: 0.92rem;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .detail-item-comment svg {
@@ -890,10 +906,16 @@ input:focus-visible {
   font-weight: 850;
 }
 
+.detail-item-comment span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  max-width: 100%;
   padding: 0.45em 0.75em;
   border-radius: 999px;
   border: 1px solid var(--score-badge-border, rgba(20, 122, 82, 0.16));
@@ -901,7 +923,10 @@ input:focus-visible {
   color: var(--score-badge-text, var(--brand));
   font-size: 0.8rem;
   font-weight: 700;
+  text-align: center;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   box-shadow: var(--inner-highlight);
 }
 

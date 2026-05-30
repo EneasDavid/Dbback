@@ -8,6 +8,7 @@ import './styles.scss';
 
 const CACHE_VERSION = 'v7';
 const EMPTY_STATE_MS = 5_000;
+const LAST_MATRICULA_KEY = 'dbback-last-matricula';
 
 type LegacyColumn = {
   key: string;
@@ -32,7 +33,7 @@ type LegacyGradeTable = GradeTable & {
 };
 
 function App() {
-  const [matricula, setMatricula] = useState('');
+  const [matricula, setMatricula] = useState(() => window.localStorage.getItem(LAST_MATRICULA_KEY) || '');
   const [session, setSession] = useState<SessionUser | null>(null);
   const [exam, setExam] = useState<'ab1' | 'ab2'>('ab1');
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -166,13 +167,15 @@ function App() {
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const normalizedMatricula = matricula.trim();
     setLoading(true);
     setError('');
     try {
       const result = await api<SessionUser>('/api/login', {
         method: 'POST',
-        body: JSON.stringify({ matricula }),
+        body: JSON.stringify({ matricula: normalizedMatricula }),
       });
+      window.localStorage.setItem(LAST_MATRICULA_KEY, result.matricula || normalizedMatricula);
       setSession(result);
       setMatricula('');
     } catch (err) {

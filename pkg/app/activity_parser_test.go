@@ -71,6 +71,75 @@ func TestActivitySubtopicCommentsComeFromSheetsNotes(t *testing.T) {
 	}
 }
 
+func TestActivitySubtopicCommentsComeFromDriveMergedCells(t *testing.T) {
+	merges := []*sheets.GridRange{
+		{StartRowIndex: 1, EndRowIndex: 2, StartColumnIndex: 1, EndColumnIndex: 3},
+	}
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Aluno", ""), cellData("Critério", ""), cellData("Critério", "")),
+		rowData(cellData("Subtópico", ""), cellData("Organização", ""), cellData("", "")),
+		rowData(cellData("Nota maxima", ""), cellData("1", ""), cellData("1", "")),
+		rowData(cellData("Alice", ""), cellData("0,8", ""), cellData("0,7", "")),
+	}, merges)
+	grid.applyDriveComments([]driveCellComment{
+		{Text: "comentario no criterio mesclado", Author: "Professor", QuotedText: "Organização", SheetID: 7, HasSheetID: true},
+	}, 7, merges)
+	grid.applyCommentMerges(merges)
+
+	table, found, err := parseActivityRubric(grid, TableConfig{
+		Key:       "at3",
+		Label:     "AT. 3",
+		SheetName: "AT. 3",
+		Kind:      "activity",
+	}, SessionUser{Name: "Alice", Matricula: "2024001339"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("student row was not found")
+	}
+	if len(table.Cards) != 1 || len(table.Cards[0].Details) != 2 {
+		t.Fatalf("unexpected cards/details: %#v", table.Cards)
+	}
+	for _, detail := range table.Cards[0].Details {
+		if got := detail.Comment; got != "comentario no criterio mesclado" {
+			t.Fatalf("detail %q comment = %q, want merged Drive comment", detail.Label, got)
+		}
+	}
+}
+
+func TestActivityCommentsPropagateThroughThreeRowMergedGroup(t *testing.T) {
+	merges := []*sheets.GridRange{
+		{StartRowIndex: 2, EndRowIndex: 5, StartColumnIndex: 1, EndColumnIndex: 2},
+	}
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Aluno", ""), cellData("Critério", "")),
+		rowData(cellData("Nota maxima", ""), cellData("1", "")),
+		rowData(cellData("Colega 1", ""), cellData("0,7", "comentario do grupo")),
+		rowData(cellData("Colega 2", ""), cellData("", "")),
+		rowData(cellData("Alice", ""), cellData("", "")),
+	}, merges)
+
+	table, found, err := parseActivityRubric(grid, TableConfig{
+		Key:       "at3",
+		Label:     "AT. 3",
+		SheetName: "AT. 3",
+		Kind:      "activity",
+	}, SessionUser{Name: "Alice", Matricula: "2024001339"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("student row was not found")
+	}
+	if len(table.Cards) != 1 || len(table.Cards[0].Details) != 1 {
+		t.Fatalf("unexpected cards/details: %#v", table.Cards)
+	}
+	if got := table.Cards[0].Details[0].Comment; got != "comentario do grupo" {
+		t.Fatalf("detail comment = %q, want merged group comment", got)
+	}
+}
+
 func TestProjectPayloadKeepsAllSubtopicsInDropdown(t *testing.T) {
 	grid := &sheetGrid{
 		headers: []string{"Nome", "Matricula", "Total", "CRUD", "Referências", "Discussão em aula", "Funcionalidades gerais", "Apresentação do projeto"},

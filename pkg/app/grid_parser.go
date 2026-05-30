@@ -63,6 +63,66 @@ func applyMergedRanges(values [][]string, notes [][]string, merges []*sheets.Gri
 	}
 }
 
+func (g *sheetGrid) applyDriveComments(comments []driveCellComment, sheetID int64, merges []*sheets.GridRange) {
+	for _, comment := range comments {
+		if comment.HasSheetID && comment.SheetID != sheetID {
+			continue
+		}
+		if strings.TrimSpace(comment.Text) == "" || strings.TrimSpace(comment.QuotedText) == "" {
+			continue
+		}
+		rowIdx, colIdx, ok := g.uniqueCellForQuotedText(comment.QuotedText, merges)
+		if !ok || g.noteAtAbsolute(rowIdx, colIdx) != "" {
+			continue
+		}
+		g.setNoteAtAbsolute(rowIdx, colIdx, comment.Text, comment.Author)
+	}
+}
+
+func (g *sheetGrid) uniqueCellForQuotedText(value string, merges []*sheets.GridRange) (int, int, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, 0, false
+	}
+
+	found := map[string][2]int{}
+	check := func(rowIdx int, row []string) {
+		for colIdx, cell := range row {
+			if strings.TrimSpace(cell) != value {
+				continue
+			}
+			logicalRow, logicalCol := logicalMergedCell(rowIdx, colIdx, merges)
+			key := fmt.Sprintf("%d:%d", logicalRow, logicalCol)
+			found[key] = [2]int{logicalRow, logicalCol}
+		}
+	}
+
+	check(g.headerRow, g.headers)
+	for idx, row := range g.rows {
+		check(g.rowIndices[idx], row)
+	}
+	if len(found) != 1 {
+		return 0, 0, false
+	}
+	for _, cell := range found {
+		return cell[0], cell[1], true
+	}
+	return 0, 0, false
+}
+
+func logicalMergedCell(rowIdx int, colIdx int, merges []*sheets.GridRange) (int, int) {
+	for _, merged := range merges {
+		startRow := int(merged.StartRowIndex)
+		endRow := int(merged.EndRowIndex)
+		startCol := int(merged.StartColumnIndex)
+		endCol := int(merged.EndColumnIndex)
+		if rowIdx >= startRow && rowIdx < endRow && colIdx >= startCol && colIdx < endCol {
+			return startRow, startCol
+		}
+	}
+	return rowIdx, colIdx
+}
+
 func matrixValue(values [][]string, rowIdx int, colIdx int) string {
 	if rowIdx < 0 || rowIdx >= len(values) || colIdx < 0 || colIdx >= len(values[rowIdx]) {
 		return ""

@@ -28,15 +28,21 @@ export function LoginView({
         </div>
         <h1>dbBack</h1>
         <p>Use sua matricula da UFAL para acessar suas notas e feedbacks das atividades.</p>
-        <form onSubmit={onSubmit}>
+        <form onSubmit={onSubmit} autoComplete="on">
           <label htmlFor="matricula">Matricula UFAL</label>
           <div className="field">
             <Search size={18} />
             <input
               id="matricula"
+              name="username"
+              type="text"
               inputMode="numeric"
               autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
+              enterKeyHint="go"
               placeholder="Digite sua matricula"
+              required
               value={matricula}
               onChange={(event) => setMatricula(event.target.value)}
             />

@@ -36,6 +36,31 @@ func TestParseGridPropagatesMergedCellNotes(t *testing.T) {
 	}
 }
 
+func TestDriveCommentOnMergedCellPropagatesToMergedColumns(t *testing.T) {
+	merges := []*sheets.GridRange{
+		{StartRowIndex: 0, EndRowIndex: 1, StartColumnIndex: 1, EndColumnIndex: 3},
+	}
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Nome", ""), cellData("Critério", ""), cellData("", "")),
+		rowData(cellData("Alice", ""), cellData("0,5", ""), cellData("0,7", "")),
+	}, merges)
+
+	grid.applyDriveComments([]driveCellComment{
+		{Text: "feedback do Drive", Author: "Professor (Prof)", QuotedText: "Critério", SheetID: 42, HasSheetID: true},
+	}, 42, merges)
+	grid.applyCommentMerges(merges)
+
+	if got := noteAt(grid.notes, 1); got != "feedback do Drive" {
+		t.Fatalf("merged drive note at B1 = %q, want feedback do Drive", got)
+	}
+	if got := noteAt(grid.notes, 2); got != "feedback do Drive" {
+		t.Fatalf("merged drive note at C1 = %q, want feedback do Drive", got)
+	}
+	if got := noteAt(grid.noteAuthors, 2); got != "Prof" {
+		t.Fatalf("merged drive author = %q, want Prof", got)
+	}
+}
+
 func rowData(cells ...*sheets.CellData) *sheets.RowData {
 	return &sheets.RowData{Values: cells}
 }

@@ -2,6 +2,10 @@ package app
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -16,11 +20,13 @@ import (
 )
 
 type SheetsClient struct {
-	cfg     Config
-	service *sheets.Service
-	mu      sync.Mutex
-	cache   map[string]cachedGrid
-	group   singleflight.Group
+	cfg           Config
+	service       *sheets.Service
+	httpClient    *http.Client
+	mu            sync.Mutex
+	cache         map[string]cachedGrid
+	driveComments cachedDriveComments
+	group         singleflight.Group
 }
 
 type cachedGrid struct {
@@ -33,6 +39,7 @@ func NewSheetsClient(ctx context.Context, cfg Config) (*SheetsClient, error) {
 		ctx,
 		[]byte(cfg.ServiceJSON),
 		sheets.SpreadsheetsReadonlyScope,
+		driveReadonlyScope,
 	)
 	if err != nil {
 		return nil, err
@@ -42,13 +49,14 @@ func NewSheetsClient(ctx context.Context, cfg Config) (*SheetsClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &SheetsClient{cfg: cfg, service: svc, cache: map[string]cachedGrid{}}, nil
+	return &SheetsClient{cfg: cfg, service: svc, httpClient: httpClient, cache: map[string]cachedGrid{}}, nil
 }
 
 func (c *SheetsClient) ClearCache() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cache = map[string]cachedGrid{}
+	c.driveComments = cachedDriveComments{}
 }
 
 func (c *SheetsClient) loadSheet(ctx context.Context, sheetName string) (*sheetGrid, error) {
@@ -78,6 +86,15 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 			return nil, nil
 		}
 
+		driveComments := []driveCellComment{}
+		if requiresDriveComments(missing, c.cfg.LoginSheet) {
+			var commentsErr error
+			driveComments, commentsErr = c.driveCommentsForSpreadsheet(ctx)
+			if commentsErr != nil {
+				return nil, NewHTTPError(503, "não conseguiu ler comentários do Google Drive: "+commentsErr.Error())
+			}
+		}
+
 		ranges := make([]string, 0, len(missing))
 		for _, sheetName := range missing {
 			ranges = append(ranges, quoteSheetName(sheetName))
@@ -104,6 +121,8 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 				continue
 			}
 			grid := parseGrid(sheet.Data[0].RowData, sheet.Merges)
+			grid.applyDriveComments(driveComments, sheet.Properties.SheetId, sheet.Merges)
+			grid.applyCommentMerges(sheet.Merges)
 			c.cache[name] = cachedGrid{expires: now.Add(c.cfg.CacheTTL), grid: grid}
 			found[name] = true
 		}
@@ -161,5 +180,157 @@ func containsString(values []string, target string) bool {
 }
 
 var sheetsGridFields = googleapi.Field(
-	"sheets(properties(title),merges(startRowIndex,endRowIndex,startColumnIndex,endColumnIndex),data(startRow,startColumn,rowData(values(formattedValue,note,userEnteredValue))))",
+	"sheets(properties(title,sheetId),merges(startRowIndex,endRowIndex,startColumnIndex,endColumnIndex),data(startRow,startColumn,rowData(values(formattedValue,note,userEnteredValue))))",
 )
+
+const driveReadonlyScope = "https://www.googleapis.com/auth/drive.readonly"
+
+func requiresDriveComments(sheetNames []string, loginSheet string) bool {
+	for _, sheetName := range sheetNames {
+		sheetName = strings.TrimSpace(sheetName)
+		if sheetName != "" && sheetName != loginSheet {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *SheetsClient) driveCommentsForSpreadsheet(ctx context.Context) ([]driveCellComment, error) {
+	c.mu.Lock()
+	if c.driveComments.comments != nil && time.Now().Before(c.driveComments.expires) {
+		comments := append([]driveCellComment(nil), c.driveComments.comments...)
+		c.mu.Unlock()
+		return comments, nil
+	}
+	c.mu.Unlock()
+
+	value, err, _ := c.group.Do("drive-comments:"+c.cfg.SpreadsheetID, func() (interface{}, error) {
+		comments, err := c.fetchDriveComments(ctx)
+		if err != nil {
+			return nil, err
+		}
+		c.mu.Lock()
+		c.driveComments = cachedDriveComments{expires: time.Now().Add(c.cfg.CacheTTL), comments: comments}
+		c.mu.Unlock()
+		return comments, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return append([]driveCellComment(nil), value.([]driveCellComment)...), nil
+}
+
+func (c *SheetsClient) fetchDriveComments(ctx context.Context) ([]driveCellComment, error) {
+	var all []driveCellComment
+	pageToken := ""
+	for {
+		endpoint, err := url.Parse(fmt.Sprintf("https://www.googleapis.com/drive/v3/files/%s/comments", url.PathEscape(c.cfg.SpreadsheetID)))
+		if err != nil {
+			return nil, err
+		}
+		query := endpoint.Query()
+		query.Set("pageSize", "100")
+		query.Set("includeDeleted", "false")
+		query.Set("fields", "nextPageToken,comments(content,anchor,author(displayName),quotedFileContent(value),deleted)")
+		if pageToken != "" {
+			query.Set("pageToken", pageToken)
+		}
+		endpoint.RawQuery = query.Encode()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		body, readErr := io.ReadAll(resp.Body)
+		closeErr := resp.Body.Close()
+		if readErr != nil {
+			return nil, readErr
+		}
+		if closeErr != nil {
+			return nil, closeErr
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return nil, fmt.Errorf("comments retornou HTTP %d: %s", resp.StatusCode, driveErrorMessage(body))
+		}
+
+		payload, err := decodeDriveComments(body)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, payload.comments...)
+		if strings.TrimSpace(payload.nextPageToken) == "" {
+			if len(all) > 0 {
+				return all, nil
+			}
+			return c.fetchDriveV2Comments(ctx)
+		}
+		pageToken = payload.nextPageToken
+	}
+}
+
+func (c *SheetsClient) fetchDriveV2Comments(ctx context.Context) ([]driveCellComment, error) {
+	var all []driveCellComment
+	pageToken := ""
+	for {
+		endpoint, err := url.Parse(fmt.Sprintf("https://www.googleapis.com/drive/v2/files/%s/comments", url.PathEscape(c.cfg.SpreadsheetID)))
+		if err != nil {
+			return nil, err
+		}
+		query := endpoint.Query()
+		query.Set("maxResults", "100")
+		query.Set("includeDeleted", "false")
+		query.Set("fields", "nextPageToken,items(content,anchor,author(displayName),context(value),deleted,status)")
+		if pageToken != "" {
+			query.Set("pageToken", pageToken)
+		}
+		endpoint.RawQuery = query.Encode()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		body, readErr := io.ReadAll(resp.Body)
+		closeErr := resp.Body.Close()
+		if readErr != nil {
+			return nil, readErr
+		}
+		if closeErr != nil {
+			return nil, closeErr
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return nil, fmt.Errorf("comments v2 retornou HTTP %d: %s", resp.StatusCode, driveErrorMessage(body))
+		}
+
+		payload, err := decodeDriveV2Comments(body)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, payload.comments...)
+		if strings.TrimSpace(payload.nextPageToken) == "" {
+			return all, nil
+		}
+		pageToken = payload.nextPageToken
+	}
+}
+
+func driveErrorMessage(body []byte) string {
+	text := strings.TrimSpace(string(body))
+	if strings.Contains(text, "SERVICE_DISABLED") || strings.Contains(text, "accessNotConfigured") {
+		return "Google Drive API desativada no projeto da service account; habilite drive.googleapis.com no Google Cloud e tente novamente"
+	}
+	if strings.Contains(text, "insufficientFilePermissions") || strings.Contains(text, "The user does not have sufficient permissions") {
+		return "a service account não tem permissão suficiente no arquivo; compartilhe a planilha com o e-mail da service account"
+	}
+	if text == "" {
+		return "resposta vazia"
+	}
+	return text
+}
