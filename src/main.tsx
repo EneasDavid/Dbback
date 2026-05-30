@@ -380,7 +380,17 @@ function GradeDetailPanel({ table, mainColumn }: { table: GradeTable; mainColumn
     .filter((item) => shouldShowColumn(item) && !shouldShowMainColumn(item) && item.key !== mainColumn.key && !isAverageColumn(item))
     .sort((a, b) => compareDetailItemOrder(a, b));
 
-  const parsedItems = compositionItems.map((item) => {
+  const dedupedItems = (() => {
+    const seen = new Set<string>();
+    return compositionItems.filter((item) => {
+      const normalizedLabel = normalized(item.label);
+      if (seen.has(normalizedLabel)) return false;
+      seen.add(normalizedLabel);
+      return true;
+    });
+  })();
+
+  const parsedItems = dedupedItems.map((item) => {
     const obtained = parseScore(item.value);
     const maxFromLabel = parseMaxFromLabel(item.label);
     const maxFromValue = parseMaxFromValue(item.value);
@@ -398,7 +408,7 @@ function GradeDetailPanel({ table, mainColumn }: { table: GradeTable; mainColumn
 
   const isAt4Detail = /\bat\.?\s*4\b/.test(normalized(mainColumn.label)) || normalized(mainColumn.label).includes('atividade 4');
   const detailTitle = isAt4Detail ? `Detalhes ${humanizeLabel(mainColumn.label)}` : 'Composição';
-  const comments = [mainColumn.comment, ...compositionItems.map((item) => item.comment)].filter(Boolean) as string[];
+  const mainComment = mainColumn.comment?.trim();
 
   return (
     <section className="detail-panel">
@@ -418,7 +428,7 @@ function GradeDetailPanel({ table, mainColumn }: { table: GradeTable; mainColumn
             <div className="detail-item-row">
               <div>
                 <strong>{getColumnLabel(item)}</strong>
-                <span>{item.value || '-'}</span>
+                <span>{item.max ? (item.obtained !== null ? formatScore(item.obtained) : item.value || '-') : item.value || '-'}</span>
               </div>
               {item.max ? (
                 <span className="badge">{item.obtained !== null ? `${formatScore(item.obtained)} / ${formatScore(item.max)}` : `Max ${formatScore(item.max)}`}</span>
@@ -436,12 +446,12 @@ function GradeDetailPanel({ table, mainColumn }: { table: GradeTable; mainColumn
           </article>
         ))}
       </div>
-      {comments.length > 0 && (
+      {mainComment && (
         <div className="comment-bubble">
           <div className="comment-avatar">P</div>
           <div>
-            <p>{comments[0]}</p>
-            <span>Professor</span>
+            <p>{mainComment}</p>
+            <span>Comentário geral</span>
           </div>
         </div>
       )}
