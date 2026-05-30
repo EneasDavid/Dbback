@@ -366,7 +366,7 @@ func addAB1ScoreAverage(result *GradeResult) {
 		total = 10
 	}
 
-	result.Tables = append(result.Tables, TableResult{
+	mediaAB1Table := TableResult{
 		Key:       "media-ab1",
 		Label:     "Média AB1",
 		SheetName: "Média AB1",
@@ -375,7 +375,23 @@ func addAB1ScoreAverage(result *GradeResult) {
 		Cards: []CardResult{
 			makeCard("media-ab1", "Média AB1", formatScore(total), "", "", nil),
 		},
-	})
+	}
+
+	// Insert after the summary table containing Prova AB
+	insertIdx := len(result.Tables)
+	for idx, table := range result.Tables {
+		if table.Kind == "summary" {
+			insertIdx = idx + 1
+			break
+		}
+	}
+
+	// Insert the media table at the correct position
+	if insertIdx < len(result.Tables) {
+		result.Tables = append(result.Tables[:insertIdx], append([]TableResult{mediaAB1Table}, result.Tables[insertIdx:]...)...)
+	} else {
+		result.Tables = append(result.Tables, mediaAB1Table)
+	}
 }
 
 func ab1MainScoreCard(card CardResult) bool {
