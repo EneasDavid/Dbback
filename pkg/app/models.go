@@ -30,6 +30,7 @@ type TableResult struct {
 	SheetName string         `json:"sheetName"`
 	Kind      string         `json:"kind"`
 	Complete  bool           `json:"complete"`
+	Status    string         `json:"status,omitempty"` // "Encerrado" ou "Não encerrado"
 	Columns   []ColumnResult `json:"columns"`
 	Items     []ActivityItem `json:"items,omitempty"`
 }

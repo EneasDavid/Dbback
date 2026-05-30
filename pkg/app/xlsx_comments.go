@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"path"
 	"regexp"
 	"strconv"
@@ -53,26 +52,19 @@ func (c *SheetsClient) commentsForSheet(ctx context.Context, sheetName string) (
 }
 
 func (c *SheetsClient) loadXLSX(ctx context.Context) ([]byte, error) {
-	// First try: load from local file if configured
-	if strings.TrimSpace(c.cfg.XLSXFile) != "" {
-		data, err := os.ReadFile(c.cfg.XLSXFile)
-		if err == nil {
-			return data, nil
-		}
-		// If local file exists but can't be read, try API fallback
-	}
-	
-	// Second try: export from Google Drive if available
+	// In production, only use Google Drive API export
+	// Local files are NOT synced to production environments (Vercel, Railway, etc)
 	if strings.TrimSpace(c.cfg.SpreadsheetID) != "" {
 		data, err := c.exportXLSX(ctx)
 		if err == nil {
 			return data, nil
 		}
-		// If export fails, fall through to return empty
+		// If export fails, return empty - comments will be unavailable but app continues
+		return nil, fmt.Errorf("nao foi possivel carregar comentarios: %v", err)
 	}
 	
-	// Return empty data - comments will be unavailable
-	return nil, fmt.Errorf("nao foi possivel carregar comentarios (arquivo local nao encontrado e export via API desabilitado)")
+	// No Spreadsheet ID configured
+	return nil, fmt.Errorf("GOOGLE_SHEET_ID nao configurado - impossivel carregar comentarios")
 }
 
 func (c *SheetsClient) exportXLSX(ctx context.Context) ([]byte, error) {
@@ -83,15 +75,26 @@ func (c *SheetsClient) exportXLSX(ctx context.Context) ([]byte, error) {
 	)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, exportURL, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("erro ao criar requisicao de export: %w", err)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("erro ao conectar no Google Drive: %w", err)
 	}
 	defer resp.Body.Close()
+	
+	if resp.StatusCode == 401 {
+		return nil, fmt.Errorf("acesso negado ao arquivo (401): conta de servico nao tem permissao. Compartilhe o arquivo com: conex-o-api-banco-de-dados@spheric-radio-495913-q2.iam.gserviceaccount.com")
+	}
+	if resp.StatusCode == 403 {
+		return nil, fmt.Errorf("permissao insuficiente (403): arquivo nao compartilhado com a conta de servico")
+	}
+	if resp.StatusCode == 404 {
+		return nil, fmt.Errorf("arquivo nao encontrado (404): verifique GOOGLE_SHEET_ID")
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, NewHTTPError(resp.StatusCode, "nao foi possivel exportar comentarios da planilha")
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("erro %d ao exportar: %s", resp.StatusCode, string(body))
 	}
 	return io.ReadAll(resp.Body)
 }

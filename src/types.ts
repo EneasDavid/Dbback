@@ -33,6 +33,7 @@ export type GradeTable = {
   sheetName: string;
   kind: string;
   complete: boolean;
+  status?: string; // "Encerrado" ou "Não encerrado"
   columns: Column[];
   items?: ActivityItem[];
 };

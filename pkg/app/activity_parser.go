@@ -51,6 +51,19 @@ func parseActivityRubric(grid *sheetGrid, table TableConfig, user SessionUser) (
 		return TableResult{}, false, NewHTTPError(500, "erro de execução: lista de sub tópicos vazia na aba "+table.SheetName)
 	}
 
+	// Detectar se há subtópicos incompletos (sem nota)
+	incompleteCount := 0
+	for _, item := range items {
+		if strings.TrimSpace(item.NotaAlcancada) == "" {
+			incompleteCount++
+		}
+	}
+	
+	status := "Encerrado"
+	if incompleteCount > 0 {
+		status = "Não encerrado"
+	}
+
 	columns := []ColumnResult{activityTotalColumn(items)}
 	return TableResult{
 		Key:       table.Key,
@@ -58,6 +71,7 @@ func parseActivityRubric(grid *sheetGrid, table TableConfig, user SessionUser) (
 		SheetName: table.SheetName,
 		Kind:      table.Kind,
 		Complete:  true,
+		Status:    status,
 		Columns:   columns,
 		Items:     items,
 	}, true, nil
