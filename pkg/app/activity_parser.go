@@ -14,6 +14,10 @@ func parseActivityRubric(grid *sheetGrid, table TableConfig, user SessionUser) (
 	if studentRowIdx < 0 {
 		return TableResult{}, false, nil
 	}
+	rowComment, rowCommentAuthor := rowIdentityComment(grid, studentRowIdx)
+	if excludesStudentFromGrades(rowComment) {
+		return TableResult{}, false, nil
+	}
 
 	items := make([]activityItem, 0, len(grid.headers))
 	for colIdx := 1; colIdx < len(grid.headers); colIdx++ {
@@ -55,6 +59,9 @@ func parseActivityRubric(grid *sheetGrid, table TableConfig, user SessionUser) (
 		}
 	}
 	fillActivityCommentsFromDriveSequence(items, grid, maxRowIdx, studentRowIdx)
+	if rowComment == "" {
+		rowComment, rowCommentAuthor = peerIdentityComment(grid, maxRowIdx, studentRowIdx, items)
+	}
 
 	status := "Encerrado"
 	if incompleteCount > 0 {
@@ -63,6 +70,10 @@ func parseActivityRubric(grid *sheetGrid, table TableConfig, user SessionUser) (
 
 	details := activityDetails(items)
 	card := activityTotalCard(items, details)
+	if card.Comment == "" && rowComment != "" {
+		card.Comment = rowComment
+		card.CommentAuthor = rowCommentAuthor
+	}
 	return TableResult{
 		Key:       table.Key,
 		Label:     table.Label,
@@ -87,6 +98,59 @@ func activityComment(grid *sheetGrid, maxRowIdx int, studentRowIdx int, colIdx i
 		}
 	}
 	return noteAt(grid.notes, colIdx), noteAt(grid.noteAuthors, colIdx)
+}
+
+func peerIdentityComment(grid *sheetGrid, maxRowIdx int, studentRowIdx int, items []activityItem) (string, string) {
+	signature := activityScoreSignature(grid, studentRowIdx, items)
+	if signature == "" {
+		return "", ""
+	}
+
+	start := studentRowIdx
+	for start > maxRowIdx+1 && activityScoreSignature(grid, start-1, items) == signature {
+		start--
+	}
+	end := studentRowIdx + 1
+	for end < len(grid.rows) && activityScoreSignature(grid, end, items) == signature {
+		end++
+	}
+	if end-start <= 1 {
+		return "", ""
+	}
+
+	type commentKey struct {
+		text   string
+		author string
+	}
+	seen := map[commentKey]bool{}
+	var comments []commentKey
+	for rowIdx := start; rowIdx < end; rowIdx++ {
+		comment, author := rowIdentityComment(grid, rowIdx)
+		if comment == "" || excludesStudentFromGrades(comment) {
+			continue
+		}
+		key := commentKey{text: comment, author: author}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		comments = append(comments, key)
+	}
+	if len(comments) != 1 {
+		return "", ""
+	}
+	return comments[0].text, comments[0].author
+}
+
+func activityScoreSignature(grid *sheetGrid, rowIdx int, items []activityItem) string {
+	if rowIdx < 0 || rowIdx >= len(grid.rows) {
+		return ""
+	}
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		parts = append(parts, normalizeID(valueAt(grid.rows[rowIdx], item.ColIdx)))
+	}
+	return strings.Join(parts, "|")
 }
 
 func fillActivityCommentsFromDriveSequence(items []activityItem, grid *sheetGrid, maxRowIdx int, studentRowIdx int) {

@@ -128,51 +128,38 @@ export function GradeCard({
 
 export function SummaryTable({ table }: { table: GradeTable }) {
   const cards = cardsFor(table);
-  const averageCards = cards.filter(isAverageCard);
-  const gradeCards = cards.filter((card) => !isAverageCard(card));
+  const firstTone = cards.find((card) => card.tone)?.tone || '';
 
   return (
-    <article className="grade-table summary">
+    <article className={`grade-table summary ${isMediaTable(table) ? `final-average ${firstTone}` : ''}`}>
       <header>
         <h2>{table.label}</h2>
       </header>
-      {averageCards.length > 0 && (
-        <div className="summary-average-stack" aria-label="Média">
-          {averageCards.map((card) => (
-            <section className={`summary-average ${card.tone || ''}`} key={`${table.key}-${card.key}`}>
-              <div>
-                <span>{card.label}</span>
-                <strong>{card.displayValue}</strong>
-              </div>
-              {card.comment && (
-                <p>
-                  <MessageSquareText size={15} />
-                  {card.comment}
-                </p>
-              )}
-            </section>
-          ))}
-        </div>
-      )}
-      {gradeCards.length > 0 && (
+      {cards.length > 0 && (
         <div className="summary-grid">
-          {gradeCards.map((card) => (
-            <section className={`summary-score ${summaryHighlight(card) ? 'highlight' : ''} ${card.tone || ''}`} key={`${table.key}-${card.key}`}>
-              <div className="summary-score-title">
-                <span>{card.label}</span>
-              </div>
-              <strong>{card.displayValue}</strong>
-              {card.comment && (
-                <p>
-                  <MessageSquareText size={15} />
-                  {card.comment}
-                </p>
-              )}
-            </section>
+          {cards.map((card) => (
+            <SummaryScoreCard card={card} fallbackLabel={table.label} key={`${table.key}-${card.key}`} />
           ))}
         </div>
       )}
     </article>
+  );
+}
+
+function SummaryScoreCard({ card, fallbackLabel }: { card: GradeCardData; fallbackLabel: string }) {
+  return (
+    <section className={`summary-score ${summaryHighlight(card) ? 'highlight' : ''} ${card.tone || ''}`}>
+      <div className="summary-score-title">
+        <span>{card.label || fallbackLabel}</span>
+      </div>
+      <strong>{card.displayValue}</strong>
+      {card.comment && (
+        <p>
+          <MessageSquareText size={15} />
+          {card.comment}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -309,13 +296,12 @@ function summaryHighlight(card: GradeCardData) {
   return label.includes('total');
 }
 
-function isAverageCard(card: GradeCardData) {
-  const label = card.label.toLowerCase();
-  return label.includes('media') || label.includes('média');
-}
-
 function cardsFor(table: GradeTable) {
   return Array.isArray(table.cards) ? table.cards : [];
+}
+
+function isMediaTable(table: GradeTable) {
+  return table.kind === 'ab1summary' || table.kind === 'ab2summary' || table.key.startsWith('media-');
 }
 
 function detailPanelId(tableKey: string, cardKey: string) {

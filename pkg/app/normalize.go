@@ -47,6 +47,39 @@ func matchesUser(row []string, nameIdx int, matriculaIdx int, user SessionUser) 
 	return false
 }
 
+func rowIdentityComment(grid *sheetGrid, rowIdx int) (string, string) {
+	if grid == nil || rowIdx < 0 || rowIdx >= len(grid.rowNotes) {
+		return "", ""
+	}
+	for _, colIdx := range identityCommentColumns(grid.headers) {
+		if comment := noteAt(grid.rowNotes[rowIdx], colIdx); comment != "" {
+			return comment, noteAt(grid.rowNoteAuthors[rowIdx], colIdx)
+		}
+	}
+	return "", ""
+}
+
+func identityCommentColumns(headers []string) []int {
+	candidates := []int{groupColumn(headers), matriculaColumn(headers), nameColumn(headers), 0}
+	seen := map[int]bool{}
+	columns := make([]int, 0, len(candidates))
+	for _, colIdx := range candidates {
+		if colIdx < 0 || colIdx >= len(headers) || seen[colIdx] {
+			continue
+		}
+		seen[colIdx] = true
+		columns = append(columns, colIdx)
+	}
+	return columns
+}
+
+func excludesStudentFromGrades(comment string) bool {
+	normalized := normalizeHeader(comment)
+	return strings.Contains(normalized, "nao consta") ||
+		strings.Contains(normalized, "nao aparece") ||
+		strings.Contains(normalized, "nao encontrado")
+}
+
 func studentRow(row []string, nameIdx int, matriculaIdx int) bool {
 	if nameIdx >= 0 && strings.TrimSpace(valueAt(row, nameIdx)) != "" {
 		return true

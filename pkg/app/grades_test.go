@@ -98,7 +98,7 @@ func TestAddAB1ScoreAverageCapsAtTen(t *testing.T) {
 	}
 }
 
-func TestAddAB1ScoreAverageOrderAfterProva(t *testing.T) {
+func TestAddAB1ScoreAverageAppendsMediaAsLastTable(t *testing.T) {
 	result := GradeResult{
 		Exam: "AB1",
 		Tables: []TableResult{
@@ -113,26 +113,9 @@ func TestAddAB1ScoreAverageOrderAfterProva(t *testing.T) {
 	addAB1ScoreSum(&result)
 	addAB1ScoreAverage(&result)
 
-	// Find the media-ab1 table
-	mediaIdx := -1
-	provaIdx := -1
-	for idx, table := range result.Tables {
-		if table.Kind == "ab1summary" {
-			mediaIdx = idx
-		}
-		if table.Kind == "summary" {
-			provaIdx = idx
-		}
-	}
-
-	if mediaIdx < 0 {
-		t.Fatalf("media-ab1 table not found")
-	}
-	if provaIdx < 0 {
-		t.Fatalf("summary (prova) table not found")
-	}
-	if mediaIdx <= provaIdx {
-		t.Fatalf("media-ab1 (index %d) must come after prova (index %d)", mediaIdx, provaIdx)
+	last := result.Tables[len(result.Tables)-1]
+	if last.Kind != "ab1summary" || last.Key != "media-ab1" {
+		t.Fatalf("last table = %#v, want media-ab1", last)
 	}
 }
 

@@ -106,6 +106,10 @@ func parseStudentTable(grid *sheetGrid, table TableConfig, user SessionUser) (Ta
 		if !matchesUser(row, nameIdx, matriculaIdx, user) {
 			continue
 		}
+		rowComment, rowCommentAuthor := rowIdentityComment(grid, rowIdx)
+		if excludesStudentFromGrades(rowComment) {
+			return TableResult{}, false, nil
+		}
 		cells := make([]studentCell, 0, len(grid.headers))
 		for colIdx, header := range grid.headers {
 			if strings.TrimSpace(header) == "" || !includeColumn(table.Kind, header) || !shouldShowColumn(header) {
@@ -131,6 +135,7 @@ func parseStudentTable(grid *sheetGrid, table TableConfig, user SessionUser) (Ta
 			})
 		}
 		cards := cardsForStudentCells(table, cells)
+		applyRowCommentToCards(cards, rowComment, rowCommentAuthor)
 		return TableResult{
 			Key:       table.Key,
 			Label:     table.Label,
@@ -141,6 +146,19 @@ func parseStudentTable(grid *sheetGrid, table TableConfig, user SessionUser) (Ta
 		}, true, nil
 	}
 	return TableResult{}, false, nil
+}
+
+func applyRowCommentToCards(cards []CardResult, comment string, author string) {
+	if strings.TrimSpace(comment) == "" {
+		return
+	}
+	for idx := range cards {
+		if strings.TrimSpace(cards[idx].Comment) != "" {
+			continue
+		}
+		cards[idx].Comment = comment
+		cards[idx].CommentAuthor = author
+	}
 }
 
 func sheetNamesForTables(tables []TableConfig) []string {
@@ -377,21 +395,7 @@ func addAB1ScoreAverage(result *GradeResult) {
 		},
 	}
 
-	// Insert after the summary table containing Prova AB
-	insertIdx := len(result.Tables)
-	for idx, table := range result.Tables {
-		if table.Kind == "summary" {
-			insertIdx = idx + 1
-			break
-		}
-	}
-
-	// Insert the media table at the correct position
-	if insertIdx < len(result.Tables) {
-		result.Tables = append(result.Tables[:insertIdx], append([]TableResult{mediaAB1Table}, result.Tables[insertIdx:]...)...)
-	} else {
-		result.Tables = append(result.Tables, mediaAB1Table)
-	}
+	result.Tables = append(result.Tables, mediaAB1Table)
 }
 
 func ab1MainScoreCard(card CardResult) bool {

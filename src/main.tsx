@@ -146,8 +146,9 @@ function App() {
   const visibleTables = useMemo(() => grades[exam]?.tables ?? [], [grades, exam]);
 
   const activityTables = useMemo(() => visibleTables.filter((table) => !isSummaryTable(table.kind) && cardsFor(table).length > 0), [visibleTables]);
-  const summaryTables = useMemo(() => visibleTables.filter((table) => isSummaryTable(table.kind) && cardsFor(table).length > 0), [visibleTables]);
-  const hasRenderableTables = activityTables.length + summaryTables.length > 0;
+  const summaryTables = useMemo(() => visibleTables.filter((table) => isSummaryTable(table.kind) && !isMediaTable(table) && cardsFor(table).length > 0), [visibleTables]);
+  const mediaTables = useMemo(() => visibleTables.filter((table) => isMediaTable(table) && cardsFor(table).length > 0), [visibleTables]);
+  const hasRenderableTables = activityTables.length + summaryTables.length + mediaTables.length > 0;
 
   useEffect(() => {
     if (!session || loading || hasRenderableTables) {
@@ -223,6 +224,9 @@ function App() {
           {summaryTables.map((table) => (
             <SummaryTable table={table} key={table.key} />
           ))}
+          {mediaTables.map((table) => (
+            <SummaryTable table={table} key={table.key} />
+          ))}
         </section>
       ) : (
         !loading && showEmptyState && <EmptyState exam={exam} />
@@ -284,7 +288,7 @@ function normalizeGradeTable(table: LegacyGradeTable): GradeTable {
     cards: cards
       .filter(Boolean)
       .filter((card) => !isPendingAverageCard(table, card))
-      .filter((card) => !isSummaryTable(table.kind) || isVisibleSummaryCard(card)),
+      .filter((card) => !isSummaryTable(table.kind) || isMediaTable(table) || isVisibleSummaryCard(card)),
   };
 }
 
@@ -364,7 +368,7 @@ function isPendingAverageCard(table: GradeTable, card: { label?: string; display
 
 function isVisibleSummaryCard(card: { label?: string }) {
   const label = normalized(card.label || '');
-  return label.includes('prova') || label.includes('media');
+  return label.includes('prova') || label.includes('media') || label.includes('somatorio');
 }
 
 function isVisibleLegacyColumn(column: LegacyColumn) {
@@ -479,6 +483,10 @@ function canPreload() {
 
 function isSummaryTable(kind: string) {
   return kind === 'summary' || kind === 'ab1summary' || kind === 'ab2summary';
+}
+
+function isMediaTable(table: GradeTable) {
+  return table.kind === 'ab1summary' || table.kind === 'ab2summary' || table.key.startsWith('media-');
 }
 
 function clearClientSession(matricula?: string) {

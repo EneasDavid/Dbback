@@ -141,6 +141,76 @@ func TestActivityCommentsPropagateThroughThreeRowMergedGroup(t *testing.T) {
 	}
 }
 
+func TestActivityIdentityColumnCommentBecomesCardComment(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Grupo", ""), cellData("Critério", "")),
+		rowData(cellData("Nota maxima", ""), cellData("1", "")),
+		rowData(cellData("Alice", "comentario geral da linha"), cellData("0,7", "")),
+	}, nil)
+
+	table, found, err := parseActivityRubric(grid, TableConfig{
+		Key:       "at1",
+		Label:     "AT. 1",
+		SheetName: "AT. 1",
+		Kind:      "activity",
+	}, SessionUser{Name: "Alice", Matricula: "123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("student row was not found")
+	}
+	if got := table.Cards[0].Comment; got != "comentario geral da linha" {
+		t.Fatalf("card comment = %q, want identity column comment", got)
+	}
+}
+
+func TestActivityIdentityColumnCommentCanExcludeStudent(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Grupo", ""), cellData("Critério", "")),
+		rowData(cellData("Nota maxima", ""), cellData("1", "")),
+		rowData(cellData("Alice", "NOME NÃO CONSTA NA ATIVIDADE"), cellData("0,7", "")),
+	}, nil)
+
+	_, found, err := parseActivityRubric(grid, TableConfig{
+		Key:       "at1",
+		Label:     "AT. 1",
+		SheetName: "AT. 1",
+		Kind:      "activity",
+	}, SessionUser{Name: "Alice", Matricula: "123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found {
+		t.Fatal("student row with exclusion comment should not return grade data")
+	}
+}
+
+func TestActivityPeerIdentityCommentAppliesWithinSameScoreBlock(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Grupo", ""), cellData("Critério", "")),
+		rowData(cellData("Nota maxima", ""), cellData("1", "")),
+		rowData(cellData("Alice", ""), cellData("0,7", "")),
+		rowData(cellData("Bob", "comentario do grupo"), cellData("0,7", "")),
+	}, nil)
+
+	table, found, err := parseActivityRubric(grid, TableConfig{
+		Key:       "at1",
+		Label:     "AT. 1",
+		SheetName: "AT. 1",
+		Kind:      "activity",
+	}, SessionUser{Name: "Alice", Matricula: "123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("student row was not found")
+	}
+	if got := table.Cards[0].Comment; got != "comentario do grupo" {
+		t.Fatalf("card comment = %q, want peer identity comment", got)
+	}
+}
+
 func TestActivityCommentsUseDriveRowSequenceWhenScoresRepeat(t *testing.T) {
 	grid := parseGrid([]*sheets.RowData{
 		rowData(cellData("Aluno", ""), cellData("Organização", ""), cellData("Q.1", ""), cellData("Q.2", ""), cellData("Q.3", ""), cellData("Q.4", ""), cellData("Q.5", ""), cellData("Q.6", "")),
@@ -465,6 +535,68 @@ func TestSummaryPayloadHidesGeneralFormulaComment(t *testing.T) {
 	}
 	if got := table.Cards[0].Comment; got != "" {
 		t.Fatalf("summary comment = %q, want empty", got)
+	}
+}
+
+func TestSummaryIdentityColumnCommentBecomesCardComment(t *testing.T) {
+	grid := &sheetGrid{
+		headers: []string{"Nome", "Matricula", "Prova"},
+		rows: [][]string{
+			{"Alice", "123", "6"},
+		},
+		rowNotes: [][]string{
+			{"comentario geral", "", ""},
+		},
+		rowNoteAuthors: [][]string{
+			{"Professor", "", ""},
+		},
+	}
+
+	table, found, err := parseStudentTable(grid, TableConfig{
+		Key:       "prova",
+		Label:     "Prova AB1",
+		SheetName: "Notas AB1",
+		Kind:      "summary",
+	}, SessionUser{Name: "Alice", Matricula: "123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("student row was not found")
+	}
+	if got := table.Cards[0].Comment; got != "comentario geral" {
+		t.Fatalf("summary card comment = %q, want identity column comment", got)
+	}
+	if got := table.Cards[0].CommentAuthor; got != "Professor" {
+		t.Fatalf("summary card author = %q, want Professor", got)
+	}
+}
+
+func TestSummaryIdentityColumnCommentCanExcludeStudent(t *testing.T) {
+	grid := &sheetGrid{
+		headers: []string{"Nome", "Matricula", "Prova"},
+		rows: [][]string{
+			{"Alice", "123", "6"},
+		},
+		rowNotes: [][]string{
+			{"NOME NÃO CONSTA NA ATIVIDADE", "", ""},
+		},
+		rowNoteAuthors: [][]string{
+			{"Professor", "", ""},
+		},
+	}
+
+	_, found, err := parseStudentTable(grid, TableConfig{
+		Key:       "prova",
+		Label:     "Prova AB1",
+		SheetName: "Notas AB1",
+		Kind:      "summary",
+	}, SessionUser{Name: "Alice", Matricula: "123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found {
+		t.Fatal("summary row with exclusion comment should not return grade data")
 	}
 }
 
