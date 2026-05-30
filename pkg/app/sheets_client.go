@@ -87,12 +87,14 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 		}
 
 		comments := map[string]map[string]cellComment{}
+		var driveComments []driveCellComment
 		if c.requiresXLSXComments(missing) {
 			var commentsErr error
 			comments, commentsErr = c.commentsForSheets(ctx, missing)
 			if commentsErr != nil {
 				return nil, NewHTTPError(503, "não conseguiu exportar comentários do Google Sheets: "+commentsErr.Error())
 			}
+			driveComments, _ = c.driveCommentsForSpreadsheet(ctx)
 		}
 
 		ranges := make([]string, 0, len(missing))
@@ -125,6 +127,7 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 				grid.applyComments(sheetComments)
 				grid.applyCommentMerges(sheet.Merges)
 			}
+			grid.applyDriveComments(driveComments, sheet.Properties.SheetId)
 			c.cache[name] = cachedGrid{expires: now.Add(c.cfg.CacheTTL), grid: grid}
 			found[name] = true
 		}
@@ -191,7 +194,7 @@ func containsString(values []string, target string) bool {
 }
 
 var sheetsGridFields = googleapi.Field(
-	"sheets(properties(title),merges(startRowIndex,endRowIndex,startColumnIndex,endColumnIndex),data(startRow,startColumn,rowData(values(formattedValue,note,userEnteredValue))))",
+	"sheets(properties(title,sheetId),merges(startRowIndex,endRowIndex,startColumnIndex,endColumnIndex),data(startRow,startColumn,rowData(values(formattedValue,note,userEnteredValue))))",
 )
 
 func exportMimeTypeXLSX() string {

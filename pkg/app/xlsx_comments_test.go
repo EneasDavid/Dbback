@@ -92,3 +92,49 @@ func TestSheetGridFeedbacksReturnsAbsoluteCells(t *testing.T) {
 		t.Fatalf("second feedback = %#v", feedbacks[1])
 	}
 }
+
+func TestApplyDriveCommentsMatchesUniqueQuotedCell(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Aluno", ""), cellData("Critério", "")),
+		rowData(cellData("Subtópico", ""), cellData("Modelagem", "")),
+		rowData(cellData("Alice", ""), cellData("1,5", "")),
+	}, nil)
+
+	grid.applyDriveComments([]driveCellComment{
+		{QuotedText: "Modelagem", Text: "comentario do Drive", Author: "Professor", SheetID: 123, HasSheetID: true},
+		{QuotedText: "Alice", Text: "outra aba", Author: "Professor", SheetID: 456, HasSheetID: true},
+	}, 123)
+
+	if got := noteAt(grid.rowNotes[0], 1); got != "comentario do Drive" {
+		t.Fatalf("drive comment = %q", got)
+	}
+	if got := noteAt(grid.rowNotes[1], 0); got != "" {
+		t.Fatalf("comment from another sheet should be ignored, got %q", got)
+	}
+}
+
+func TestApplyDriveCommentsIgnoresAmbiguousQuotedCell(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Aluno", ""), cellData("Critério", "")),
+		rowData(cellData("Subtópico", ""), cellData("1", "")),
+		rowData(cellData("Alice", ""), cellData("1", "")),
+	}, nil)
+
+	grid.applyDriveComments([]driveCellComment{
+		{QuotedText: "1", Text: "comentario ambiguo", Author: "Professor"},
+	}, 0)
+
+	if got := noteAt(grid.rowNotes[0], 1); got != "" {
+		t.Fatalf("ambiguous detail comment = %q", got)
+	}
+	if got := noteAt(grid.rowNotes[1], 1); got != "" {
+		t.Fatalf("ambiguous student comment = %q", got)
+	}
+}
+
+func TestDriveCommentSheetIDParsesWorkbookAnchor(t *testing.T) {
+	sheetID, ok := driveCommentSheetID(`{"type":"workbook-range","uid":123,"range":"456"}`)
+	if !ok || sheetID != 123 {
+		t.Fatalf("sheetID = %d, ok = %v", sheetID, ok)
+	}
+}

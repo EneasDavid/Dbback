@@ -72,6 +72,14 @@ type cellComment struct {
 	Author string
 }
 
+type driveCellComment struct {
+	Text       string
+	Author     string
+	QuotedText string
+	SheetID    int64
+	HasSheetID bool
+}
+
 type SheetComment struct {
 	Cell   string
 	Text   string

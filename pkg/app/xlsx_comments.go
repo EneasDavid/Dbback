@@ -3,6 +3,11 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -105,6 +110,119 @@ func (c *SheetsClient) commentsForSheets(ctx context.Context, sheetNames []strin
 		return nil, err
 	}
 	return filterComments(value.(map[string]map[string]cellComment), wanted), nil
+}
+
+func (c *SheetsClient) driveCommentsForSpreadsheet(ctx context.Context) ([]driveCellComment, error) {
+	value, err, _ := c.group.Do("drive-comments:"+c.cfg.SpreadsheetID, func() (interface{}, error) {
+		return c.fetchDriveComments(ctx)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return value.([]driveCellComment), nil
+}
+
+func (c *SheetsClient) fetchDriveComments(ctx context.Context) ([]driveCellComment, error) {
+	var all []driveCellComment
+	pageToken := ""
+	for {
+		endpoint, err := url.Parse(fmt.Sprintf("https://www.googleapis.com/drive/v3/files/%s/comments", url.PathEscape(c.cfg.SpreadsheetID)))
+		if err != nil {
+			return nil, err
+		}
+		query := endpoint.Query()
+		query.Set("pageSize", "100")
+		query.Set("includeDeleted", "false")
+		query.Set("fields", "nextPageToken,comments(content,anchor,author(displayName),quotedFileContent(value),deleted)")
+		if pageToken != "" {
+			query.Set("pageToken", pageToken)
+		}
+		endpoint.RawQuery = query.Encode()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		body, readErr := io.ReadAll(resp.Body)
+		closeErr := resp.Body.Close()
+		if readErr != nil {
+			return nil, readErr
+		}
+		if closeErr != nil {
+			return nil, closeErr
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return nil, fmt.Errorf("comments retornou HTTP %d", resp.StatusCode)
+		}
+
+		var payload driveCommentsResponse
+		if err := json.Unmarshal(body, &payload); err != nil {
+			return nil, err
+		}
+		for _, comment := range payload.Comments {
+			text := strings.TrimSpace(comment.Content)
+			quoted := strings.TrimSpace(comment.QuotedFileContent.Value)
+			if comment.Deleted || text == "" || quoted == "" {
+				continue
+			}
+			sheetID, hasSheetID := driveCommentSheetID(comment.Anchor)
+			all = append(all, driveCellComment{
+				Text:       text,
+				Author:     authorDisplayName(comment.Author.DisplayName),
+				QuotedText: quoted,
+				SheetID:    sheetID,
+				HasSheetID: hasSheetID,
+			})
+		}
+		if strings.TrimSpace(payload.NextPageToken) == "" {
+			return all, nil
+		}
+		pageToken = payload.NextPageToken
+	}
+}
+
+type driveCommentsResponse struct {
+	NextPageToken string `json:"nextPageToken"`
+	Comments      []struct {
+		Content string `json:"content"`
+		Anchor  string `json:"anchor"`
+		Deleted bool   `json:"deleted"`
+		Author  struct {
+			DisplayName string `json:"displayName"`
+		} `json:"author"`
+		QuotedFileContent struct {
+			Value string `json:"value"`
+		} `json:"quotedFileContent"`
+	} `json:"comments"`
+}
+
+func driveCommentSheetID(anchor string) (int64, bool) {
+	anchor = strings.TrimSpace(anchor)
+	if anchor == "" {
+		return 0, false
+	}
+	var payload struct {
+		UID json.RawMessage `json:"uid"`
+	}
+	if err := json.Unmarshal([]byte(anchor), &payload); err != nil || len(payload.UID) == 0 {
+		return 0, false
+	}
+	var number int64
+	if err := json.Unmarshal(payload.UID, &number); err == nil {
+		return number, true
+	}
+	var text string
+	if err := json.Unmarshal(payload.UID, &text); err == nil {
+		var parsed int64
+		if _, err := fmt.Sscan(strings.TrimSpace(text), &parsed); err == nil {
+			return parsed, true
+		}
+	}
+	return 0, false
 }
 
 func parseXLSXComments(data []byte, sheetNames []string) (map[string]map[string]cellComment, error) {

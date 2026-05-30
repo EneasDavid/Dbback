@@ -74,6 +74,58 @@ func (g *sheetGrid) applyComments(comments map[string]cellComment) {
 	}
 }
 
+func (g *sheetGrid) applyDriveComments(comments []driveCellComment, sheetID int64) {
+	for _, comment := range comments {
+		if comment.HasSheetID && comment.SheetID != sheetID {
+			continue
+		}
+		if strings.TrimSpace(comment.Text) == "" || strings.TrimSpace(comment.QuotedText) == "" {
+			continue
+		}
+		rowIdx, colIdx, ok := g.uniqueCellForValue(comment.QuotedText)
+		if !ok || g.noteAtAbsolute(rowIdx, colIdx) != "" {
+			continue
+		}
+		g.setNoteAtAbsolute(rowIdx, colIdx, comment.Text, comment.Author)
+	}
+}
+
+func (g *sheetGrid) uniqueCellForValue(value string) (int, int, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, 0, false
+	}
+	foundRow := 0
+	foundCol := 0
+	found := false
+	ambiguous := false
+	check := func(rowIdx int, row []string) {
+		for colIdx, cell := range row {
+			if strings.TrimSpace(cell) != value {
+				continue
+			}
+			if found {
+				ambiguous = true
+				return
+			}
+			found = true
+			foundRow = rowIdx
+			foundCol = colIdx
+		}
+	}
+	check(g.headerRow, g.headers)
+	for idx, row := range g.rows {
+		if ambiguous {
+			break
+		}
+		check(g.rowIndices[idx], row)
+	}
+	if !found || ambiguous {
+		return 0, 0, false
+	}
+	return foundRow, foundCol, true
+}
+
 func matrixValue(values [][]string, rowIdx int, colIdx int) string {
 	if rowIdx < 0 || rowIdx >= len(values) || colIdx < 0 || colIdx >= len(values[rowIdx]) {
 		return ""
