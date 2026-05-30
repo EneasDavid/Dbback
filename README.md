@@ -24,6 +24,52 @@ O projeto e um monolito modular: uma unica aplicacao deployavel, com responsabil
 - `pkg/app/`: regras de sessao, configuracao, Google Sheets, parsing de tabelas e comentarios.
 - `src/`: frontend React, separado em componentes, API client, tipos e utilitarios de notas.
 
+## Amplitude tecnica
+
+### Cache e sessao
+
+- Sessao assinada em cookie HTTP-only com validade de 7 horas.
+- Ao expirar, `/api/me` e `/api/grades` deixam de autorizar a consulta e o aluno precisa fazer login novamente.
+- Ao sair, o cookie e invalidado no backend e o cache local do aluno e apagado no frontend.
+- O backend mantem cache em memoria por 7 horas para grids do Google Sheets e comentarios exportados do XLSX.
+- O cache usa `singleflight` para evitar multiplas chamadas simultaneas iguais ao Google Sheets/Drive.
+- No frontend, as notas ficam em `sessionStorage` apenas durante a sessao da aba; reload força refresh da API quando necessario.
+
+### Seguranca e privacidade
+
+- A consulta e somente leitura, usando escopo read-only do Google Sheets.
+- O login aceita apenas matricula e valida a correlacao matricula/nome na aba de base.
+- A resposta retorna apenas a linha vinculada ao aluno logado.
+- Cookies usam assinatura HMAC, `HttpOnly`, `SameSite=Lax` e `Secure` quando habilitado em producao.
+- A API envia `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` e `Permissions-Policy` restritivo.
+- Segredos ficam em variaveis de ambiente ou arquivo local ignorado pelo Git.
+
+### Rede de computadores
+
+- O frontend conversa com a API do mesmo dominio, reduzindo CORS e superficie de exposicao.
+- A API atua como proxy de leitura controlado entre o aluno e Google Sheets/Drive.
+- O cache reduz latencia, consumo de banda e risco de rate limit no Google.
+- Requisicoes AB1 e AB2 sao carregadas em paralelo para melhorar tempo percebido.
+- Em producao, recomenda-se HTTPS, `COOKIE_SECURE=true` e rate limit no proxy/edge.
+
+### Estruturas de dados, grafos e PAA
+
+- As planilhas sao normalizadas para uma estrutura tabular em memoria: cabecalhos, linhas, notas e autores.
+- Celulas mescladas sao expandidas antes do parsing para preservar a relacao grupo -> aluno -> nota.
+- A relacao `AB -> atividade -> subtopico -> nota maxima -> nota alcancada -> comentario` forma uma arvore de avaliacao.
+- Comentarios sao indexados por referencia de celula, funcionando como um mapa `celula -> comentario`.
+- A correlacao matricula/nome usa busca linear sobre a aba base; para turmas maiores pode evoluir para indice `map[matricula]aluno`.
+- O custo principal por aba e `O(L * C)`, onde `L` e quantidade de linhas e `C` quantidade de colunas. A expansao de merges e `O(M * A)`, com `M` merges e `A` area mesclada.
+- O projeto aplica ideias de PAA ao reduzir chamadas externas, evitar recomputacao com cache e preservar ordem deterministica das tabelas.
+
+### POO e arquitetura de software
+
+- O backend Go usa tipos com responsabilidade clara, como `SheetsClient`, `SessionManager`, `Config`, `GradeResult`, `TableResult` e `ActivityItem`.
+- O design segue separacao de responsabilidades: configuracao, sessao, HTTP, login, parsing, normalizacao, comentarios e grades.
+- O frontend separa componentes visuais, cliente HTTP, tipos e regras de nota.
+- A arquitetura favorece baixo acoplamento: mudancas na origem dos dados ficam em `pkg/app`, enquanto regras de exibicao ficam em `src`.
+- O monolito modular facilita deploy simples sem abrir mao de organizacao interna.
+
 ## Variaveis de ambiente
 
 Crie as variaveis no ambiente onde o projeto for rodar:

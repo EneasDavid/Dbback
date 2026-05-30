@@ -442,7 +442,18 @@ input:focus-visible {
 
 .grade-table.final-average {
   margin-top: 2px;
-  border-color: color-mix(in srgb, var(--success) 20%, var(--border-soft));
+}
+
+.grade-table.final-average.score-danger {
+  border-color: color-mix(in srgb, var(--danger) 58%, var(--border-soft));
+}
+
+.grade-table.final-average.score-warning {
+  border-color: color-mix(in srgb, var(--warning) 58%, var(--border-soft));
+}
+
+.grade-table.final-average.score-success {
+  border-color: color-mix(in srgb, var(--success) 58%, var(--border-soft));
 }
 
 .summary-grid {
