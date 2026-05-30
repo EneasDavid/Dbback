@@ -29,7 +29,7 @@ func NewSessionManager(cfg Config) SessionManager {
 }
 
 func (s SessionManager) Set(w http.ResponseWriter, user SessionUser) {
-	expires := time.Now().Add(8 * time.Hour)
+	expires := time.Now().Add(7 * time.Hour)
 	payload := fmt.Sprintf("%s|%s|%d", url.QueryEscape(user.Matricula), url.QueryEscape(user.Name), expires.Unix())
 	token := base64.RawURLEncoding.EncodeToString([]byte(payload)) + "." + sign(payload, s.secret)
 	http.SetCookie(w, &http.Cookie{

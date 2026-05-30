@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -12,6 +13,7 @@ import (
 
 func main() {
 	loadDotEnv(".env")
+	os.Setenv("COOKIE_SECURE", "false")
 
 	static := http.FileServer(http.Dir("dist"))
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -47,8 +49,18 @@ func loadDotEnv(path string) {
 		if !ok {
 			continue
 		}
-		if os.Getenv(strings.TrimSpace(key)) == "" {
-			os.Setenv(strings.TrimSpace(key), strings.TrimSpace(value))
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key == "GOOGLE_SERVICE_ACCOUNT_JSON" && strings.HasPrefix(value, "{") && !json.Valid([]byte(value)) {
+			for scanner.Scan() {
+				value += "\n" + scanner.Text()
+				if json.Valid([]byte(value)) {
+					break
+				}
+			}
+		}
+		if os.Getenv(key) == "" {
+			os.Setenv(key, value)
 		}
 	}
 }

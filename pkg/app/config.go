@@ -17,6 +17,7 @@ type Config struct {
 	CookieSecure  bool
 	ServiceJSON   string
 	ServiceFile   string
+	XLSXFile      string
 	CacheTTL      time.Duration
 }
 
@@ -45,7 +46,8 @@ func LoadConfig() Config {
 		CookieSecure:  strings.EqualFold(firstNonEmpty(os.Getenv("COOKIE_SECURE"), "true"), "true"),
 		ServiceJSON:   serviceAccountJSON(),
 		ServiceFile:   os.Getenv("GOOGLE_SERVICE_ACCOUNT_FILE"),
-		CacheTTL:      90 * time.Second,
+		XLSXFile:      os.Getenv("GOOGLE_SHEET_XLSX_FILE"),
+		CacheTTL:      7 * time.Hour,
 	}
 }
 

@@ -36,7 +36,7 @@
 :root[data-theme="dark"] {
   color: #edf3ff;
   background: #080b12;
-  color-scheme: light;
+  color-scheme: dark;
   --page: #080b12;
   --shell: rgba(13, 18, 29, 0.9);
   --panel: rgba(24, 31, 45, 0.76);
@@ -181,8 +181,15 @@ input {
   min-width: 0;
   border: 0;
   outline: 0;
+  appearance: none;
   color: var(--text);
   background: transparent;
+}
+
+input:focus,
+input:focus-visible {
+  outline: 0 !important;
+  box-shadow: none !important;
 }
 
 .primary-button,
@@ -220,7 +227,20 @@ input {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
   padding: 8px 0 18px;
+}
+
+.topbar > div:first-child {
+  min-width: 0;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-left: auto;
 }
 
 .topbar span,
@@ -256,6 +276,15 @@ input {
   transform: translateY(-1px);
 }
 
+.danger-button {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger-bg) 68%, var(--panel-soft));
+}
+
+.danger-button:hover {
+  background: var(--danger-bg);
+}
+
 .theme-button {
   position: fixed;
   top: 16px;
@@ -276,7 +305,7 @@ input {
 }
 
 .theme-compact {
-  margin-left: 8px;
+  margin-left: 0;
 }
 
 .exam-switch {
@@ -657,6 +686,21 @@ input {
   box-shadow: var(--shadow-soft);
 }
 
+.detail-item.score-danger {
+  border-color: var(--danger-border);
+  background: color-mix(in srgb, var(--danger-bg) 58%, var(--panel));
+}
+
+.detail-item.score-warning {
+  border-color: color-mix(in srgb, var(--warning) 36%, var(--border-soft));
+  background: color-mix(in srgb, var(--warning-bg) 58%, var(--panel));
+}
+
+.detail-item.score-success {
+  border-color: color-mix(in srgb, var(--success) 32%, var(--border-soft));
+  background: color-mix(in srgb, var(--success-bg) 58%, var(--panel));
+}
+
 .detail-item-row {
   display: flex;
   align-items: flex-start;
@@ -669,11 +713,6 @@ input {
   display: block;
   margin-bottom: 6px;
   font-size: 1rem;
-}
-
-.detail-item-row span {
-  color: var(--muted);
-  font-size: 0.92rem;
 }
 
 .detail-item-comment {
@@ -715,8 +754,20 @@ input {
 .detail-progress-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(20,122,82,0.93), rgba(20,122,82,0.4));
+  background: linear-gradient(90deg, rgba(20, 122, 82, 0.93), rgba(20, 122, 82, 0.4));
   transition: width 250ms ease;
+}
+
+.detail-item.score-danger .detail-progress-fill {
+  background: linear-gradient(90deg, var(--danger), color-mix(in srgb, var(--danger) 42%, transparent));
+}
+
+.detail-item.score-warning .detail-progress-fill {
+  background: linear-gradient(90deg, var(--warning), color-mix(in srgb, var(--warning) 42%, transparent));
+}
+
+.detail-item.score-success .detail-progress-fill {
+  background: linear-gradient(90deg, var(--success), color-mix(in srgb, var(--success) 42%, transparent));
 }
 
 .comment-bubble {
@@ -775,28 +826,41 @@ input {
 
 .inline-error {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 12px;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  margin-top: 12px;
+  padding: 14px 16px;
   border: 1px solid var(--danger-border);
-  border-radius: 14px;
+  border-radius: 18px;
   color: var(--danger);
   background: var(--danger-bg);
-  font-size: 0.92rem;
+  font-size: 0.98rem;
   line-height: 1.35;
+  font-weight: 650;
 }
 
 .inline-error svg {
   flex: 0 0 auto;
-  margin-top: 1px;
+  margin-top: 0;
+}
+
+.inline-error span {
+  display: block;
+  min-width: 0;
 }
 
 .loading {
-  padding: 18px;
-  border-radius: 14px;
+  min-height: 58px;
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: 18px;
   color: var(--muted);
-  background: var(--panel-soft);
+  background: var(--panel);
   text-align: center;
+  display: grid;
+  place-items: center;
   font-weight: 700;
 }
 

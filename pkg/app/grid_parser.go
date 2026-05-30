@@ -1,0 +1,163 @@
+package app
+
+import (
+	"fmt"
+	"strings"
+
+	"google.golang.org/api/sheets/v4"
+)
+
+func parseGrid(rows []*sheets.RowData, merges []*sheets.GridRange) *sheetGrid {
+	allValues := make([][]string, 0, len(rows))
+	allNotes := make([][]string, 0, len(rows))
+	for _, row := range rows {
+		values := make([]string, len(row.Values))
+		notes := make([]string, len(row.Values))
+		for idx, cell := range row.Values {
+			values[idx] = cellText(cell)
+			notes[idx] = strings.TrimSpace(cell.Note)
+		}
+		allValues = append(allValues, values)
+		allNotes = append(allNotes, notes)
+	}
+	applyMergedRanges(allValues, allNotes, merges)
+
+	headerIdx := bestHeaderIndex(allValues)
+	if headerIdx < 0 {
+		return &sheetGrid{}
+	}
+
+	grid := &sheetGrid{headers: allValues[headerIdx], notes: allNotes[headerIdx], headerRow: headerIdx}
+	for idx, values := range allValues[headerIdx+1:] {
+		if hasAny(values) {
+			grid.rows = append(grid.rows, values)
+			grid.rowNotes = append(grid.rowNotes, allNotes[headerIdx+1+idx])
+			grid.rowIndices = append(grid.rowIndices, headerIdx+1+idx)
+		}
+	}
+	return grid
+}
+
+func applyMergedRanges(values [][]string, notes [][]string, merges []*sheets.GridRange) {
+	for _, merged := range merges {
+		startRow := int(merged.StartRowIndex)
+		endRow := int(merged.EndRowIndex)
+		startCol := int(merged.StartColumnIndex)
+		endCol := int(merged.EndColumnIndex)
+		if startRow < 0 || startCol < 0 || endRow <= startRow || endCol <= startCol {
+			continue
+		}
+		value := matrixValue(values, startRow, startCol)
+		note := matrixValue(notes, startRow, startCol)
+		for rowIdx := startRow; rowIdx < endRow; rowIdx++ {
+			for colIdx := startCol; colIdx < endCol; colIdx++ {
+				if value != "" {
+					setMatrixValue(values, rowIdx, colIdx, value)
+				}
+				if note != "" {
+					setMatrixValue(notes, rowIdx, colIdx, note)
+				}
+			}
+		}
+	}
+}
+
+func matrixValue(values [][]string, rowIdx int, colIdx int) string {
+	if rowIdx < 0 || rowIdx >= len(values) || colIdx < 0 || colIdx >= len(values[rowIdx]) {
+		return ""
+	}
+	return strings.TrimSpace(values[rowIdx][colIdx])
+}
+
+func setMatrixValue(values [][]string, rowIdx int, colIdx int, value string) {
+	if rowIdx < 0 || rowIdx >= len(values) || colIdx < 0 {
+		return
+	}
+	for len(values[rowIdx]) <= colIdx {
+		values[rowIdx] = append(values[rowIdx], "")
+	}
+	values[rowIdx][colIdx] = value
+}
+
+func (g *sheetGrid) applyComments(comments map[string]string) {
+	for cell, comment := range comments {
+		rowIdx, colIdx, ok := parseCellRef(cell)
+		if !ok || comment == "" {
+			continue
+		}
+		switch {
+		case rowIdx == g.headerRow:
+			g.notes = setAt(g.notes, colIdx, comment)
+		case rowIdx > g.headerRow:
+			for idx, actualRow := range g.rowIndices {
+				if actualRow == rowIdx {
+					g.rowNotes[idx] = setAt(g.rowNotes[idx], colIdx, comment)
+					break
+				}
+			}
+		}
+	}
+}
+
+func setAt(values []string, idx int, value string) []string {
+	for len(values) <= idx {
+		values = append(values, "")
+	}
+	values[idx] = value
+	return values
+}
+
+func bestHeaderIndex(rows [][]string) int {
+	headerIdx := -1
+	bestScore := 0
+	for idx, values := range rows {
+		score := headerScore(values)
+		if score > bestScore {
+			bestScore = score
+			headerIdx = idx
+		}
+	}
+	if headerIdx >= 0 {
+		return headerIdx
+	}
+	for idx, values := range rows {
+		if hasAny(values) {
+			return idx
+		}
+	}
+	return -1
+}
+
+func cellText(cell *sheets.CellData) string {
+	if cell == nil {
+		return ""
+	}
+	if cell.FormattedValue != "" {
+		return strings.TrimSpace(cell.FormattedValue)
+	}
+	if cell.UserEnteredValue == nil {
+		return ""
+	}
+	if cell.UserEnteredValue.StringValue != nil {
+		return strings.TrimSpace(*cell.UserEnteredValue.StringValue)
+	}
+	if cell.UserEnteredValue.NumberValue != nil {
+		return strings.TrimSpace(fmt.Sprintf("%v", *cell.UserEnteredValue.NumberValue))
+	}
+	if cell.UserEnteredValue.BoolValue != nil {
+		if *cell.UserEnteredValue.BoolValue {
+			return "true"
+		}
+		return "false"
+	}
+	return ""
+}
+
+func hasAny(values []string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return true
+		}
+	}
+	return false
+}

@@ -92,6 +92,9 @@ func grades(w http.ResponseWriter, r *http.Request) {
 		app.Error(w, app.NewHTTPError(401, "sessao expirada"))
 		return
 	}
+	if r.URL.Query().Get("refresh") == "1" {
+		sheetsClient.ClearCache()
+	}
 	result, err := sheetsClient.GradeFor(r.Context(), r.URL.Query().Get("exam"), user)
 	if err != nil {
 		app.Error(w, err)
