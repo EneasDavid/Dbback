@@ -110,13 +110,14 @@ export function ExamSwitch({ exam, setExam }: { exam: 'ab1' | 'ab2'; setExam: (e
 
 export function AverageCard({ exam, status }: { exam: 'ab1' | 'ab2'; status: StudentStatus }) {
   const value = exam === 'ab1' ? status.ab1 : status.ab2;
+  const tone = value < 5 ? 'score-danger' : value < 7 ? 'score-warning' : 'score-success';
   return (
-    <article className="grade-table activity final-average">
+    <article className={`grade-table activity final-average ${tone}`}>
       <header>
         <h2>{`Média ${exam.toUpperCase()}`}</h2>
       </header>
       <div className="summary-grid">
-        <section className={`summary-score highlight ${value < 5 ? 'score-danger' : value < 7 ? 'score-warning' : 'score-success'}`}>
+        <section className={`summary-score highlight ${tone}`}>
           <span>Média da AB</span>
           <strong>{formatScore(value)}</strong>
         </section>
@@ -261,12 +262,12 @@ function GradeDetailPanel({ table, mainColumn }: { table: GradeTable; mainColumn
       </div>
       <div className="detail-items">
         {parsedItems.map((item) => (
-          <article className={`detail-item ${scoreToneFromRatio(item.ratio)}`} key={item.key}>
+          <article className={`detail-item ${scoreToneFromRatio(item.ratio, item.pending)}`} key={item.key}>
             <div className="detail-item-row">
               <div>
                 <strong>{item.label}</strong>
               </div>
-              {item.max ? <span className="badge">{item.obtained !== null ? `${formatScore(item.obtained)} / ${formatScore(item.max)}` : `Max ${formatScore(item.max)}`}</span> : null}
+              {item.max ? <span className="badge">{item.pending ? 'Não corrigido ainda' : item.obtained !== null ? `${formatScore(item.obtained)} / ${formatScore(item.max)}` : `Max ${formatScore(item.max)}`}</span> : null}
             </div>
             <div className="detail-progress-bar" aria-hidden="true">
               <div className="detail-progress-fill" style={{ width: `${item.ratio}%` }} />
@@ -274,7 +275,10 @@ function GradeDetailPanel({ table, mainColumn }: { table: GradeTable; mainColumn
             {item.comment ? (
               <p className="detail-item-comment">
                 <MessageSquareText size={14} />
-                {item.comment}
+                <span>
+                  {item.commentAuthor && <strong>{item.commentAuthor}</strong>}
+                  {item.comment}
+                </span>
               </p>
             ) : null}
           </article>

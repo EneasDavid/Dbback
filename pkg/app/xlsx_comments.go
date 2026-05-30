@@ -19,10 +19,10 @@ import (
 
 type cachedComments struct {
 	expires time.Time
-	bySheet map[string]map[string]string
+	bySheet map[string]map[string]cellComment
 }
 
-func (c *SheetsClient) commentsForSheet(ctx context.Context, sheetName string) (map[string]string, error) {
+func (c *SheetsClient) commentsForSheet(ctx context.Context, sheetName string) (map[string]cellComment, error) {
 	c.mu.Lock()
 	if c.comments.bySheet != nil && time.Now().Before(c.comments.expires) {
 		comments := c.comments.bySheet[sheetName]
@@ -48,7 +48,7 @@ func (c *SheetsClient) commentsForSheet(ctx context.Context, sheetName string) (
 	if err != nil {
 		return nil, err
 	}
-	comments := value.(map[string]map[string]string)
+	comments := value.(map[string]map[string]cellComment)
 	return comments[sheetName], nil
 }
 
@@ -80,7 +80,7 @@ func (c *SheetsClient) exportXLSX(ctx context.Context) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func parseXLSXComments(data []byte) (map[string]map[string]string, error) {
+func parseXLSXComments(data []byte) (map[string]map[string]cellComment, error) {
 	reader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return nil, err
@@ -94,9 +94,10 @@ func parseXLSXComments(data []byte) (map[string]map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := map[string]map[string]string{}
+	people := workbookPeople(files)
+	result := map[string]map[string]cellComment{}
 	for _, sheet := range sheets {
-		comments := commentsForWorksheet(files, sheet.Path)
+		comments := commentsForWorksheet(files, sheet.Path, people)
 		if len(comments) > 0 {
 			result[sheet.Name] = comments
 		}
@@ -147,7 +148,7 @@ func workbookSheets(files map[string]*zip.File) ([]workbookSheet, error) {
 	return sheets, nil
 }
 
-func commentsForWorksheet(files map[string]*zip.File, worksheetPath string) map[string]string {
+func commentsForWorksheet(files map[string]*zip.File, worksheetPath string, people map[string]string) map[string]cellComment {
 	type rel struct {
 		Type   string `xml:"Type,attr"`
 		Target string `xml:"Target,attr"`
@@ -161,12 +162,12 @@ func commentsForWorksheet(files map[string]*zip.File, worksheetPath string) map[
 	if err := readXML(files, relPath, &rels); err != nil {
 		return nil
 	}
-	comments := map[string]string{}
+	comments := map[string]cellComment{}
 	for _, relationship := range rels.Relationships {
 		target := normalizeXLSXPath(path.Dir(worksheetPath), relationship.Target)
 		switch {
 		case strings.Contains(relationship.Type, "threadedComment"):
-			mergeComments(comments, parseThreadedCommentFile(files, target))
+			mergeComments(comments, parseThreadedCommentFile(files, target, people))
 		case strings.Contains(relationship.Type, "/comments"):
 			mergeComments(comments, parseClassicCommentFile(files, target))
 		}
@@ -174,10 +175,11 @@ func commentsForWorksheet(files map[string]*zip.File, worksheetPath string) map[
 	return comments
 }
 
-func parseThreadedCommentFile(files map[string]*zip.File, filename string) map[string]string {
+func parseThreadedCommentFile(files map[string]*zip.File, filename string, people map[string]string) map[string]cellComment {
 	type threadedComment struct {
-		Ref  string `xml:"ref,attr"`
-		Text string `xml:"text"`
+		Ref      string `xml:"ref,attr"`
+		PersonID string `xml:"personId,attr"`
+		Text     string `xml:"text"`
 	}
 	type threadedComments struct {
 		Comments []threadedComment `xml:"threadedComment"`
@@ -186,16 +188,16 @@ func parseThreadedCommentFile(files map[string]*zip.File, filename string) map[s
 	if err := readXML(files, filename, &parsed); err != nil {
 		return nil
 	}
-	comments := map[string]string{}
+	comments := map[string]cellComment{}
 	for _, comment := range parsed.Comments {
 		if text := strings.TrimSpace(comment.Text); text != "" {
-			comments[comment.Ref] = text
+			comments[comment.Ref] = cellComment{Text: text, Author: people[comment.PersonID]}
 		}
 	}
 	return comments
 }
 
-func parseClassicCommentFile(files map[string]*zip.File, filename string) map[string]string {
+func parseClassicCommentFile(files map[string]*zip.File, filename string) map[string]cellComment {
 	type commentXML struct {
 		Ref  string            `xml:"ref,attr"`
 		Text []commentTextNode `xml:"text>r>t"`
@@ -208,14 +210,35 @@ func parseClassicCommentFile(files map[string]*zip.File, filename string) map[st
 	if err := readXML(files, filename, &parsed); err != nil {
 		return nil
 	}
-	comments := map[string]string{}
+	comments := map[string]cellComment{}
 	for _, comment := range parsed.Comments {
 		text := commentText(comment.Text, comment.Flat)
 		if text != "" {
-			comments[comment.Ref] = text
+			comments[comment.Ref] = cellComment{Text: text}
 		}
 	}
 	return comments
+}
+
+func workbookPeople(files map[string]*zip.File) map[string]string {
+	type personXML struct {
+		ID          string `xml:"id,attr"`
+		DisplayName string `xml:"displayName,attr"`
+	}
+	type peopleXML struct {
+		People []personXML `xml:"person"`
+	}
+	var parsed peopleXML
+	if err := readXML(files, "xl/persons/person.xml", &parsed); err != nil {
+		return nil
+	}
+	people := map[string]string{}
+	for _, person := range parsed.People {
+		if strings.TrimSpace(person.ID) != "" {
+			people[person.ID] = strings.TrimSpace(person.DisplayName)
+		}
+	}
+	return people
 }
 
 type commentTextNode struct {
@@ -237,9 +260,9 @@ func commentText(rich []commentTextNode, flat []commentTextNode) string {
 	return strings.TrimSpace(text)
 }
 
-func mergeComments(dst map[string]string, src map[string]string) {
+func mergeComments(dst map[string]cellComment, src map[string]cellComment) {
 	for cell, comment := range src {
-		if strings.TrimSpace(comment) != "" {
+		if strings.TrimSpace(comment.Text) != "" {
 			dst[cell] = comment
 		}
 	}

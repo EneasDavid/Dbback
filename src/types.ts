@@ -3,6 +3,7 @@ export type Column = {
   label: string;
   value: string;
   comment?: string;
+  commentAuthor?: string;
 };
 
 export type ActivityItem = {
@@ -11,6 +12,7 @@ export type ActivityItem = {
   notaMaxima: string;
   notaAlcancada: string;
   comentario?: string;
+  comentarioAutor?: string;
 };
 
 export type GradeResult = {

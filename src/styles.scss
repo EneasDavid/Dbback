@@ -699,6 +699,16 @@ input:focus-visible {
   background: color-mix(in srgb, var(--success-bg) 34%, var(--panel));
 }
 
+.detail-item.score-pending {
+  background: color-mix(in srgb, var(--panel-soft) 72%, var(--panel));
+}
+
+.detail-item.score-pending .badge {
+  color: var(--muted-strong);
+  background: color-mix(in srgb, var(--panel-soft) 78%, transparent);
+  border-color: var(--border);
+}
+
 .detail-item-row {
   display: flex;
   align-items: flex-start;
@@ -727,6 +737,14 @@ input:focus-visible {
 .detail-item-comment svg {
   color: var(--brand);
   margin-top: 2px;
+}
+
+.detail-item-comment strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--muted-strong);
+  font-size: 0.78rem;
+  font-weight: 850;
 }
 
 .badge {
@@ -768,6 +786,10 @@ input:focus-visible {
 
 .detail-item.score-success .detail-progress-fill {
   background: linear-gradient(90deg, var(--success), color-mix(in srgb, var(--success) 42%, transparent));
+}
+
+.detail-item.score-pending .detail-progress-fill {
+  background: color-mix(in srgb, var(--muted) 42%, transparent);
 }
 
 .comment-bubble {

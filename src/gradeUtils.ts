@@ -5,9 +5,11 @@ export type DetailItem = {
   label: string;
   value: string;
   comment?: string;
+  commentAuthor?: string;
   obtained: number | null;
   max: number;
   ratio: number;
+  pending: boolean;
 };
 
 export function computeStudentStatus(ab1: GradeResult, ab2: GradeResult): StudentStatus | null {
@@ -35,16 +37,19 @@ export function getDetailItems(table: GradeTable, mainColumn: Column): DetailIte
       .map((item) => {
         const obtained = parseScore(item.notaAlcancada);
         const max = parseScore(item.notaMaxima) ?? 1;
-        const ratio = obtained !== null && max > 0 ? Math.min((obtained / max) * 100, 100) : 0;
+        const pending = item.notaAlcancada.trim() === '';
+        const ratio = !pending && obtained !== null && max > 0 ? Math.min((obtained / max) * 100, 100) : 0;
 
         return {
           key: item.key,
           label: humanizeLabel(item.subtopic),
           value: item.notaAlcancada,
           comment: item.comentario,
+          commentAuthor: item.comentarioAutor,
           obtained,
           max,
           ratio,
+          pending,
         };
       });
   }
@@ -69,9 +74,11 @@ export function getDetailItems(table: GradeTable, mainColumn: Column): DetailIte
         label: getColumnLabel(item),
         value: item.value,
         comment: item.comment,
+        commentAuthor: item.commentAuthor,
         obtained,
         max,
         ratio,
+        pending: item.value.trim() === '',
       };
     });
 }
@@ -148,7 +155,8 @@ export function displayValue(column: Column) {
   return column.value || 'Não corrigida ainda';
 }
 
-export function scoreToneFromRatio(ratio: number) {
+export function scoreToneFromRatio(ratio: number, pending = false) {
+  if (pending) return 'score-pending';
   if (ratio < 50) return 'score-danger';
   if (ratio < 70) return 'score-warning';
   return 'score-success';

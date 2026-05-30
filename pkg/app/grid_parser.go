@@ -27,11 +27,12 @@ func parseGrid(rows []*sheets.RowData, merges []*sheets.GridRange) *sheetGrid {
 		return &sheetGrid{}
 	}
 
-	grid := &sheetGrid{headers: allValues[headerIdx], notes: allNotes[headerIdx], headerRow: headerIdx}
+	grid := &sheetGrid{headers: allValues[headerIdx], notes: allNotes[headerIdx], noteAuthors: make([]string, len(allNotes[headerIdx])), headerRow: headerIdx}
 	for idx, values := range allValues[headerIdx+1:] {
 		if hasAny(values) {
 			grid.rows = append(grid.rows, values)
 			grid.rowNotes = append(grid.rowNotes, allNotes[headerIdx+1+idx])
+			grid.rowNoteAuthors = append(grid.rowNoteAuthors, make([]string, len(allNotes[headerIdx+1+idx])))
 			grid.rowIndices = append(grid.rowIndices, headerIdx+1+idx)
 		}
 	}
@@ -79,19 +80,21 @@ func setMatrixValue(values [][]string, rowIdx int, colIdx int, value string) {
 	values[rowIdx][colIdx] = value
 }
 
-func (g *sheetGrid) applyComments(comments map[string]string) {
+func (g *sheetGrid) applyComments(comments map[string]cellComment) {
 	for cell, comment := range comments {
 		rowIdx, colIdx, ok := parseCellRef(cell)
-		if !ok || comment == "" {
+		if !ok || comment.Text == "" {
 			continue
 		}
 		switch {
 		case rowIdx == g.headerRow:
-			g.notes = setAt(g.notes, colIdx, comment)
+			g.notes = setAt(g.notes, colIdx, comment.Text)
+			g.noteAuthors = setAt(g.noteAuthors, colIdx, comment.Author)
 		case rowIdx > g.headerRow:
 			for idx, actualRow := range g.rowIndices {
 				if actualRow == rowIdx {
-					g.rowNotes[idx] = setAt(g.rowNotes[idx], colIdx, comment)
+					g.rowNotes[idx] = setAt(g.rowNotes[idx], colIdx, comment.Text)
+					g.rowNoteAuthors[idx] = setAt(g.rowNoteAuthors[idx], colIdx, comment.Author)
 					break
 				}
 			}
@@ -109,12 +112,13 @@ func (g *sheetGrid) applyCommentMerges(merges []*sheets.GridRange) {
 			continue
 		}
 		comment := g.noteAtAbsolute(startRow, startCol)
+		author := g.noteAuthorAtAbsolute(startRow, startCol)
 		if comment == "" {
 			continue
 		}
 		for rowIdx := startRow; rowIdx < endRow; rowIdx++ {
 			for colIdx := startCol; colIdx < endCol; colIdx++ {
-				g.setNoteAtAbsolute(rowIdx, colIdx, comment)
+				g.setNoteAtAbsolute(rowIdx, colIdx, comment, author)
 			}
 		}
 	}
@@ -132,14 +136,28 @@ func (g *sheetGrid) noteAtAbsolute(rowIdx int, colIdx int) string {
 	return ""
 }
 
-func (g *sheetGrid) setNoteAtAbsolute(rowIdx int, colIdx int, comment string) {
+func (g *sheetGrid) noteAuthorAtAbsolute(rowIdx int, colIdx int) string {
+	if rowIdx == g.headerRow {
+		return noteAt(g.noteAuthors, colIdx)
+	}
+	for idx, actualRow := range g.rowIndices {
+		if actualRow == rowIdx {
+			return noteAt(g.rowNoteAuthors[idx], colIdx)
+		}
+	}
+	return ""
+}
+
+func (g *sheetGrid) setNoteAtAbsolute(rowIdx int, colIdx int, comment string, author string) {
 	if rowIdx == g.headerRow {
 		g.notes = setAt(g.notes, colIdx, comment)
+		g.noteAuthors = setAt(g.noteAuthors, colIdx, author)
 		return
 	}
 	for idx, actualRow := range g.rowIndices {
 		if actualRow == rowIdx {
 			g.rowNotes[idx] = setAt(g.rowNotes[idx], colIdx, comment)
+			g.rowNoteAuthors[idx] = setAt(g.rowNoteAuthors[idx], colIdx, author)
 			return
 		}
 	}

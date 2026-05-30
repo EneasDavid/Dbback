@@ -33,15 +33,18 @@ func parseActivityRubric(grid *sheetGrid, table TableConfig, user SessionUser) (
 			continue
 		}
 		comment := noteAt(grid.notes, colIdx)
+		commentAuthor := noteAt(grid.noteAuthors, colIdx)
 		if studentRowIdx < len(grid.rowNotes) && noteAt(grid.rowNotes[studentRowIdx], colIdx) != "" {
 			comment = noteAt(grid.rowNotes[studentRowIdx], colIdx)
+			commentAuthor = noteAt(grid.rowNoteAuthors[studentRowIdx], colIdx)
 		}
 		items = append(items, ActivityItem{
-			Key:           fmt.Sprintf("i%d", colIdx),
-			Subtopic:      subtopic,
-			NotaMaxima:    maximum,
-			NotaAlcancada: valueAt(grid.rows[studentRowIdx], colIdx),
-			Comentario:    comment,
+			Key:             fmt.Sprintf("i%d", colIdx),
+			Subtopic:        subtopic,
+			NotaMaxima:      maximum,
+			NotaAlcancada:   valueAt(grid.rows[studentRowIdx], colIdx),
+			Comentario:      comment,
+			ComentarioAutor: commentAuthor,
 		})
 	}
 	if len(items) == 0 {
@@ -98,7 +101,7 @@ func rubricLabel(grid *sheetGrid, maxRowIdx int, colIdx int) string {
 func activityTotalColumn(items []ActivityItem) ColumnResult {
 	for _, item := range items {
 		if normalizeHeader(item.Subtopic) == "total" {
-			return ColumnResult{Key: "nota", Label: "Nota", Value: activityScore(item.NotaAlcancada, item.NotaMaxima), Comment: item.Comentario}
+			return ColumnResult{Key: "nota", Label: "Nota", Value: activityScore(item.NotaAlcancada, item.NotaMaxima), Comment: item.Comentario, CommentAuthor: item.ComentarioAutor}
 		}
 	}
 	total := 0.0

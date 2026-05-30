@@ -105,14 +105,17 @@ func parseStudentTable(grid *sheetGrid, table TableConfig, user SessionUser) (Ta
 				continue
 			}
 			comment := noteAt(grid.notes, colIdx)
+			commentAuthor := noteAt(grid.noteAuthors, colIdx)
 			if rowIdx < len(grid.rowNotes) && noteAt(grid.rowNotes[rowIdx], colIdx) != "" {
 				comment = noteAt(grid.rowNotes[rowIdx], colIdx)
+				commentAuthor = noteAt(grid.rowNoteAuthors[rowIdx], colIdx)
 			}
 			columns = append(columns, ColumnResult{
-				Key:     fmt.Sprintf("c%d", colIdx),
-				Label:   header,
-				Value:   valueAt(row, colIdx),
-				Comment: comment,
+				Key:           fmt.Sprintf("c%d", colIdx),
+				Label:         header,
+				Value:         valueAt(row, colIdx),
+				Comment:       comment,
+				CommentAuthor: commentAuthor,
 			})
 		}
 		return TableResult{
