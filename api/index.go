@@ -92,10 +92,18 @@ func grades(w http.ResponseWriter, r *http.Request) {
 		app.Error(w, app.NewHTTPError(401, "sessao expirada"))
 		return
 	}
+	
+	// Validate exam parameter strictly
+	exam := strings.TrimSpace(r.URL.Query().Get("exam"))
+	if exam != "ab1" && exam != "ab2" {
+		app.Error(w, app.NewHTTPError(400, "parametro exam invalido: deve ser 'ab1' ou 'ab2'"))
+		return
+	}
+	
 	if r.URL.Query().Get("refresh") == "1" {
 		sheetsClient.ClearCache()
 	}
-	result, err := sheetsClient.GradeFor(r.Context(), r.URL.Query().Get("exam"), user)
+	result, err := sheetsClient.GradeFor(r.Context(), exam, user)
 	if err != nil {
 		app.Error(w, err)
 		return
