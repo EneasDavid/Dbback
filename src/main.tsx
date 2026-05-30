@@ -197,8 +197,6 @@ function App() {
         <ThemeButton theme={theme} setTheme={setTheme} compact />
       </header>
 
-      {studentStatus && <StatusBanner status={studentStatus} />}
-
       <section className="exam-switch" aria-label="Selecionar avaliacao">
         <button className={exam === 'ab1' ? 'active' : ''} type="button" onClick={() => setExam('ab1')}>
           AB1
@@ -635,28 +633,6 @@ function humanizeLabel(label: string) {
     .trim();
 }
 
-function StatusBanner({ status }: { status: StudentStatus }) {
-  return (
-    <section className={`status-banner ${status.approved ? 'approved' : 'pending'}`}>
-      <div>
-        <span>Média das AB</span>
-        <strong>{formatScore(status.average)}</strong>
-      </div>
-      <div className="status-details">
-        <span>AB1</span>
-        <strong>{formatScore(status.ab1)}</strong>
-      </div>
-      <div className="status-details">
-        <span>AB2</span>
-        <strong>{formatScore(status.ab2)}</strong>
-      </div>
-      <div className="status-summary">
-        <span>{status.approved ? 'Aprovado' : 'Em acompanhamento'}</span>
-      </div>
-    </section>
-  );
-}
-
 function isGradeColumn(column: Column) {
   const label = normalized(column.label);
   return (
@@ -665,7 +641,8 @@ function isGradeColumn(column: Column) {
     label.includes('nota ab') ||
     label === 'total' ||
     label.startsWith('semana') ||
-    ['sgbd', 'dataset', 'crud', 'apresentacao', 'projeto'].includes(label)
+    ['sgbd', 'dataset', 'crud', 'apresentacao', 'projeto'].includes(label) ||
+    isActivityColumn(column)
   );
 }
 
