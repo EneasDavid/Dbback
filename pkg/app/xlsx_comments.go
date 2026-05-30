@@ -53,10 +53,26 @@ func (c *SheetsClient) commentsForSheet(ctx context.Context, sheetName string) (
 }
 
 func (c *SheetsClient) loadXLSX(ctx context.Context) ([]byte, error) {
+	// First try: load from local file if configured
 	if strings.TrimSpace(c.cfg.XLSXFile) != "" {
-		return os.ReadFile(c.cfg.XLSXFile)
+		data, err := os.ReadFile(c.cfg.XLSXFile)
+		if err == nil {
+			return data, nil
+		}
+		// If local file exists but can't be read, try API fallback
 	}
-	return c.exportXLSX(ctx)
+	
+	// Second try: export from Google Drive if available
+	if strings.TrimSpace(c.cfg.SpreadsheetID) != "" {
+		data, err := c.exportXLSX(ctx)
+		if err == nil {
+			return data, nil
+		}
+		// If export fails, fall through to return empty
+	}
+	
+	// Return empty data - comments will be unavailable
+	return nil, fmt.Errorf("nao foi possivel carregar comentarios (arquivo local nao encontrado e export via API desabilitado)")
 }
 
 func (c *SheetsClient) exportXLSX(ctx context.Context) ([]byte, error) {

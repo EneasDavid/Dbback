@@ -75,10 +75,15 @@ func (c *SheetsClient) loadSheet(ctx context.Context, sheetName string) (*sheetG
 			return nil, NewHTTPError(404, "aba nao encontrada: "+sheetName)
 		}
 		grid := parseGrid(resp.Sheets[0].Data[0].RowData, resp.Sheets[0].Merges)
-		if comments, err := c.commentsForSheet(ctx, sheetName); err == nil {
+		
+		// Try to load comments, but don't fail if they're unavailable
+		comments, err := c.commentsForSheet(ctx, sheetName)
+		if err == nil && comments != nil {
 			grid.applyComments(comments)
 			grid.applyCommentMerges(resp.Sheets[0].Merges)
 		}
+		// Note: if comments fail to load, we continue anyway - comments are optional
+		
 		c.mu.Lock()
 		c.cache[sheetName] = cachedGrid{expires: time.Now().Add(c.cfg.CacheTTL), grid: grid}
 		c.mu.Unlock()
