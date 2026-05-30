@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+set -eu
+
+echo "Running local quality gate before push..."
+go vet $(go list ./... | grep -v /node_modules/)
+go test -race $(go list ./... | grep -v /node_modules/)
+npm run lint
+npm run build

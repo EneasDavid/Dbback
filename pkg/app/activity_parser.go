@@ -15,7 +15,7 @@ func parseActivityRubric(grid *sheetGrid, table TableConfig, user SessionUser) (
 		return TableResult{}, false, nil
 	}
 
-	items := make([]ActivityItem, 0, len(grid.headers))
+	items := make([]activityItem, 0, len(grid.headers))
 	for colIdx := 1; colIdx < len(grid.headers); colIdx++ {
 		subtopic := rubricLabel(grid, maxRowIdx, colIdx)
 		if subtopic == "" {
@@ -32,13 +32,8 @@ func parseActivityRubric(grid *sheetGrid, table TableConfig, user SessionUser) (
 		if _, ok := parseNumber(maximum); !ok {
 			continue
 		}
-		comment := noteAt(grid.notes, colIdx)
-		commentAuthor := noteAt(grid.noteAuthors, colIdx)
-		if studentRowIdx < len(grid.rowNotes) && noteAt(grid.rowNotes[studentRowIdx], colIdx) != "" {
-			comment = noteAt(grid.rowNotes[studentRowIdx], colIdx)
-			commentAuthor = noteAt(grid.rowNoteAuthors[studentRowIdx], colIdx)
-		}
-		items = append(items, ActivityItem{
+		comment, commentAuthor := activityComment(grid, maxRowIdx, studentRowIdx, colIdx)
+		items = append(items, activityItem{
 			Key:             fmt.Sprintf("i%d", colIdx),
 			Subtopic:        subtopic,
 			NotaMaxima:      maximum,
@@ -58,13 +53,14 @@ func parseActivityRubric(grid *sheetGrid, table TableConfig, user SessionUser) (
 			incompleteCount++
 		}
 	}
-	
+
 	status := "Encerrado"
 	if incompleteCount > 0 {
 		status = "Não encerrado"
 	}
 
-	columns := []ColumnResult{activityTotalColumn(items)}
+	details := activityDetails(items)
+	card := activityTotalCard(items, details)
 	return TableResult{
 		Key:       table.Key,
 		Label:     table.Label,
@@ -72,9 +68,23 @@ func parseActivityRubric(grid *sheetGrid, table TableConfig, user SessionUser) (
 		Kind:      table.Kind,
 		Complete:  true,
 		Status:    status,
-		Columns:   columns,
-		Items:     items,
+		Cards:     []CardResult{card},
 	}, true, nil
+}
+
+func activityComment(grid *sheetGrid, maxRowIdx int, studentRowIdx int, colIdx int) (string, string) {
+	if studentRowIdx < len(grid.rowNotes) {
+		if comment := noteAt(grid.rowNotes[studentRowIdx], colIdx); comment != "" {
+			return comment, noteAt(grid.rowNoteAuthors[studentRowIdx], colIdx)
+		}
+	}
+	detailRowIdx := maxRowIdx - 1
+	if detailRowIdx >= 0 && detailRowIdx < len(grid.rowNotes) {
+		if comment := noteAt(grid.rowNotes[detailRowIdx], colIdx); comment != "" {
+			return comment, noteAt(grid.rowNoteAuthors[detailRowIdx], colIdx)
+		}
+	}
+	return noteAt(grid.notes, colIdx), noteAt(grid.noteAuthors, colIdx)
 }
 
 func findMaxRow(rows [][]string) int {
@@ -112,10 +122,10 @@ func rubricLabel(grid *sheetGrid, maxRowIdx int, colIdx int) string {
 	return main
 }
 
-func activityTotalColumn(items []ActivityItem) ColumnResult {
+func activityTotalCard(items []activityItem, details []DetailResult) CardResult {
 	for _, item := range items {
 		if normalizeHeader(item.Subtopic) == "total" {
-			return ColumnResult{Key: "nota", Label: "Nota", Value: activityScore(item.NotaAlcancada, item.NotaMaxima), Comment: item.Comentario, CommentAuthor: item.ComentarioAutor}
+			return makeCard("nota", "Nota", activityScore(item.NotaAlcancada, item.NotaMaxima), item.Comentario, item.ComentarioAutor, details)
 		}
 	}
 	total := 0.0
@@ -131,12 +141,12 @@ func activityTotalColumn(items []ActivityItem) ColumnResult {
 		}
 	}
 	if !hasAny {
-		return ColumnResult{Key: "nota", Label: "Nota", Value: ""}
+		return makeCard("nota", "Nota", "", "", "", details)
 	}
 	if maximum > 0 {
-		return ColumnResult{Key: "nota", Label: "Nota", Value: formatNumber(total / maximum)}
+		return makeCard("nota", "Nota", formatNumber(total/maximum), "", "", details)
 	}
-	return ColumnResult{Key: "nota", Label: "Nota", Value: formatNumber(total)}
+	return makeCard("nota", "Nota", formatNumber(total), "", "", details)
 }
 
 func activityScore(value string, maximum string) string {

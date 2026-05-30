@@ -1,98 +1,93 @@
 # dbBack
-Projeto desenvolvido por David Eneas para a disciplina de Banco de Dados do curso para auxiliar os alunos a terem acesso fácil e rápido às suas notas e feedbacks de atividades, centralizando as informações em uma interface mobile amigável.
 
-Aplicacao Go + React para consulta mobile de notas por matricula em uma planilha do Google Sheets.
+Aplicação Go + React para consulta mobile de notas e feedbacks por matrícula, usando uma planilha Google Sheets como fonte read-only. O foco do projeto é acesso rápido em celular, inclusive em conexão ruim, sem expor a planilha nem dados de outros alunos.
 
-## Como funciona
+## Produto
 
-- Login por matricula existente na aba `Base de dados`.
-- A aba de login precisa ter uma coluna de matricula e uma coluna de nome.
-- Sessao de 7 horas em cookie HTTP-only assinado. Ao expirar, o aluno precisa fazer login novamente.
-- Consulta somente leitura via Google Sheets API.
-- Selecao entre `AB1` e `AB2`.
-- Cada AB pode consultar varias abas/tabelas da mesma planilha.
-- Retorno apenas das linhas do nome vinculado a matricula logada.
-- Feedbacks das atividades sao lidos dos comentarios/notas das celulas quando a API do Sheets expoe esse dado.
-- Atividades retornam a rubrica completa: subtopico, nota maxima, nota alcancada e comentario.
+- Login por matrícula validada na aba `Base de dados`.
+- Sessão de 7 horas em cookie assinado, `HttpOnly`, `SameSite=Lax` e `Secure` em produção.
+- Consulta individual de AB1 e AB2.
+- Feedbacks lidos de **notas da célula** (`CellData.note`) pela Google Sheets API.
+- Payload render-ready: o backend retorna `tables[].cards[].details[]`, reduzindo cálculo no aparelho.
+- Cache no backend e no navegador para diminuir latência, tráfego e risco de rate limit.
 
 ## Arquitetura
 
-O projeto e um monolito modular: uma unica aplicacao deployavel, com responsabilidades separadas por modulo.
+O projeto é um monolito modular com frontend estático e API Go:
 
-- `api/`: rotas HTTP.
-- `cmd/dev/`: servidor local integrado.
-- `pkg/app/`: regras de sessao, configuracao, Google Sheets, parsing de tabelas e comentarios.
-- `src/`: frontend React, separado em componentes, API client, tipos e utilitarios de notas.
+- `api/`: rotas HTTP (`/api/login`, `/api/logout`, `/api/me`, `/api/grades`).
+- `cmd/dev/`: servidor local que serve `dist/` e proxy da API no mesmo processo.
+- `pkg/app/`: sessão, configuração, cliente Google Sheets, parsing, normalização e regras de renderização.
+- `src/`: React, API client, tipos e componentes visuais.
 
-## Amplitude tecnica
+Fluxo principal:
 
-### Cache e sessao
+```text
+Aluno -> React -> /api/login -> Google Sheets Base de dados
+Aluno -> React -> /api/grades?exam=ab1|ab2 -> SheetsClient -> Google Sheets
+Google Sheets -> valores + notes -> parser Go -> cards/details -> React
+```
 
-- Sessao assinada em cookie HTTP-only com validade de 7 horas.
-- Ao expirar, `/api/me` e `/api/grades` deixam de autorizar a consulta e o aluno precisa fazer login novamente.
-- Ao sair, o cookie e invalidado no backend e o cache local do aluno e apagado no frontend.
-- O backend mantem cache em memoria por 7 horas para grids do Google Sheets e comentarios exportados do XLSX.
-- O cache usa `singleflight` para evitar multiplas chamadas simultaneas iguais ao Google Sheets/Drive.
-- No frontend, as notas ficam em `sessionStorage` apenas durante a sessao da aba; reload força refresh da API quando necessario.
+## Dados e regras
 
-### Seguranca e privacidade
+- A service account usa apenas `spreadsheets.readonly`.
+- O backend busca abas em lote por exame, deduplica nomes de abas e aplica `Fields(...)` para retornar só `formattedValue`, `userEnteredValue`, `note`, `merges` e `properties.title`.
+- A planilha é normalizada em memória como `sheetGrid`: cabeçalhos, linhas, notas e índices reais.
+- Células mescladas são expandidas antes do parsing.
+- Comentários dos subtópicos seguem esta precedência:
+  1. nota da célula do aluno;
+  2. nota da linha do subtópico;
+  3. nota do cabeçalho.
+- Médias pendentes não são renderizadas como card de média.
+- A resposta nunca retorna lista completa de alunos; somente dados compatíveis com a sessão.
 
-- A consulta e somente leitura, usando escopo read-only do Google Sheets.
-- O login aceita apenas matricula e valida a correlacao matricula/nome na aba de base.
-- A resposta retorna apenas a linha vinculada ao aluno logado.
-- Cookies usam assinatura HMAC, `HttpOnly`, `SameSite=Lax` e `Secure` quando habilitado em producao.
-- A API envia `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` e `Permissions-Policy` restritivo.
-- Segredos ficam em variaveis de ambiente ou arquivo local ignorado pelo Git.
+## Rede e performance
 
-### Rede de computadores
+- O frontend usa o mesmo domínio da API quando possível, reduzindo CORS e cookies cross-site.
+- `/api/*` envia `Cache-Control: no-store` porque contém dados privados.
+- Assets em `/assets/*` usam cache imutável por hash.
+- O backend mantém cache em memória por 7 horas e usa `singleflight` para evitar chamadas duplicadas ao Google.
+- O frontend usa `sessionStorage` versionado para mostrar dados imediatamente em reload.
+- Em redes `saveData`, `slow-2g` ou `2g`, o app busca primeiro só a AB ativa; em conexões melhores, pré-carrega a outra AB em segundo plano.
 
-- O frontend conversa com a API do mesmo dominio, reduzindo CORS e superficie de exposicao.
-- A API atua como proxy de leitura controlado entre o aluno e Google Sheets/Drive.
-- O cache reduz latencia, consumo de banda e risco de rate limit no Google.
-- Requisicoes AB1 e AB2 sao carregadas em paralelo para melhorar tempo percebido.
-- Em producao, recomenda-se HTTPS, `COOKIE_SECURE=true` e rate limit no proxy/edge.
+## Segurança
 
-### Estruturas de dados, grafos e PAA
+- Sem endpoint para listar usuários ou consultar matrícula arbitrária autenticada.
+- Cookie assinado por HMAC com `SESSION_SECRET`.
+- Headers de resposta: `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` e `Cache-Control`.
+- Segredos devem ficar em variáveis de ambiente. Não versionar JSON de service account, `.xlsx`, `.pem`, `.key`, patches ou binários.
+- O CI rejeita arquivos gerados ou secret-like rastreados.
 
-- As planilhas sao normalizadas para uma estrutura tabular em memoria: cabecalhos, linhas, notas e autores.
-- Celulas mescladas sao expandidas antes do parsing para preservar a relacao grupo -> aluno -> nota.
-- A relacao `AB -> atividade -> subtopico -> nota maxima -> nota alcancada -> comentario` forma uma arvore de avaliacao.
-- Comentarios sao indexados por referencia de celula, funcionando como um mapa `celula -> comentario`.
-- A correlacao matricula/nome usa busca linear sobre a aba base; para turmas maiores pode evoluir para indice `map[matricula]aluno`.
-- O custo principal por aba e `O(L * C)`, onde `L` e quantidade de linhas e `C` quantidade de colunas. A expansao de merges e `O(M * A)`, com `M` merges e `A` area mesclada.
-- O projeto aplica ideias de PAA ao reduzir chamadas externas, evitar recomputacao com cache e preservar ordem deterministica das tabelas.
+## Complexidade e estrutura de dados
 
-### POO e arquitetura de software
+- Parsing por aba: `O(L * C)`, com `L` linhas e `C` colunas.
+- Expansão de merges: `O(M * A)`, com `M` ranges mesclados e `A` área total expandida.
+- Busca de aluno: linear por aba, adequada para turmas pequenas/médias. Para turmas maiores, o próximo passo natural é índice `map[matricula]linha`.
+- A árvore lógica é `AB -> tabela -> card -> detalhe -> comentário`.
 
-- O backend Go usa tipos com responsabilidade clara, como `SheetsClient`, `SessionManager`, `Config`, `GradeResult`, `TableResult` e `ActivityItem`.
-- O design segue separacao de responsabilidades: configuracao, sessao, HTTP, login, parsing, normalizacao, comentarios e grades.
-- O frontend separa componentes visuais, cliente HTTP, tipos e regras de nota.
-- A arquitetura favorece baixo acoplamento: mudancas na origem dos dados ficam em `pkg/app`, enquanto regras de exibicao ficam em `src`.
-- O monolito modular facilita deploy simples sem abrir mao de organizacao interna.
+## Variáveis de ambiente
 
-## Variaveis de ambiente
+```env
+GOOGLE_SHEET_ID=...
+LOGIN_SHEET_NAME=Base de dados
+SHEET_AB1_PESQUISA=AT. 1
+SHEET_AB1_ARTIGO=AT. 2
+SHEET_AB1_LISTA=AT. 3
+SHEET_AB1_PROVA=Notas AB1
+SHEET_AB2_LISTA=AT. 4
+SHEET_AB2_PROJETO=Projeto AB2
+SESSION_SECRET=use-uma-chave-forte-com-mais-de-32-caracteres
+COOKIE_SECURE=true
+GOOGLE_SERVICE_ACCOUNT_JSON_BASE64=...
+```
 
-Crie as variaveis no ambiente onde o projeto for rodar:
+Alternativas para credenciais:
 
-- `GOOGLE_SHEET_ID`: id da planilha.
-- `LOGIN_SHEET_NAME`: aba com a base de matriculas.
-- `SHEET_AB1_PESQUISA`: aba da pesquisa AB1.
-- `SHEET_AB1_ARTIGO`: aba do artigo AB1.
-- `SHEET_AB1_LISTA`: aba da lista AB1.
-- `SHEET_AB1_PROVA`: aba da prova/notas AB1.
-- `SHEET_AB2_LISTA`: aba da lista AB2.
-- `SHEET_AB2_PROJETO`: aba do projeto AB2.
-- `SESSION_SECRET`: chave longa e aleatoria para assinar a sessao.
-- `COOKIE_SECURE`: `true` em producao, `false` em dev local sem HTTPS.
-- `GOOGLE_SERVICE_ACCOUNT_JSON`: JSON completo da service account.
-- `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64`: alternativa ao JSON direto, boa para CI.
-- `GOOGLE_SERVICE_ACCOUNT_FILE`: caminho local para o arquivo JSON da service account.
-- `GOOGLE_SHEET_XLSX_FILE`: opcional; caminho local para um `.xlsx` exportado com threaded comments.
+- `GOOGLE_SERVICE_ACCOUNT_JSON`: JSON completo.
+- `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64`: recomendado para CI/deploy.
+- `GOOGLE_SERVICE_ACCOUNT_FILE`: apenas para desenvolvimento local.
 
-Compartilhe a planilha com o e-mail `client_email` da service account como leitor.
-
-Nas abas de notas, o sistema procura primeiro uma coluna de nome (`Nome`, `Aluno`, `Estudante`, etc.).
-Se a aba nao tiver nome, usa matricula como fallback.
+Compartilhe a planilha com o `client_email` da service account como **Visualizador**.
 
 ## Desenvolvimento
 
@@ -102,10 +97,52 @@ go mod download
 npm run dev:full
 ```
 
-O comando `dev:full` compila o frontend e sobe a API Go junto em `http://localhost:8080`.
+Comandos de qualidade:
 
-`npm run dev` continua disponivel para abrir apenas o frontend Vite.
+```bash
+go vet $(go list ./... | grep -v /node_modules/)
+go test -race $(go list ./... | grep -v /node_modules/)
+npm run lint
+npm run build
+npm audit --audit-level=high
+```
 
-## Deploy
+O hook local de pre-push já está versionado em `.githooks/pre-push`. Para ativar em outro clone:
 
-O workflow `.github/workflows/ci.yml` roda somente lint, build e testes Go. Deploy fica opcional e fora do CI padrao, sem exigir login ou token de provedor.
+```bash
+git config core.hooksPath .githooks
+```
+
+## CI/CD
+
+O workflow `.github/workflows/ci.yml` roda em push e pull request para `main`:
+
+- higiene do repositório e formatação Go;
+- `go mod verify`;
+- `go vet`;
+- `go test -race`;
+- `govulncheck`;
+- `npm ci`;
+- `npm run lint`;
+- `npm run build`;
+- `npm audit --audit-level=high`.
+
+Para impedir merge quando algo falhar, habilite no GitHub:
+
+- branch protection em `main`;
+- required status check: `required quality gate`;
+- bloqueio de direct push em `main`;
+- pull request obrigatório antes de merge.
+
+## Commits
+
+Use mensagens descritivas no padrão Conventional Commits:
+
+```text
+feat: render grades from Sheets notes
+fix: ignore legacy grade cache without cards
+ci: add required quality gate
+docs: consolidate architecture and security notes
+```
+
+Antes de publicar, rode a qualidade local ou deixe o pre-push bloquear o envio.

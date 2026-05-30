@@ -105,23 +105,23 @@ echo -n "6️⃣  Buscando notas (exam=ab1)... "
 GRADES_RESPONSE=$(curl -s http://localhost:8080/api/grades?exam=ab1 \
     -H "Cookie: $COOKIE" 2>/dev/null)
 
-if echo "$GRADES_RESPONSE" | jq -e '.tables[0].columns[0]' > /dev/null 2>&1; then
+if echo "$GRADES_RESPONSE" | jq -e '.tables[0].cards[0]' > /dev/null 2>&1; then
     echo -e "${GREEN}✓${NC}"
     
     # Verificar se há comentários
-    HAS_COMMENTS=$(echo "$GRADES_RESPONSE" | jq '[.tables[].columns[] | select(.comment != null and .comment != "")] | length' 2>/dev/null || echo "0")
+    HAS_COMMENTS=$(echo "$GRADES_RESPONSE" | jq '[(.tables[].cards[]?, .tables[].cards[]?.details[]?) | select(.comment != null and .comment != "")] | length' 2>/dev/null || echo "0")
     
     if [ "$HAS_COMMENTS" -gt 0 ]; then
         echo -e "   ${GREEN}✓ Comentários encontrados: $HAS_COMMENTS${NC}"
         echo ""
         echo "📋 Exemplo de comentário:"
-        echo "$GRADES_RESPONSE" | jq '[.tables[].columns[] | select(.comment != null and .comment != "")][0]' 2>/dev/null | head -10
+        echo "$GRADES_RESPONSE" | jq '[(.tables[].cards[]?, .tables[].cards[]?.details[]?) | select(.comment != null and .comment != "")][0]' 2>/dev/null | head -10
     else
         echo -e "   ${YELLOW}⚠ Nenhum comentário encontrado${NC}"
         echo "   Possíveis causas:"
-        echo "   1. A conta de serviço não tem acesso ao Google Drive"
+        echo "   1. A planilha não tem notas de célula nos critérios"
         echo "   2. O arquivo não está compartilhado com a conta de serviço"
-        echo "   3. Os comentários não existem nas abas da planilha"
+        echo "   3. A nota está em comentário/discussão do Drive, não em nota de célula"
     fi
 else
     echo -e "${RED}✗${NC} Falha ao buscar notas"
@@ -142,6 +142,6 @@ echo ""
 echo "Próximas ações:"
 echo "1. Se os comentários foram encontrados: tudo está OK! Faça deploy no Vercel."
 echo "2. Se NENHUM comentário foi encontrado:"
-echo "   a) Verifique se a conta de serviço está com acesso ao Google Drive"
+echo "   a) Verifique se a conta de serviço está com acesso de leitor ao Google Sheets"
 echo "   b) Compartilhe o arquivo Sheets com o email da conta (mostrado acima)"
 echo "   c) Rode este teste novamente"

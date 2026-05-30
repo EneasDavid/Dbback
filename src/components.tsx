@@ -1,22 +1,6 @@
 import { AlertCircle, BookOpenCheck, ChevronRight, LogOut, MessageSquareText, Moon, Search, Sun } from 'lucide-react';
-import {
-  displayValue,
-  feedbackComments,
-  formatScore,
-  getColumnLabel,
-  getDetailItems,
-  getSummaryLabel,
-  humanizeLabel,
-  isActivityColumn,
-  isAverageColumn,
-  isFinalAverageColumn,
-  isGradeColumn,
-  normalized,
-  scoreTone,
-  scoreToneFromRatio,
-  shouldShowMainColumn,
-} from './gradeUtils';
-import type { Column, GradeTable, SessionUser, StudentStatus } from './types';
+import type { FormEvent } from 'react';
+import type { GradeCard as GradeCardData, GradeDetail, GradeTable, SessionUser } from './types';
 
 export function LoginView({
   matricula,
@@ -33,7 +17,7 @@ export function LoginView({
   error: string;
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
-  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
     <main className="shell login-shell">
@@ -58,7 +42,7 @@ export function LoginView({
             />
           </div>
           {error && <InlineError message={error} />}
-          <button className="primary-button" type="submit" disabled={loading}>
+          <button className="primary-button" type="submit" disabled={loading} aria-busy={loading}>
             {loading ? 'Entrando...' : 'Entrar'}
             <ChevronRight size={18} />
           </button>
@@ -98,31 +82,13 @@ export function Topbar({
 export function ExamSwitch({ exam, setExam }: { exam: 'ab1' | 'ab2'; setExam: (exam: 'ab1' | 'ab2') => void }) {
   return (
     <section className="exam-switch" aria-label="Selecionar avaliacao">
-      <button className={exam === 'ab1' ? 'active' : ''} type="button" onClick={() => setExam('ab1')}>
+      <button className={exam === 'ab1' ? 'active' : ''} type="button" onClick={() => setExam('ab1')} aria-pressed={exam === 'ab1'}>
         AB1
       </button>
-      <button className={exam === 'ab2' ? 'active' : ''} type="button" onClick={() => setExam('ab2')}>
+      <button className={exam === 'ab2' ? 'active' : ''} type="button" onClick={() => setExam('ab2')} aria-pressed={exam === 'ab2'}>
         AB2
       </button>
     </section>
-  );
-}
-
-export function AverageCard({ exam, status }: { exam: 'ab1' | 'ab2'; status: StudentStatus }) {
-  const value = exam === 'ab1' ? status.ab1 : status.ab2;
-  const tone = value < 5 ? 'score-danger' : value < 7 ? 'score-warning' : 'score-success';
-  return (
-    <article className={`grade-table activity final-average ${tone}`}>
-      <header>
-        <h2>{`Média ${exam.toUpperCase()}`}</h2>
-      </header>
-      <div className="summary-grid">
-        <section className={`summary-score highlight ${tone}`}>
-          <span>Média da AB</span>
-          <strong>{formatScore(value)}</strong>
-        </section>
-      </div>
-    </article>
   );
 }
 
@@ -132,66 +98,49 @@ export function GradeCard({
   onToggleDetail,
 }: {
   table: GradeTable;
-  activeDetail: { tableKey: string; columnKey: string } | null;
-  onToggleDetail: (tableKey: string, columnKey: string) => void;
+  activeDetail: { tableKey: string; cardKey: string } | null;
+  onToggleDetail: (tableKey: string, cardKey: string) => void;
 }) {
-  const activeKey = activeDetail?.tableKey === table.key ? activeDetail.columnKey : null;
+  const activeKey = activeDetail?.tableKey === table.key ? activeDetail.cardKey : null;
   return (
     <article className={`grade-table ${table.kind}`}>
       <header>
         <div>
           <h2>{table.label}</h2>
+          {table.status && <span className="table-status">{table.status}</span>}
         </div>
       </header>
-      {table.columns.filter((column) => shouldShowMainColumn(column)).map((column) => (
-        <div key={`${table.key}-${column.key}`}>
-          <GradeRow column={column} expanded={activeKey === column.key} onToggle={() => onToggleDetail(table.key, column.key)} />
-          {activeKey === column.key && <GradeDetailPanel table={table} mainColumn={column} />}
+      {cardsFor(table).map((card) => (
+        <div key={`${table.key}-${card.key}`}>
+          <GradeRow tableKey={table.key} card={card} expanded={activeKey === card.key} onToggle={() => onToggleDetail(table.key, card.key)} />
+          {activeKey === card.key && <GradeDetailPanel tableKey={table.key} card={card} />}
         </div>
       ))}
     </article>
   );
 }
 
-export function SummaryTable({ table, exam }: { table: GradeTable; exam: 'ab1' | 'ab2' }) {
-  const sortedColumns = [...table.columns.filter((column) => shouldShowMainColumn(column) && !isFinalAverageColumn(column))].sort((a, b) => {
-    const labelA = normalized(a.label);
-    const labelB = normalized(b.label);
-
-    if (labelA.includes('prova') && !labelB.includes('prova')) return -1;
-    if (!labelA.includes('prova') && labelB.includes('prova')) return 1;
-    if (isAverageColumn(a) && !isAverageColumn(b)) return -1;
-    if (!isAverageColumn(a) && isAverageColumn(b)) return 1;
-    if (isActivityColumn(a) && !isActivityColumn(b)) return -1;
-    if (!isActivityColumn(a) && isActivityColumn(b)) return 1;
-    return labelA.localeCompare(labelB, 'pt-BR', { numeric: true });
-  });
-
+export function SummaryTable({ table }: { table: GradeTable }) {
   return (
     <article className="grade-table summary">
       <header>
         <h2>{table.label}</h2>
       </header>
       <div className="summary-grid">
-        {sortedColumns.map((column) => {
-          const isAverage = isAverageColumn(column);
-          const isAT4 = /\bat\.?\s*4\b/.test(normalized(column.label)) || normalized(column.label).includes('atividade 4');
-          return (
-            <section className={`summary-score ${isAverage ? 'highlight' : ''} ${isAverage ? scoreTone(column) : ''}`} key={`${table.key}-${column.key}`}>
-              <div className="summary-score-title">
-                <span>{getSummaryLabel(column)}</span>
-                {isAT4 && exam === 'ab2' ? <span className="at4-badge">AT.4</span> : null}
-              </div>
-              <strong>{displayValue(column)}</strong>
-              {column.comment && (
-                <p>
-                  <MessageSquareText size={15} />
-                  {column.comment}
-                </p>
-              )}
-            </section>
-          );
-        })}
+        {cardsFor(table).map((card) => (
+          <section className={`summary-score ${summaryHighlight(card) ? 'highlight' : ''} ${card.tone || ''}`} key={`${table.key}-${card.key}`}>
+            <div className="summary-score-title">
+              <span>{card.label}</span>
+            </div>
+            <strong>{card.displayValue}</strong>
+            {card.comment && (
+              <p>
+                <MessageSquareText size={15} />
+                {card.comment}
+              </p>
+            )}
+          </section>
+        ))}
       </div>
     </article>
   );
@@ -224,86 +173,110 @@ export function InlineError({ message }: { message: string }) {
   );
 }
 
-function GradeRow({ column, expanded, onToggle }: { column: Column; expanded: boolean; onToggle: () => void }) {
-  const clickable = isGradeColumn(column);
+export function EmptyState({ exam }: { exam: 'ab1' | 'ab2' }) {
   return (
-    <section className={`grade-row ${expanded ? 'expanded' : ''} ${clickable ? 'clickable' : ''} ${scoreTone(column)}`}>
-      <button type="button" className="grade-row-trigger" onClick={clickable ? onToggle : undefined} aria-expanded={expanded} disabled={!clickable}>
+    <section className="empty-state" role="status">
+      <BookOpenCheck size={24} />
+      <div>
+        <strong>{exam.toUpperCase()} ainda sem notas visíveis</strong>
+        <p>Quando houver notas corrigidas para sua matrícula, elas aparecerão aqui.</p>
+      </div>
+    </section>
+  );
+}
+
+function GradeRow({ tableKey, card, expanded, onToggle }: { tableKey: string; card: GradeCardData; expanded: boolean; onToggle: () => void }) {
+  const clickable = Boolean(card.details?.length);
+  const panelId = detailPanelId(tableKey, card.key);
+  return (
+    <section className={`grade-row ${expanded ? 'expanded' : ''} ${clickable ? 'clickable' : ''} ${card.tone || ''}`}>
+      <button
+        type="button"
+        className="grade-row-trigger"
+        onClick={clickable ? onToggle : undefined}
+        aria-controls={clickable ? panelId : undefined}
+        aria-expanded={clickable ? expanded : undefined}
+        disabled={!clickable}
+        aria-label={clickable ? `Abrir detalhes de ${card.label}` : `${card.label}: ${card.displayValue}`}
+      >
         <div>
-          <span>{getColumnLabel(column)}</span>
-          <strong>{displayValue(column)}</strong>
+          <span>{card.label}</span>
+          <strong>{card.displayValue}</strong>
         </div>
         {clickable && <ChevronRight size={18} className={expanded ? 'rotated' : ''} />}
       </button>
-      {column.comment && (
+      {card.comment && (
         <p className="row-comment">
           <MessageSquareText size={15} />
-          {column.comment}
+          {card.comment}
         </p>
       )}
     </section>
   );
 }
 
-function GradeDetailPanel({ table, mainColumn }: { table: GradeTable; mainColumn: Column }) {
-  const parsedItems = getDetailItems(table, mainColumn);
-  const isAt4Detail = /\bat\.?\s*4\b/.test(normalized(mainColumn.label)) || normalized(mainColumn.label).includes('atividade 4');
-  const detailTitle = isAt4Detail ? `Detalhes ${humanizeLabel(mainColumn.label)}` : 'Composição';
-  const mainComment = mainColumn.comment?.trim();
-  const orphanComments = feedbackComments(table).filter((comment) => !parsedItems.some((item) => item.comment === comment));
-
+function GradeDetailPanel({ tableKey, card }: { tableKey: string; card: GradeCardData }) {
+  const details = card.details ?? [];
   return (
-    <section className="detail-panel">
+    <section className="detail-panel" id={detailPanelId(tableKey, card.key)}>
       <div className="detail-header">
         <div>
-          <span>{detailTitle}</span>
+          <span>{card.label}</span>
           <strong>Critérios avaliados</strong>
         </div>
       </div>
       <div className="detail-items">
-        {parsedItems.map((item) => (
-          <article className={`detail-item ${scoreToneFromRatio(item.ratio, item.pending)}`} key={item.key}>
-            <div className="detail-item-row">
-              <div>
-                <strong>{item.label}</strong>
-              </div>
-              {item.max ? <span className="badge">{item.pending ? 'Não corrigido ainda' : item.obtained !== null ? `${formatScore(item.obtained)} / ${formatScore(item.max)}` : `Max ${formatScore(item.max)}`}</span> : null}
-            </div>
-            <div className="detail-progress-bar" aria-hidden="true">
-              <div className="detail-progress-fill" style={{ width: `${item.ratio}%` }} />
-            </div>
-            {item.comment ? (
-              <p className="detail-item-comment">
-                <MessageSquareText size={14} />
-                <span>
-                  {item.commentAuthor && <strong>{item.commentAuthor}</strong>}
-                  {item.comment}
-                </span>
-              </p>
-            ) : null}
-          </article>
+        {details.map((item) => (
+          <DetailItem item={item} key={item.key} />
         ))}
       </div>
-      {mainComment && (
+      {card.comment && (
         <div className="comment-bubble">
           <div className="comment-avatar">P</div>
           <div>
-            <p>{mainComment}</p>
+            <p>{card.comment}</p>
             <span>Comentário geral</span>
           </div>
         </div>
       )}
-      {orphanComments.length > 0 && (
-        <section className="feedback-list inline-feedback">
-          <span>Feedback geral</span>
-          {orphanComments.map((comment, index) => (
-            <p key={`${table.key}-detail-comment-${index}`}>
-              <MessageSquareText size={15} />
-              {comment}
-            </p>
-          ))}
-        </section>
-      )}
     </section>
   );
+}
+
+function DetailItem({ item }: { item: GradeDetail }) {
+  return (
+    <article className={`detail-item ${item.tone || ''}`}>
+      <div className="detail-item-row">
+        <div>
+          <strong>{item.label}</strong>
+        </div>
+        <span className="badge">{item.displayScore}</span>
+      </div>
+      <div className="detail-progress-bar" aria-hidden="true">
+        <div className="detail-progress-fill" style={{ width: `${item.ratio}%` }} />
+      </div>
+      {item.comment ? (
+        <p className="detail-item-comment">
+          <MessageSquareText size={14} />
+          <span>
+            {item.commentAuthor && <strong>{item.commentAuthor}</strong>}
+            {item.comment}
+          </span>
+        </p>
+      ) : null}
+    </article>
+  );
+}
+
+function summaryHighlight(card: GradeCardData) {
+  const label = card.label.toLowerCase();
+  return label.includes('media') || label.includes('média') || label.includes('total');
+}
+
+function cardsFor(table: GradeTable) {
+  return Array.isArray(table.cards) ? table.cards : [];
+}
+
+function detailPanelId(tableKey: string, cardKey: string) {
+  return `details-${tableKey}-${cardKey}`;
 }

@@ -65,7 +65,7 @@ func Bootstrap(r *http.Request) (Config, SessionManager, *SheetsClient, error) {
 }
 
 func bootstrapKey(cfg Config) string {
-	parts := []string{cfg.SpreadsheetID, cfg.LoginSheet, cfg.SessionSecret, cfg.ServiceJSON, cfg.ServiceFile, cfg.XLSXFile}
+	parts := []string{cfg.SpreadsheetID, cfg.LoginSheet, cfg.SessionSecret, cfg.ServiceJSON, cfg.ServiceFile}
 	for _, table := range append(cfg.AB1Tables, cfg.AB2Tables...) {
 		parts = append(parts, table.Key, table.SheetName, table.Kind)
 	}

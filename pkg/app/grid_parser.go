@@ -80,28 +80,6 @@ func setMatrixValue(values [][]string, rowIdx int, colIdx int, value string) {
 	values[rowIdx][colIdx] = value
 }
 
-func (g *sheetGrid) applyComments(comments map[string]cellComment) {
-	for cell, comment := range comments {
-		rowIdx, colIdx, ok := parseCellRef(cell)
-		if !ok || comment.Text == "" {
-			continue
-		}
-		switch {
-		case rowIdx == g.headerRow:
-			g.notes = setAt(g.notes, colIdx, comment.Text)
-			g.noteAuthors = setAt(g.noteAuthors, colIdx, comment.Author)
-		case rowIdx > g.headerRow:
-			for idx, actualRow := range g.rowIndices {
-				if actualRow == rowIdx {
-					g.rowNotes[idx] = setAt(g.rowNotes[idx], colIdx, comment.Text)
-					g.rowNoteAuthors[idx] = setAt(g.rowNoteAuthors[idx], colIdx, comment.Author)
-					break
-				}
-			}
-		}
-	}
-}
-
 func (g *sheetGrid) applyCommentMerges(merges []*sheets.GridRange) {
 	for _, merged := range merges {
 		startRow := int(merged.StartRowIndex)

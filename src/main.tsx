@@ -1,10 +1,12 @@
-import { StrictMode, useEffect, useMemo, useState } from 'react';
+import { StrictMode, useEffect, useMemo, useRef, useState } from 'react';
+import type { FormEvent, MutableRefObject } from 'react';
 import { createRoot } from 'react-dom/client';
 import { api } from './api';
-import { AverageCard, ExamSwitch, GradeCard, InlineError, LoginView, SummaryTable, Topbar } from './components';
-import { computeStudentStatus, normalizeGrade, shouldShowTable } from './gradeUtils';
-import type { GradeCache, GradeResult, SessionUser, StudentStatus } from './types';
+import { EmptyState, ExamSwitch, GradeCard, InlineError, LoginView, SummaryTable, Topbar } from './components';
+import type { GradeCache, GradeResult, GradeTable, SessionUser } from './types';
 import './styles.scss';
+
+const CACHE_VERSION = 'v2';
 
 function App() {
   const [matricula, setMatricula] = useState('');
@@ -14,10 +16,14 @@ function App() {
     return window.localStorage.getItem('theme') === 'dark' ? 'dark' : 'light';
   });
   const [grades, setGrades] = useState<GradeCache>({});
-  const [studentStatus, setStudentStatus] = useState<StudentStatus | null>(null);
-  const [activeDetail, setActiveDetail] = useState<{ tableKey: string; columnKey: string } | null>(null);
+  const gradesRef = useRef<GradeCache>({});
+  const [activeDetail, setActiveDetail] = useState<{ tableKey: string; cardKey: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    gradesRef.current = grades;
+  }, [grades]);
 
   useEffect(() => {
     if (!error) return;
@@ -42,77 +48,72 @@ function App() {
 
   useEffect(() => {
     if (!session) return;
-    const cacheKey = `dbback-grades:${session.matricula}`;
-    const cached = window.sessionStorage.getItem(cacheKey);
-    if (cached) {
-      try {
-        setGrades(JSON.parse(cached) as GradeCache);
-      } catch {
-        window.sessionStorage.removeItem(cacheKey);
-      }
+    const cacheKey = gradeCacheKey(session.matricula);
+    clearLegacyGradeCache(session.matricula);
+    const cached = readGradeCache(cacheKey);
+    if (Object.keys(cached).length > 0) {
+      setGrades((current) => storeGradeCache(current, cached, cacheKey, gradesRef));
     }
-    setLoading(true);
-    setError('');
-    const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
-    const refresh = navigation?.type === 'reload' ? '&refresh=1' : '';
-    Promise.allSettled([api<GradeResult>(`/api/grades?exam=ab1${refresh}`), api<GradeResult>(`/api/grades?exam=ab2${refresh}`)])
-      .then(([ab1Result, ab2Result]) => {
-        const ab1 = ab1Result.status === 'fulfilled' ? normalizeGrade(ab1Result.value, 'AB1') : null;
-        const ab2 = ab2Result.status === 'fulfilled' ? normalizeGrade(ab2Result.value, 'AB2') : null;
-        const expired = [ab1Result, ab2Result].some((result) => result.status === 'rejected' && isSessionExpired(result.reason));
-        if (expired) {
-          clearClientSession(session.matricula);
-          setGrades({});
-          setStudentStatus(null);
-          setError('');
-          setSession(null);
-          return;
-        }
-        const nextGrades = { ...(ab1 ? { ab1 } : {}), ...(ab2 ? { ab2 } : {}) };
-        window.sessionStorage.setItem(cacheKey, JSON.stringify(nextGrades));
-        setGrades((current) => (JSON.stringify(current) === JSON.stringify(nextGrades) ? current : nextGrades));
-        if (!ab1 && !ab2) {
-          const reason = ab1Result.status === 'rejected' ? ab1Result.reason : ab2Result.status === 'rejected' ? ab2Result.reason : null;
-          setError(reason instanceof Error ? reason.message : 'Nao foi possivel carregar as notas.');
-          return;
-        }
-        if (!ab1 || !ab2) {
-          setStudentStatus(null);
-          setError('Algumas notas ainda nao estao disponiveis.');
-          return;
-        }
-        setStudentStatus(computeStudentStatus(ab1, ab2));
-      })
-      .catch((err) => {
-        if (isSessionExpired(err)) {
-          clearClientSession(session.matricula);
-          setGrades({});
-          setStudentStatus(null);
-          setError('');
-          setSession(null);
-          return;
-        }
-        setGrades({});
-        setStudentStatus(null);
-        setError(err instanceof Error ? err.message : 'Erro ao carregar as notas.');
-      })
-      .finally(() => setLoading(false));
   }, [session]);
 
-  const visibleColumns = useMemo(() => {
-    return grades[exam]?.tables ?? [];
-  }, [grades, exam]);
+  useEffect(() => {
+    if (!session) return;
+    const currentSession = session;
+    let cancelled = false;
+    const cacheKey = gradeCacheKey(currentSession.matricula);
 
-  const activityTables = useMemo(() => visibleColumns.filter((table) => table.kind !== 'summary' && shouldShowTable(table)), [visibleColumns]);
-  const summaryTables = useMemo(() => visibleColumns.filter((table) => table.kind === 'summary' && shouldShowTable(table)), [visibleColumns]);
+    async function fetchExam(target: 'ab1' | 'ab2', foreground: boolean) {
+      if (foreground) {
+        setLoading(true);
+        setError('');
+      }
+      try {
+        const result = normalizeGradeResult(await api<GradeResult>(`/api/grades?exam=${target}`));
+        if (cancelled) return;
+        setGrades((current) => storeGradeCache(current, { [target]: result }, cacheKey, gradesRef));
+      } catch (err) {
+        if (cancelled) return;
+        if (isSessionExpired(err)) {
+          clearClientSession(currentSession.matricula);
+          setGrades({});
+          setError('');
+          setSession(null);
+          return;
+        }
+        if (foreground) {
+          setError(err instanceof Error ? err.message : 'Erro ao carregar as notas.');
+        }
+      } finally {
+        if (foreground && !cancelled) setLoading(false);
+      }
+    }
 
-  const handleToggleDetail = (tableKey: string, columnKey: string) => {
+    const cached = readGradeCache(cacheKey);
+    const hasActive = Boolean(gradesRef.current[exam] || cached[exam]);
+    void fetchExam(exam, !hasActive).then(() => {
+      const other = exam === 'ab1' ? 'ab2' : 'ab1';
+      if (!cancelled && canPreload() && !gradesRef.current[other]) {
+        void fetchExam(other, false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session, exam]);
+
+  const visibleTables = useMemo(() => grades[exam]?.tables ?? [], [grades, exam]);
+
+  const activityTables = useMemo(() => visibleTables.filter((table) => !isSummaryTable(table.kind) && cardsFor(table).length > 0), [visibleTables]);
+  const summaryTables = useMemo(() => visibleTables.filter((table) => isSummaryTable(table.kind) && cardsFor(table).length > 0), [visibleTables]);
+
+  const handleToggleDetail = (tableKey: string, cardKey: string) => {
     setActiveDetail((current) =>
-      current?.tableKey === tableKey && current.columnKey === columnKey ? null : { tableKey, columnKey }
+      current?.tableKey === tableKey && current.cardKey === cardKey ? null : { tableKey, cardKey }
     );
   };
 
-  async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
     setError('');
@@ -135,7 +136,6 @@ function App() {
     clearClientSession(session?.matricula);
     setSession(null);
     setGrades({});
-    setStudentStatus(null);
     setError('');
   }
 
@@ -155,36 +155,118 @@ function App() {
 
   return (
     <main className="shell">
+      <a className="skip-link" href="#grades">Ir para notas</a>
       <Topbar session={session} theme={theme} setTheme={setTheme} onLogout={handleLogout} />
       <ExamSwitch exam={exam} setExam={setExam} />
 
       {error && <InlineError message={error} />}
-      {loading && <div className="loading">Carregando notas...</div>}
+      {loading && <div className="loading" role="status" aria-live="polite">Carregando notas...</div>}
 
-      {!loading && visibleColumns.length > 0 && (
-        <section className="grade-list">
+      {visibleTables.length > 0 ? (
+        <section className="grade-list" id="grades" aria-live="polite">
           {activityTables.map((table) => (
             <GradeCard table={table} key={table.key} activeDetail={activeDetail} onToggleDetail={handleToggleDetail} />
           ))}
           {summaryTables.map((table) => (
-            <SummaryTable table={table} key={table.key} exam={exam} />
+            <SummaryTable table={table} key={table.key} />
           ))}
-          {studentStatus && <AverageCard exam={exam} status={studentStatus} />}
         </section>
+      ) : (
+        !loading && <EmptyState exam={exam} />
       )}
     </main>
   );
 }
 
+function storeGradeCache(
+  current: GradeCache,
+  incoming: GradeCache,
+  cacheKey: string,
+  gradesRef: MutableRefObject<GradeCache>,
+) {
+  const normalizedIncoming = normalizeGradeCache(incoming);
+  const next = { ...current, ...normalizedIncoming };
+  gradesStorageSet(cacheKey, next);
+  gradesRef.current = next;
+  return JSON.stringify(current) === JSON.stringify(next) ? current : next;
+}
+
+function gradeCacheKey(matricula: string) {
+  return `dbback-grades:${CACHE_VERSION}:${matricula}`;
+}
+
+function readGradeCache(cacheKey: string): GradeCache {
+  const cached = window.sessionStorage.getItem(cacheKey);
+  if (!cached) return {};
+  try {
+    return normalizeGradeCache(JSON.parse(cached) as GradeCache);
+  } catch {
+    window.sessionStorage.removeItem(cacheKey);
+    return {};
+  }
+}
+
+function normalizeGradeCache(cache: GradeCache): GradeCache {
+  return {
+    ...(cache.ab1 ? { ab1: normalizeGradeResult(cache.ab1) } : {}),
+    ...(cache.ab2 ? { ab2: normalizeGradeResult(cache.ab2) } : {}),
+  };
+}
+
+function normalizeGradeResult(grade: GradeResult): GradeResult {
+  return {
+    ...grade,
+    tables: Array.isArray(grade.tables)
+      ? grade.tables
+          .filter(Boolean)
+          .map((table) => ({
+            ...table,
+            cards: Array.isArray(table.cards) ? table.cards.filter(Boolean).filter((card) => !isPendingAverageCard(table, card)) : [],
+          }))
+      : [],
+  };
+}
+
+function cardsFor(table: GradeTable) {
+  return Array.isArray(table.cards) ? table.cards : [];
+}
+
+function isPendingAverageCard(table: GradeTable, card: { label?: string; displayValue?: string; value?: string }) {
+  if (!isSummaryTable(table.kind)) return false;
+  const label = (card.label || '').toLowerCase();
+  const value = `${card.displayValue || card.value || ''}`.toLowerCase();
+  return (label.includes('média') || label.includes('media')) && value.includes('não corrigida');
+}
+
+function gradesStorageSet(cacheKey: string, grades: GradeCache) {
+  window.sessionStorage.setItem(cacheKey, JSON.stringify(grades));
+}
+
+function canPreload() {
+  const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+  if (!connection) return true;
+  if (connection.saveData) return false;
+  return connection.effectiveType !== 'slow-2g' && connection.effectiveType !== '2g';
+}
+
+function isSummaryTable(kind: string) {
+  return kind === 'summary' || kind === 'ab2summary';
+}
+
 function clearClientSession(matricula?: string) {
   if (matricula) {
-    window.sessionStorage.removeItem(`dbback-grades:${matricula}`);
+    window.sessionStorage.removeItem(gradeCacheKey(matricula));
+    clearLegacyGradeCache(matricula);
   }
   if (!matricula) {
     for (const key of Object.keys(window.sessionStorage)) {
       if (key.startsWith('dbback-grades:')) window.sessionStorage.removeItem(key);
     }
   }
+}
+
+function clearLegacyGradeCache(matricula: string) {
+  window.sessionStorage.removeItem(`dbback-grades:${matricula}`);
 }
 
 function isSessionExpired(error: unknown) {

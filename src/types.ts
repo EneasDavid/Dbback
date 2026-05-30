@@ -1,30 +1,25 @@
-export type Column = {
+export type GradeDetail = {
   key: string;
   label: string;
   value: string;
+  max: number;
+  displayScore: string;
+  ratio: number;
+  pending: boolean;
+  tone?: string;
   comment?: string;
   commentAuthor?: string;
 };
 
-export type ActivityItem = {
+export type GradeCard = {
   key: string;
-  subtopic: string;
-  notaMaxima: string;
-  notaAlcancada: string;
-  comentario?: string;
-  comentarioAutor?: string;
-};
-
-export type GradeResult = {
-  exam: string;
-  matricula: string;
-  name: string;
-  tables: GradeTable[];
-};
-
-export type SessionUser = {
-  matricula: string;
-  name: string;
+  label: string;
+  value: string;
+  displayValue: string;
+  tone?: string;
+  comment?: string;
+  commentAuthor?: string;
+  details?: GradeDetail[];
 };
 
 export type GradeTable = {
@@ -33,9 +28,8 @@ export type GradeTable = {
   sheetName: string;
   kind: string;
   complete: boolean;
-  status?: string; // "Encerrado" ou "Não encerrado"
-  columns: Column[];
-  items?: ActivityItem[];
+  status?: string;
+  cards?: GradeCard[];
 };
 
 export type StudentStatus = {
@@ -43,6 +37,19 @@ export type StudentStatus = {
   ab2: number;
   average: number;
   approved: boolean;
+};
+
+export type GradeResult = {
+  exam: string;
+  matricula: string;
+  name: string;
+  tables: GradeTable[];
+  studentStatus?: StudentStatus;
+};
+
+export type SessionUser = {
+  matricula: string;
+  name: string;
 };
 
 export type GradeCache = Partial<Record<'ab1' | 'ab2', GradeResult>>;
