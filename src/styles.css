@@ -36,7 +36,7 @@
 :root[data-theme="dark"] {
   color: #edf3ff;
   background: #080b12;
-  color-scheme: dark;
+  color-scheme: light;
   --page: #080b12;
   --shell: rgba(13, 18, 29, 0.9);
   --panel: rgba(24, 31, 45, 0.76);
@@ -47,12 +47,12 @@
   --muted-strong: #d1d9e8;
   --border: rgba(151, 164, 187, 0.28);
   --border-soft: rgba(151, 164, 187, 0.16);
-  --brand: #60a5fa;
-  --brand-hover: #93c5fd;
+  --brand: #145943;
+  --brand-hover: #69ba9d;
   --brand-soft: rgba(96, 165, 250, 0.16);
   /* force AT.4 accent to green in dark mode */
   --accent-at4: #176B4F;
-  --brand-contrast: #07111f;
+  --brand-contrast: #ffffff;
   --danger: #fca5a5;
   --danger-bg: rgba(127, 29, 29, 0.38);
   --danger-border: rgba(248, 113, 113, 0.42);

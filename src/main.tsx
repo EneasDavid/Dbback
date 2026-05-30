@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useMemo, useState } from 'react';
+import { StrictMode, useEffect, useMemo, useState, type ReactElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AlertCircle, BookOpenCheck, ChevronRight, LogOut, MessageSquareText, Moon, Search, Sun } from 'lucide-react';
 import './styles.css';
@@ -197,6 +197,8 @@ function App() {
         <ThemeButton theme={theme} setTheme={setTheme} compact />
       </header>
 
+      {studentStatus && <StatusBanner status={studentStatus} />}
+
       <section className="exam-switch" aria-label="Selecionar avaliacao">
         <button className={exam === 'ab1' ? 'active' : ''} type="button" onClick={() => setExam('ab1')}>
           AB1
@@ -298,7 +300,7 @@ function SummaryTable({ table, exam, status }: { table: GradeTable; exam: 'ab1' 
           return sortedColumns.flatMap((column) => {
             const isAverage = isAverageColumn(column);
             const isAT4 = /\bat\.?\s*4\b/.test(normalized(column.label)) || normalized(column.label).includes('atividade 4');
-            const parts: any[] = [];
+            const parts: ReactElement[] = [];
             parts.push(
               <section
                 className={`summary-score ${isAverage ? 'highlight' : ''} ${isAverage ? scoreTone(column) : ''}`}
