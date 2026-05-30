@@ -5,11 +5,12 @@ Aplicacao Go + React para consulta mobile de notas por matricula em uma planilha
 ## Como funciona
 
 - Login por matricula existente na aba `Base de dados`.
+- A aba de login precisa ter uma coluna de matricula e uma coluna de nome.
 - Sessao em cookie HTTP-only assinado.
 - Consulta somente leitura via Google Sheets API.
 - Selecao entre `AB1` e `AB2`.
 - Cada AB pode consultar varias abas/tabelas da mesma planilha.
-- Retorno apenas das linhas da matricula logada.
+- Retorno apenas das linhas do nome vinculado a matricula logada.
 - Comentarios por coluna sao lidos das notas das celulas do cabecalho de cada aba.
 
 ## Variaveis de ambiente
@@ -31,6 +32,9 @@ Crie as variaveis na Vercel e no ambiente local:
 - `GOOGLE_SERVICE_ACCOUNT_FILE`: caminho local para o arquivo JSON da service account.
 
 Compartilhe a planilha com o e-mail `client_email` da service account como leitor.
+
+Nas abas de notas, o sistema procura primeiro uma coluna de nome (`Nome`, `Aluno`, `Estudante`, etc.).
+Se a aba nao tiver nome, usa matricula como fallback.
 
 ## Desenvolvimento
 

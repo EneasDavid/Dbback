@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -18,13 +19,18 @@ type SessionManager struct {
 	secure bool
 }
 
+type SessionUser struct {
+	Matricula string `json:"matricula"`
+	Name      string `json:"name"`
+}
+
 func NewSessionManager(cfg Config) SessionManager {
 	return SessionManager{secret: []byte(cfg.SessionSecret), secure: cfg.CookieSecure}
 }
 
-func (s SessionManager) Set(w http.ResponseWriter, matricula string) {
+func (s SessionManager) Set(w http.ResponseWriter, user SessionUser) {
 	expires := time.Now().Add(8 * time.Hour)
-	payload := fmt.Sprintf("%s|%d", matricula, expires.Unix())
+	payload := fmt.Sprintf("%s|%s|%d", url.QueryEscape(user.Matricula), url.QueryEscape(user.Name), expires.Unix())
 	token := base64.RawURLEncoding.EncodeToString([]byte(payload)) + "." + sign(payload, s.secret)
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
@@ -51,32 +57,49 @@ func (s SessionManager) Clear(w http.ResponseWriter) {
 	})
 }
 
-func (s SessionManager) Matricula(r *http.Request) (string, bool) {
+func (s SessionManager) User(r *http.Request) (SessionUser, bool) {
 	cookie, err := r.Cookie(cookieName)
 	if err != nil || cookie.Value == "" {
-		return "", false
+		return SessionUser{}, false
 	}
 	parts := strings.Split(cookie.Value, ".")
 	if len(parts) != 2 {
-		return "", false
+		return SessionUser{}, false
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil {
-		return "", false
+		return SessionUser{}, false
 	}
 	payload := string(raw)
 	if !hmac.Equal([]byte(parts[1]), []byte(sign(payload, s.secret))) {
-		return "", false
+		return SessionUser{}, false
 	}
 	payloadParts := strings.Split(payload, "|")
-	if len(payloadParts) != 2 {
-		return "", false
+	if len(payloadParts) < 2 {
+		return SessionUser{}, false
 	}
-	expires, err := strconv.ParseInt(payloadParts[1], 10, 64)
+	expiresValue := payloadParts[len(payloadParts)-1]
+	expires, err := strconv.ParseInt(expiresValue, 10, 64)
 	if err != nil || time.Now().Unix() > expires {
-		return "", false
+		return SessionUser{}, false
 	}
-	return payloadParts[0], true
+	matricula, err := url.QueryUnescape(payloadParts[0])
+	if err != nil {
+		return SessionUser{}, false
+	}
+	name := ""
+	if len(payloadParts) >= 3 {
+		name, err = url.QueryUnescape(payloadParts[1])
+		if err != nil {
+			return SessionUser{}, false
+		}
+	}
+	return SessionUser{Matricula: matricula, Name: name}, true
+}
+
+func (s SessionManager) Matricula(r *http.Request) (string, bool) {
+	user, ok := s.User(r)
+	return user.Matricula, ok
 }
 
 func sign(payload string, secret []byte) string {

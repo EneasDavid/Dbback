@@ -13,7 +13,13 @@ type Column = {
 type GradeResult = {
   exam: string;
   matricula: string;
+  name: string;
   tables: GradeTable[];
+};
+
+type SessionUser = {
+  matricula: string;
+  name: string;
 };
 
 type GradeTable = {
@@ -38,7 +44,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 function App() {
   const [matricula, setMatricula] = useState('');
-  const [session, setSession] = useState<string | null>(null);
+  const [session, setSession] = useState<SessionUser | null>(null);
   const [exam, setExam] = useState<'ab1' | 'ab2'>('ab1');
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return window.localStorage.getItem('theme') === 'dark' ? 'dark' : 'light';
@@ -54,8 +60,8 @@ function App() {
   }, [theme]);
 
   useEffect(() => {
-    api<{ matricula: string }>('/api/me')
-      .then((me) => setSession(me.matricula))
+    api<SessionUser>('/api/me')
+      .then(setSession)
       .catch(() => setSession(null));
   }, []);
 
@@ -81,11 +87,11 @@ function App() {
     setLoading(true);
     setError('');
     try {
-      const result = await api<{ matricula: string }>('/api/login', {
+      const result = await api<SessionUser>('/api/login', {
         method: 'POST',
         body: JSON.stringify({ matricula }),
       });
-      setSession(result.matricula);
+      setSession(result);
       setMatricula('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao entrar.');
@@ -139,8 +145,8 @@ function App() {
     <main className="shell">
       <header className="topbar">
         <div>
-          <span>Matricula</span>
-          <strong>{session}</strong>
+          <span>{session.matricula}</span>
+          <strong>{session.name || 'Aluno'}</strong>
         </div>
         <button className="icon-button" type="button" onClick={handleLogout} aria-label="Sair">
           <LogOut size={18} />

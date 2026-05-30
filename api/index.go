@@ -46,17 +46,14 @@ func login(w http.ResponseWriter, r *http.Request) {
 		app.Error(w, app.NewHTTPError(400, "informe a matricula"))
 		return
 	}
-	ok, err := sheetsClient.MatriculaExists(r.Context(), matricula)
+	identity, err := sheetsClient.LoginIdentity(r.Context(), matricula)
 	if err != nil {
 		app.Error(w, err)
 		return
 	}
-	if !ok {
-		app.Error(w, app.NewHTTPError(401, "matricula nao autorizada"))
-		return
-	}
-	sessions.Set(w, matricula)
-	app.JSON(w, http.StatusOK, map[string]any{"matricula": matricula})
+	user := app.SessionUser{Matricula: identity.Matricula, Name: identity.Name}
+	sessions.Set(w, user)
+	app.JSON(w, http.StatusOK, user)
 }
 
 func logout(w http.ResponseWriter, r *http.Request) {
@@ -73,12 +70,12 @@ func me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg := app.LoadConfig()
-	matricula, ok := app.NewSessionManager(cfg).Matricula(r)
+	user, ok := app.NewSessionManager(cfg).User(r)
 	if !ok {
 		app.Error(w, app.NewHTTPError(401, "sessao expirada"))
 		return
 	}
-	app.JSON(w, http.StatusOK, map[string]string{"matricula": matricula})
+	app.JSON(w, http.StatusOK, user)
 }
 
 func grades(w http.ResponseWriter, r *http.Request) {
@@ -90,12 +87,12 @@ func grades(w http.ResponseWriter, r *http.Request) {
 		app.Error(w, err)
 		return
 	}
-	matricula, ok := sessions.Matricula(r)
+	user, ok := sessions.User(r)
 	if !ok {
 		app.Error(w, app.NewHTTPError(401, "sessao expirada"))
 		return
 	}
-	result, err := sheetsClient.GradeFor(r.Context(), r.URL.Query().Get("exam"), matricula)
+	result, err := sheetsClient.GradeFor(r.Context(), r.URL.Query().Get("exam"), user)
 	if err != nil {
 		app.Error(w, err)
 		return

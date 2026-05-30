@@ -21,6 +21,7 @@ type ColumnResult struct {
 type GradeResult struct {
 	Exam      string        `json:"exam"`
 	Matricula string        `json:"matricula"`
+	Name      string        `json:"name"`
 	Tables    []TableResult `json:"tables"`
 }
 
@@ -49,6 +50,11 @@ type sheetGrid struct {
 	rows    [][]string
 }
 
+type LoginIdentity struct {
+	Matricula string `json:"matricula"`
+	Name      string `json:"name"`
+}
+
 func NewSheetsClient(ctx context.Context, cfg Config) (*SheetsClient, error) {
 	svc, err := sheets.NewService(ctx, option.WithCredentialsJSON([]byte(cfg.ServiceJSON)), option.WithScopes(sheets.SpreadsheetsReadonlyScope))
 	if err != nil {
@@ -58,33 +64,52 @@ func NewSheetsClient(ctx context.Context, cfg Config) (*SheetsClient, error) {
 }
 
 func (c *SheetsClient) MatriculaExists(ctx context.Context, matricula string) (bool, error) {
-	grid, err := c.loadSheet(ctx, c.cfg.LoginSheet)
+	_, err := c.LoginIdentity(ctx, matricula)
 	if err != nil {
+		if httpErr, ok := err.(HTTPError); ok && httpErr.Status == 401 {
+			return false, nil
+		}
 		return false, err
 	}
-	idx := matriculaColumn(grid.headers)
-	if idx < 0 {
-		return false, NewHTTPError(500, "coluna de matricula nao encontrada na base de dados")
-	}
-	for _, row := range grid.rows {
-		if idx < len(row) && normalizeID(row[idx]) == normalizeID(matricula) {
-			return true, nil
-		}
-	}
-	return false, nil
+	return true, nil
 }
 
-func (c *SheetsClient) GradeFor(ctx context.Context, exam string, matricula string) (GradeResult, error) {
+func (c *SheetsClient) LoginIdentity(ctx context.Context, matricula string) (LoginIdentity, error) {
+	grid, err := c.loadSheet(ctx, c.cfg.LoginSheet)
+	if err != nil {
+		return LoginIdentity{}, err
+	}
+	matriculaIdx := matriculaColumn(grid.headers)
+	nameIdx := nameColumn(grid.headers)
+	if matriculaIdx < 0 {
+		return LoginIdentity{}, NewHTTPError(500, "coluna de matricula nao encontrada na base de dados")
+	}
+	if nameIdx < 0 {
+		return LoginIdentity{}, NewHTTPError(500, "coluna de nome nao encontrada na base de dados")
+	}
+	for _, row := range grid.rows {
+		if matriculaIdx < len(row) && normalizeID(row[matriculaIdx]) == normalizeID(matricula) {
+			name := valueAt(row, nameIdx)
+			if strings.TrimSpace(name) == "" {
+				return LoginIdentity{}, NewHTTPError(401, "matricula sem nome vinculado")
+			}
+			return LoginIdentity{Matricula: valueAt(row, matriculaIdx), Name: name}, nil
+		}
+	}
+	return LoginIdentity{}, NewHTTPError(401, "matricula nao autorizada")
+}
+
+func (c *SheetsClient) GradeFor(ctx context.Context, exam string, user SessionUser) (GradeResult, error) {
 	tables, err := c.tablesForExam(exam)
 	if err != nil {
 		return GradeResult{}, err
 	}
-	result := GradeResult{Exam: strings.ToUpper(strings.TrimSpace(exam)), Matricula: matricula}
+	result := GradeResult{Exam: strings.ToUpper(strings.TrimSpace(exam)), Matricula: user.Matricula, Name: user.Name}
 	for _, table := range tables {
 		if strings.TrimSpace(table.SheetName) == "" {
 			continue
 		}
-		tableResult, found, err := c.gradeTableFor(ctx, table, matricula)
+		tableResult, found, err := c.gradeTableFor(ctx, table, user)
 		if err != nil {
 			return GradeResult{}, err
 		}
@@ -98,18 +123,25 @@ func (c *SheetsClient) GradeFor(ctx context.Context, exam string, matricula stri
 	return result, nil
 }
 
-func (c *SheetsClient) gradeTableFor(ctx context.Context, table TableConfig, matricula string) (TableResult, bool, error) {
+func (c *SheetsClient) gradeTableFor(ctx context.Context, table TableConfig, user SessionUser) (TableResult, bool, error) {
 	sheetName := table.SheetName
 	grid, err := c.loadSheet(ctx, sheetName)
 	if err != nil {
 		return TableResult{}, false, err
 	}
-	idx := matriculaColumn(grid.headers)
+	idx := nameColumn(grid.headers)
+	searchValue := user.Name
+	matchByName := true
 	if idx < 0 {
-		return TableResult{}, false, NewHTTPError(500, "coluna de matricula nao encontrada na aba "+sheetName)
+		idx = matriculaColumn(grid.headers)
+		searchValue = user.Matricula
+		matchByName = false
+	}
+	if idx < 0 {
+		return TableResult{}, false, NewHTTPError(500, "coluna de nome ou matricula nao encontrada na aba "+sheetName)
 	}
 	for _, row := range grid.rows {
-		if idx >= len(row) || normalizeID(row[idx]) != normalizeID(matricula) {
+		if idx >= len(row) || !sameLookupValue(row[idx], searchValue, matchByName) {
 			continue
 		}
 		columns := make([]ColumnResult, 0, len(grid.headers))
@@ -247,12 +279,50 @@ func matriculaColumn(headers []string) int {
 	return -1
 }
 
+func nameColumn(headers []string) int {
+	candidates := []string{"nome", "aluno", "estudante", "discente", "nome completo", "nome do aluno"}
+	for idx, header := range headers {
+		normalized := normalizeHeader(header)
+		for _, candidate := range candidates {
+			if normalized == normalizeHeader(candidate) {
+				return idx
+			}
+		}
+	}
+	for idx, header := range headers {
+		normalized := normalizeHeader(header)
+		if strings.Contains(normalized, "nome") || strings.Contains(normalized, "aluno") {
+			return idx
+		}
+	}
+	return -1
+}
+
 func normalizeHeader(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	replacer := strings.NewReplacer("á", "a", "à", "a", "ã", "a", "â", "a", "é", "e", "ê", "e", "í", "i", "ó", "o", "ô", "o", "õ", "o", "ú", "u", "ç", "c")
 	return replacer.Replace(value)
 }
 
+func valueAt(row []string, idx int) string {
+	if idx < 0 || idx >= len(row) {
+		return ""
+	}
+	return strings.TrimSpace(row[idx])
+}
+
 func normalizeID(value string) string {
 	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(value), " ", ""))
+}
+
+func normalizePerson(value string) string {
+	fields := strings.Fields(normalizeHeader(value))
+	return strings.Join(fields, " ")
+}
+
+func sameLookupValue(left string, right string, person bool) bool {
+	if person {
+		return normalizePerson(left) == normalizePerson(right)
+	}
+	return normalizeID(left) == normalizeID(right)
 }
