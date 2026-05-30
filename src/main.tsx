@@ -478,7 +478,7 @@ function canPreload() {
 }
 
 function isSummaryTable(kind: string) {
-  return kind === 'summary' || kind === 'ab2summary';
+  return kind === 'summary' || kind === 'ab1summary' || kind === 'ab2summary';
 }
 
 function clearClientSession(matricula?: string) {
