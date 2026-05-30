@@ -81,9 +81,21 @@ function App() {
     if (!session) return;
     setLoading(true);
     setError('');
-    Promise.all([api<GradeResult>('/api/grades?exam=ab1'), api<GradeResult>('/api/grades?exam=ab2')])
-      .then(([ab1, ab2]) => {
-        setGrades({ ab1, ab2 });
+    Promise.allSettled([api<GradeResult>('/api/grades?exam=ab1'), api<GradeResult>('/api/grades?exam=ab2')])
+      .then(([ab1Result, ab2Result]) => {
+        const ab1 = ab1Result.status === 'fulfilled' ? normalizeGrade(ab1Result.value, 'AB1') : null;
+        const ab2 = ab2Result.status === 'fulfilled' ? normalizeGrade(ab2Result.value, 'AB2') : null;
+        setGrades({ ...(ab1 ? { ab1 } : {}), ...(ab2 ? { ab2 } : {}) });
+        if (!ab1 && !ab2) {
+          const reason = ab1Result.status === 'rejected' ? ab1Result.reason : ab2Result.status === 'rejected' ? ab2Result.reason : null;
+          setError(reason instanceof Error ? reason.message : 'Nao foi possivel carregar as notas.');
+          return;
+        }
+        if (!ab1 || !ab2) {
+          setStudentStatus(null);
+          setError('Algumas notas ainda nao estao disponiveis.');
+          return;
+        }
         const ab1Total = findScore(ab1, (table, column) => table.complete && table.kind === 'summary' && normalized(column.label).includes('nota') && normalized(column.label).includes('ab'));
         const ab2Total = findScore(ab2, (table, column) => table.complete && table.key === 'projeto' && normalized(column.label) === 'total');
         if (ab1Total === null || ab2Total === null) {
@@ -338,8 +350,8 @@ function scoreTone(column: Column) {
 }
 
 function findScore(grade: GradeResult, predicate: (table: GradeTable, column: Column) => boolean) {
-  for (const table of grade.tables) {
-    for (const column of table.columns) {
+  for (const table of grade.tables ?? []) {
+    for (const column of table.columns ?? []) {
       if (predicate(table, column)) {
         const score = parseScore(column.value);
         return score !== null && score > 0 ? score : null;
@@ -347,6 +359,19 @@ function findScore(grade: GradeResult, predicate: (table: GradeTable, column: Co
     }
   }
   return null;
+}
+
+function normalizeGrade(grade: GradeResult, fallbackExam: string): GradeResult {
+  return {
+    ...grade,
+    exam: grade.exam || fallbackExam,
+    tables: Array.isArray(grade.tables)
+      ? grade.tables.map((table) => ({
+          ...table,
+          columns: Array.isArray(table.columns) ? table.columns : [],
+        }))
+      : [],
+  };
 }
 
 function parseScore(value: string) {
