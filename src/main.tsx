@@ -6,7 +6,7 @@ import { EmptyState, ExamSwitch, GradeCard, InlineError, LoginView, SummaryTable
 import type { GradeCache, GradeResult, GradeTable, SessionUser } from './types';
 import './styles.scss';
 
-const CACHE_VERSION = 'v6';
+const CACHE_VERSION = 'v7';
 const EMPTY_STATE_MS = 5_000;
 
 type LegacyColumn = {
@@ -106,7 +106,9 @@ function App() {
         setError('');
       }
       try {
-        const result = normalizeGradeResult(await api<GradeResult>(`/api/grades?exam=${target}`));
+        const params = new URLSearchParams({ exam: target });
+        if (foreground) params.set('refresh', '1');
+        const result = normalizeGradeResult(await api<GradeResult>(`/api/grades?${params.toString()}`));
         if (cancelled) return;
         setGrades((current) => storeGradeCache(current, { [target]: result }, cacheKey, gradesRef));
       } catch (err) {
