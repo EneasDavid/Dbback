@@ -106,6 +106,7 @@ function App() {
 
   const activityTables = useMemo(() => visibleTables.filter((table) => !isSummaryTable(table.kind) && cardsFor(table).length > 0), [visibleTables]);
   const summaryTables = useMemo(() => visibleTables.filter((table) => isSummaryTable(table.kind) && cardsFor(table).length > 0), [visibleTables]);
+  const hasRenderableTables = activityTables.length + summaryTables.length > 0;
 
   const handleToggleDetail = (tableKey: string, cardKey: string) => {
     setActiveDetail((current) =>
@@ -162,7 +163,7 @@ function App() {
       {error && <InlineError message={error} />}
       {loading && <div className="loading" role="status" aria-live="polite">Carregando notas...</div>}
 
-      {visibleTables.length > 0 ? (
+      {hasRenderableTables ? (
         <section className="grade-list" id="grades" aria-live="polite">
           {activityTables.map((table) => (
             <GradeCard table={table} key={table.key} activeDetail={activeDetail} onToggleDetail={handleToggleDetail} />

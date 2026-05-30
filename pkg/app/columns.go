@@ -8,10 +8,15 @@ func includeColumn(kind string, header string) bool {
 	}
 	switch kind {
 	case "summary":
-		return summaryColumn(header)
+		return true
 	case "ab2summary":
 		normalized := normalizeHeader(header)
-		return normalized == "atividade" || normalized == "projeto" || strings.Contains(normalized, "nota ab")
+		return normalized == "atividade" ||
+			normalized == "projeto" ||
+			normalized == "total" ||
+			strings.Contains(normalized, "nota") ||
+			strings.Contains(normalized, "media") ||
+			isActivityColumn(header)
 	default:
 		return true
 	}
