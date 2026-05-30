@@ -72,6 +72,7 @@ func (c *SheetsClient) GradeFor(ctx context.Context, exam string, user SessionUs
 		}
 	}
 	addAB1ScoreSum(&result)
+	addAB2ScoreAverage(&result)
 	if len(result.Tables) == 0 {
 		return GradeResult{}, NewHTTPError(404, "matricula nao encontrada em "+strings.ToUpper(strings.TrimSpace(exam)))
 	}
@@ -300,6 +301,63 @@ func addAB1ScoreSum(result *GradeResult) {
 		result.Tables[tableIdx].Cards = cards
 		return
 	}
+}
+
+func addAB2ScoreAverage(result *GradeResult) {
+	if strings.ToUpper(strings.TrimSpace(result.Exam)) != "AB2" {
+		return
+	}
+	for _, table := range result.Tables {
+		if table.Key == "media-ab2" || table.Kind == "ab2summary" {
+			return
+		}
+	}
+
+	total := 0.0
+	hasAny := false
+	for _, table := range result.Tables {
+		if table.Kind == "summary" || table.Kind == "ab2summary" {
+			continue
+		}
+		for _, card := range table.Cards {
+			if !ab2MainScoreCard(card) {
+				continue
+			}
+			score, ok := parseScore(card.Value)
+			if !ok {
+				continue
+			}
+			total += score
+			hasAny = true
+			break
+		}
+	}
+	if !hasAny {
+		return
+	}
+	if total > 10 {
+		total = 10
+	}
+
+	result.Tables = append(result.Tables, TableResult{
+		Key:       "media-ab2",
+		Label:     "Média AB2",
+		SheetName: "Média AB2",
+		Kind:      "ab2summary",
+		Complete:  true,
+		Cards: []CardResult{
+			makeCard("media-ab2", "Média AB2", formatScore(total), "", "", nil),
+		},
+	})
+}
+
+func ab2MainScoreCard(card CardResult) bool {
+	label := normalizeHeader(card.Label)
+	return label == "nota" ||
+		label == "total" ||
+		strings.Contains(label, "projeto") ||
+		strings.Contains(label, "atividade") ||
+		strings.HasPrefix(label, "at.")
 }
 
 func (c *SheetsClient) tablesForExam(exam string) ([]TableConfig, error) {

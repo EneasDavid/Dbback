@@ -48,3 +48,46 @@ func TestAddAB1ScoreSumCapsAtTen(t *testing.T) {
 		t.Fatalf("capped sum value = %q, want 10", got)
 	}
 }
+
+func TestAddAB2ScoreAverageAddsVisibleScoreCards(t *testing.T) {
+	result := GradeResult{
+		Exam: "AB2",
+		Tables: []TableResult{
+			{Key: "at4", Kind: "activity", Cards: []CardResult{
+				makeCard("nota", "Nota", "0,65", "", "", nil),
+			}},
+			{Key: "projeto", Kind: "project", Cards: []CardResult{
+				makeCard("total", "Total", "0,45", "", "", nil),
+			}},
+		},
+	}
+
+	addAB2ScoreAverage(&result)
+
+	if len(result.Tables) != 3 {
+		t.Fatalf("tables len = %d, want 3: %#v", len(result.Tables), result.Tables)
+	}
+	summary := result.Tables[2]
+	if summary.Key != "media-ab2" || summary.Kind != "ab2summary" || summary.Label != "Média AB2" {
+		t.Fatalf("unexpected AB2 summary table: %#v", summary)
+	}
+	if len(summary.Cards) != 1 || summary.Cards[0].Label != "Média AB2" || summary.Cards[0].Value != "1,1" {
+		t.Fatalf("unexpected AB2 summary card: %#v", summary.Cards)
+	}
+}
+
+func TestAddAB2ScoreAverageCapsAtTen(t *testing.T) {
+	result := GradeResult{
+		Exam: "AB2",
+		Tables: []TableResult{
+			{Key: "at4", Kind: "activity", Cards: []CardResult{{Label: "Nota", Value: "8"}}},
+			{Key: "projeto", Kind: "project", Cards: []CardResult{{Label: "Total", Value: "4"}}},
+		},
+	}
+
+	addAB2ScoreAverage(&result)
+
+	if got := result.Tables[2].Cards[0].Value; got != "10" {
+		t.Fatalf("capped AB2 value = %q, want 10", got)
+	}
+}
