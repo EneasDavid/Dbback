@@ -312,8 +312,6 @@ func addAB1ScoreSum(result *GradeResult) {
 		if total > 10 {
 			total = 10
 		}
-		sumCard := makeCard("somatorio-ab", "Somatório AB", formatScore(total), "", "", nil)
-		cards = append(cards, sumCard)
 		sort.SliceStable(cards, func(i, j int) bool {
 			return summaryCardOrder(cards[i].Label) < summaryCardOrder(cards[j].Label)
 		})
