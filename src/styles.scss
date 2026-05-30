@@ -12,9 +12,9 @@
   --muted-strong: #354053;
   --border: rgba(36, 48, 68, 0.16);
   --border-soft: rgba(36, 48, 68, 0.1);
-  --brand: #0A84FF;
-  --brand-hover: #0064D2;
-  --brand-soft: rgba(10, 132, 255, 0.12);
+  --brand: #1C8A5A;
+  --brand-hover: #147A52;
+  --brand-soft: rgba(28, 138, 90, 0.12);
   --accent: #34C759;
   --accent-soft: rgba(52, 199, 89, 0.12);
   --accent-at4: #1C8A5A;
@@ -26,14 +26,14 @@
   --success-bg: rgba(52, 199, 89, 0.12);
   --warning: #A86100;
   --warning-bg: rgba(255, 149, 0, 0.14);
-  --score-badge-bg: rgba(10, 132, 255, 0.11);
-  --score-badge-text: #0059BA;
-  --score-badge-border: rgba(10, 132, 255, 0.18);
+  --score-badge-bg: rgba(28, 138, 90, 0.11);
+  --score-badge-text: #0F6D45;
+  --score-badge-border: rgba(28, 138, 90, 0.18);
   --glass-line: rgba(255, 255, 255, 0.68);
   --shadow: 0 24px 70px rgba(33, 43, 63, 0.16);
   --shadow-soft: 0 14px 34px rgba(33, 43, 63, 0.1);
   --inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.72);
-  --focus: 0 0 0 4px rgba(10, 132, 255, 0.22);
+  --focus: 0 0 0 4px rgba(28, 138, 90, 0.22);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -54,13 +54,13 @@
   --muted-strong: #d6deeb;
   --border: rgba(191, 203, 222, 0.22);
   --border-soft: rgba(191, 203, 222, 0.13);
-  --brand: #64B5FF;
-  --brand-hover: #8AC7FF;
-  --brand-soft: rgba(100, 181, 255, 0.16);
+  --brand: #5DE18A;
+  --brand-hover: #86EFAC;
+  --brand-soft: rgba(93, 225, 138, 0.16);
   --accent: #5DE18A;
   --accent-soft: rgba(93, 225, 138, 0.14);
   --accent-at4: #5DE18A;
-  --brand-contrast: #ffffff;
+  --brand-contrast: #052e1a;
   --danger: #ff9b95;
   --danger-bg: rgba(127, 29, 29, 0.38);
   --danger-border: rgba(248, 113, 113, 0.42);
@@ -68,14 +68,14 @@
   --success-bg: rgba(20, 83, 45, 0.42);
   --warning: #fde68a;
   --warning-bg: rgba(113, 63, 18, 0.42);
-  --score-badge-bg: rgba(226, 232, 240, 0.1);
-  --score-badge-text: #e5edf8;
-  --score-badge-border: rgba(226, 232, 240, 0.16);
+  --score-badge-bg: rgba(93, 225, 138, 0.12);
+  --score-badge-text: #d7ffe3;
+  --score-badge-border: rgba(93, 225, 138, 0.22);
   --glass-line: rgba(255, 255, 255, 0.1);
   --shadow: 0 28px 70px rgba(0, 0, 0, 0.34);
   --shadow-soft: 0 16px 38px rgba(0, 0, 0, 0.28);
   --inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  --focus: 0 0 0 4px rgba(100, 181, 255, 0.3);
+  --focus: 0 0 0 4px rgba(93, 225, 138, 0.3);
 }
 
 * {

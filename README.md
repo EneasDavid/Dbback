@@ -89,6 +89,26 @@ Alternativas para credenciais:
 
 Compartilhe a planilha com o `client_email` da service account como **Visualizador**.
 
+### Vercel
+
+No Vercel, nao use `GOOGLE_SERVICE_ACCOUNT_FILE`: arquivos `.json` locais sao ignorados pelo Git e nao chegam ao deploy. Gere a credencial em base64 e cadastre como variável do projeto:
+
+```bash
+base64 < service-account.local.json | tr -d '\n'
+```
+
+Configure no painel do Vercel, em Production e Preview quando precisar testar:
+
+```env
+GOOGLE_SERVICE_ACCOUNT_JSON_BASE64=<saida-do-comando-base64>
+GOOGLE_SHEET_ID=<id-da-planilha>
+LOGIN_SHEET_NAME=Base de dados
+SESSION_SECRET=<chave-forte>
+COOKIE_SECURE=true
+```
+
+Deixe `VITE_API_BASE` vazio quando o frontend e `/api/*` estiverem no mesmo projeto Vercel.
+
 ## Desenvolvimento
 
 ```bash
