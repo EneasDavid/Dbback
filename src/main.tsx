@@ -197,7 +197,6 @@ function App() {
 
   return (
     <main className="shell">
-      <a className="skip-link" href="#grades">Ir para notas</a>
       <Topbar session={session} theme={theme} setTheme={setTheme} onLogout={handleLogout} />
       <ExamSwitch exam={exam} setExam={setExam} />
 

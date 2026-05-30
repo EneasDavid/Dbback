@@ -121,27 +121,51 @@ export function GradeCard({
 }
 
 export function SummaryTable({ table }: { table: GradeTable }) {
+  const cards = cardsFor(table);
+  const averageCards = cards.filter(isAverageCard);
+  const gradeCards = cards.filter((card) => !isAverageCard(card));
+
   return (
     <article className="grade-table summary">
       <header>
         <h2>{table.label}</h2>
       </header>
-      <div className="summary-grid">
-        {cardsFor(table).map((card) => (
-          <section className={`summary-score ${summaryHighlight(card) ? 'highlight' : ''} ${card.tone || ''}`} key={`${table.key}-${card.key}`}>
-            <div className="summary-score-title">
-              <span>{card.label}</span>
-            </div>
-            <strong>{card.displayValue}</strong>
-            {card.comment && (
-              <p>
-                <MessageSquareText size={15} />
-                {card.comment}
-              </p>
-            )}
-          </section>
-        ))}
-      </div>
+      {averageCards.length > 0 && (
+        <div className="summary-average-stack" aria-label="Média">
+          {averageCards.map((card) => (
+            <section className={`summary-average ${card.tone || ''}`} key={`${table.key}-${card.key}`}>
+              <div>
+                <span>{card.label}</span>
+                <strong>{card.displayValue}</strong>
+              </div>
+              {card.comment && (
+                <p>
+                  <MessageSquareText size={15} />
+                  {card.comment}
+                </p>
+              )}
+            </section>
+          ))}
+        </div>
+      )}
+      {gradeCards.length > 0 && (
+        <div className="summary-grid">
+          {gradeCards.map((card) => (
+            <section className={`summary-score ${summaryHighlight(card) ? 'highlight' : ''} ${card.tone || ''}`} key={`${table.key}-${card.key}`}>
+              <div className="summary-score-title">
+                <span>{card.label}</span>
+              </div>
+              <strong>{card.displayValue}</strong>
+              {card.comment && (
+                <p>
+                  <MessageSquareText size={15} />
+                  {card.comment}
+                </p>
+              )}
+            </section>
+          ))}
+        </div>
+      )}
     </article>
   );
 }
@@ -270,7 +294,12 @@ function DetailItem({ item }: { item: GradeDetail }) {
 
 function summaryHighlight(card: GradeCardData) {
   const label = card.label.toLowerCase();
-  return label.includes('media') || label.includes('média') || label.includes('total');
+  return label.includes('total');
+}
+
+function isAverageCard(card: GradeCardData) {
+  const label = card.label.toLowerCase();
+  return label.includes('media') || label.includes('média');
 }
 
 function cardsFor(table: GradeTable) {
