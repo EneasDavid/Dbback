@@ -69,8 +69,15 @@ function App() {
   }, [theme]);
 
   useEffect(() => {
-    api<SessionUser>('/api/me')
-      .then(setSession)
+    api<SessionUser | null>('/api/me')
+      .then((user) => {
+        if (user?.matricula) {
+          setSession(user);
+          return;
+        }
+        clearClientSession();
+        setSession(null);
+      })
       .catch(() => {
         clearClientSession();
         setSession(null);

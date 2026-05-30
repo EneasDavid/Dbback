@@ -31,6 +31,9 @@
   --score-badge-border: rgba(28, 138, 90, 0.18);
   --progress-track: rgba(28, 138, 90, 0.12);
   --progress-track-border: rgba(28, 138, 90, 0.08);
+  --pending-text: #657085;
+  --pending-bg: rgba(101, 112, 133, 0.1);
+  --pending-border: rgba(101, 112, 133, 0.18);
   --glass-line: rgba(255, 255, 255, 0.68);
   --shadow: 0 24px 70px rgba(33, 43, 63, 0.16);
   --shadow-soft: 0 14px 34px rgba(33, 43, 63, 0.1);
@@ -75,6 +78,9 @@
   --score-badge-border: rgba(155, 207, 176, 0.24);
   --progress-track: rgba(229, 236, 232, 0.18);
   --progress-track-border: rgba(229, 236, 232, 0.14);
+  --pending-text: #ffffff;
+  --pending-bg: rgba(238, 243, 242, 0.1);
+  --pending-border: rgba(238, 243, 242, 0.22);
   --glass-line: rgba(255, 255, 255, 0.12);
   --shadow: 0 28px 70px rgba(6, 10, 18, 0.28);
   --shadow-soft: 0 16px 38px rgba(6, 10, 18, 0.22);
@@ -674,21 +680,33 @@ input:focus-visible {
   background: var(--success-bg);
 }
 
+.grade-row.score-pending {
+  margin: 8px 0 0;
+  padding: 0 10px;
+  border-radius: 18px;
+  color: var(--pending-text);
+  background: var(--pending-bg);
+}
+
 .grade-row.score-danger strong,
 .grade-row.score-warning strong,
 .grade-row.score-success strong,
+.grade-row.score-pending strong,
 .summary-score.score-danger strong,
 .summary-score.score-warning strong,
 .summary-score.score-success strong,
+.summary-score.score-pending strong,
 .summary-average.score-danger strong,
 .summary-average.score-warning strong,
-.summary-average.score-success strong {
+.summary-average.score-success strong,
+.summary-average.score-pending strong {
   color: currentColor;
 }
 
 .summary-score.score-danger,
 .summary-score.score-warning,
-.summary-score.score-success {
+.summary-score.score-success,
+.summary-score.score-pending {
   margin: 0;
   padding: 16px;
   border-radius: 22px;
@@ -712,9 +730,16 @@ input:focus-visible {
   background: var(--success-bg);
 }
 
+.summary-score.score-pending {
+  color: var(--pending-text);
+  border-color: var(--pending-border);
+  background: var(--pending-bg);
+}
+
 .summary-average.score-danger,
 .summary-average.score-warning,
-.summary-average.score-success {
+.summary-average.score-success,
+.summary-average.score-pending {
   color: currentColor;
 }
 
@@ -734,6 +759,12 @@ input:focus-visible {
   color: var(--success);
   border-color: color-mix(in srgb, var(--success) 32%, var(--border-soft));
   background: linear-gradient(145deg, color-mix(in srgb, var(--success-bg) 72%, var(--panel)), color-mix(in srgb, var(--panel) 86%, transparent));
+}
+
+.summary-average.score-pending {
+  color: var(--pending-text);
+  border-color: var(--pending-border);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--pending-bg) 72%, var(--panel)), color-mix(in srgb, var(--panel) 86%, transparent));
 }
 
 .grade-row p {
@@ -810,13 +841,14 @@ input:focus-visible {
 }
 
 .detail-item.score-pending {
-  background: color-mix(in srgb, var(--panel-soft) 72%, var(--panel));
+  border-color: var(--pending-border);
+  background: color-mix(in srgb, var(--pending-bg) 58%, var(--panel));
 }
 
 .detail-item.score-pending .badge {
-  color: var(--muted-strong);
-  background: color-mix(in srgb, var(--panel-soft) 78%, transparent);
-  border-color: var(--border);
+  color: var(--pending-text);
+  background: color-mix(in srgb, var(--pending-bg) 84%, transparent);
+  border-color: var(--pending-border);
 }
 
 .detail-item-row {
@@ -931,7 +963,7 @@ input:focus-visible {
 }
 
 .detail-item.score-pending .detail-progress-fill {
-  background: color-mix(in srgb, var(--muted) 42%, transparent);
+  background: color-mix(in srgb, var(--pending-text) 44%, transparent);
 }
 
 .comment-bubble {

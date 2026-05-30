@@ -138,6 +138,7 @@ func (g *sheetGrid) noteAuthorAtAbsolute(rowIdx int, colIdx int) string {
 }
 
 func (g *sheetGrid) setNoteAtAbsolute(rowIdx int, colIdx int, comment string, author string) {
+	author = authorDisplayName(author)
 	if rowIdx == g.headerRow {
 		g.notes = setAt(g.notes, colIdx, comment)
 		g.noteAuthors = setAt(g.noteAuthors, colIdx, author)

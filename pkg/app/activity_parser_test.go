@@ -71,18 +71,18 @@ func TestActivitySubtopicCommentsComeFromSheetsNotes(t *testing.T) {
 	}
 }
 
-func TestProjectPayloadHidesIdentityColumnsAndKeepsDetails(t *testing.T) {
+func TestProjectPayloadKeepsAllSubtopicsInDropdown(t *testing.T) {
 	grid := &sheetGrid{
-		headers: []string{"Nome", "Matricula", "Total", "CRUD"},
+		headers: []string{"Nome", "Matricula", "Total", "CRUD", "Referências", "Discussão em aula", "Funcionalidades gerais", "Apresentação do projeto"},
 		notes:   []string{"", "", "comentario total", "comentario crud"},
 		rows: [][]string{
-			{"Alice", "123", "8", "1"},
+			{"Alice", "123", "8", "1", "0,5", "0,5", "0,8", "1"},
 		},
 		rowNotes: [][]string{
-			{"", "", "", ""},
+			{"", "", "", "", "", "", "", ""},
 		},
 		rowNoteAuthors: [][]string{
-			{"", "", "", ""},
+			{"", "", "", "", "", "", "", ""},
 		},
 	}
 
@@ -104,8 +104,26 @@ func TestProjectPayloadHidesIdentityColumnsAndKeepsDetails(t *testing.T) {
 	if table.Cards[0].Label != "Total" {
 		t.Fatalf("card label = %q, want Total", table.Cards[0].Label)
 	}
-	if len(table.Cards[0].Details) != 1 || table.Cards[0].Details[0].Label != "CRUD" {
-		t.Fatalf("details should only include CRUD, got %#v", table.Cards[0].Details)
+	details := table.Cards[0].Details
+	if len(details) != 5 {
+		t.Fatalf("details len = %d, want 5: %#v", len(details), details)
+	}
+	wantLabels := map[string]bool{
+		"CRUD":                   false,
+		"Referências":            false,
+		"Discussão em aula":      false,
+		"Funcionalidades gerais": false,
+		"Apresentação":           false,
+	}
+	for _, detail := range details {
+		if _, ok := wantLabels[detail.Label]; ok {
+			wantLabels[detail.Label] = true
+		}
+	}
+	for label, found := range wantLabels {
+		if !found {
+			t.Fatalf("missing project detail %q in %#v", label, details)
+		}
 	}
 }
 

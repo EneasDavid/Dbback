@@ -103,6 +103,41 @@ func columnDetails(cells []studentCell) []DetailResult {
 	return details
 }
 
+func projectDetails(cells []studentCell) []DetailResult {
+	details := make([]DetailResult, 0, len(cells))
+	for _, cell := range cells {
+		if !projectDetailColumn(cell.Header) {
+			continue
+		}
+		maximum := inferMaxForLabel(cell.Header)
+		if maximum <= 0 {
+			maximum = 1
+		}
+		obtained, hasObtained := parseScore(cell.Value)
+		pending := strings.TrimSpace(cell.Value) == ""
+		ratio := 0.0
+		if !pending && hasObtained && maximum > 0 {
+			ratio = math.Min((obtained/maximum)*100, 100)
+		}
+		details = append(details, DetailResult{
+			Key:           cell.Key,
+			Label:         cell.Label,
+			Value:         cell.Value,
+			Max:           maximum,
+			DisplayScore:  detailDisplayScore(cell.Value, maximum, pending),
+			Ratio:         ratio,
+			Pending:       pending,
+			Tone:          scoreToneFromRatio(ratio, pending),
+			Comment:       cell.Comment,
+			CommentAuthor: cell.CommentAuthor,
+		})
+	}
+	sort.SliceStable(details, func(i, j int) bool {
+		return compareDetailLabels(details[i].Label, details[j].Label) < 0
+	})
+	return details
+}
+
 func detailDisplayScore(value string, maximum float64, pending bool) string {
 	if pending {
 		return "Não corrigido ainda"
@@ -305,6 +340,23 @@ func shouldShowMainCard(header string) bool {
 		strings.Contains(label, "projeto") ||
 		label == "ab1" ||
 		label == "ab2"
+}
+
+func projectMainColumn(header string) bool {
+	if !shouldShowColumn(header) {
+		return false
+	}
+	label := normalizeHeader(header)
+	return label == "nota" ||
+		label == "total" ||
+		strings.Contains(label, "media") ||
+		label == "projeto" ||
+		strings.HasPrefix(label, "projeto ab") ||
+		strings.HasPrefix(label, "nota projeto")
+}
+
+func projectDetailColumn(header string) bool {
+	return shouldShowColumn(header) && !projectMainColumn(header)
 }
 
 func isDetailOnlyColumn(header string) bool {

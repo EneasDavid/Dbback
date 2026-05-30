@@ -168,6 +168,9 @@ func cardsForStudentCells(table TableConfig, cells []studentCell) []CardResult {
 		})
 		return cards
 	}
+	if table.Kind == "project" {
+		return projectCards(table, cells)
+	}
 
 	details := columnDetails(cells)
 	cards := make([]CardResult, 0, len(cells))
@@ -184,6 +187,19 @@ func cardsForStudentCells(table TableConfig, cells []studentCell) []CardResult {
 		cards = fallbackCards(cells)
 	}
 	return cards
+}
+
+func projectCards(table TableConfig, cells []studentCell) []CardResult {
+	details := projectDetails(cells)
+	for _, cell := range cells {
+		if projectMainColumn(cell.Header) && hasVisibleCellData(cell) {
+			return []CardResult{makeCard(cell.Key, cardLabel(cell.Header), cell.Value, cell.Comment, cell.CommentAuthor, details)}
+		}
+	}
+	if len(details) > 0 {
+		return []CardResult{makeCard("projeto", table.Label, "", "", "", details)}
+	}
+	return nil
 }
 
 func shouldShowSummaryCard(cell studentCell) bool {

@@ -132,7 +132,7 @@ func parseXLSXComments(data []byte, sheetNames []string) (map[string]map[string]
 			if result[sheetName] == nil {
 				result[sheetName] = map[string]cellComment{}
 			}
-			result[sheetName][comment.Cell] = cellComment{Text: text, Author: strings.TrimSpace(comment.Author)}
+			result[sheetName][comment.Cell] = cellComment{Text: text, Author: authorDisplayName(comment.Author)}
 		}
 	}
 	return result, nil

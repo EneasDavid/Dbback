@@ -2,9 +2,18 @@ package app
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 )
+
+var nicknamePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`\(([^()]+)\)\s*$`),
+	regexp.MustCompile(`"([^"]+)"\s*$`),
+	regexp.MustCompile(`'([^']+)'\s*$`),
+	regexp.MustCompile(`“([^”]+)”\s*$`),
+	regexp.MustCompile(`‘([^’]+)’\s*$`),
+}
 
 func normalizeHeader(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
@@ -53,6 +62,36 @@ func noteAt(notes []string, idx int) string {
 		return ""
 	}
 	return strings.TrimSpace(notes[idx])
+}
+
+func authorDisplayName(author string) string {
+	author = strings.TrimSpace(author)
+	if author == "" {
+		return ""
+	}
+	for _, pattern := range nicknamePatterns {
+		match := pattern.FindStringSubmatch(author)
+		if len(match) < 2 {
+			continue
+		}
+		nickname := strings.TrimSpace(match[1])
+		if validNickname(nickname) {
+			return nickname
+		}
+	}
+	return author
+}
+
+func validNickname(value string) bool {
+	if value == "" || strings.Contains(value, "@") {
+		return false
+	}
+	normalized := normalizeHeader(value)
+	return normalized != "ele/dele" &&
+		normalized != "ela/dela" &&
+		normalized != "they/them" &&
+		normalized != "he/him" &&
+		normalized != "she/her"
 }
 
 func valueAt(row []string, idx int) string {

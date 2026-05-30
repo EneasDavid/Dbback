@@ -72,7 +72,7 @@ func me(w http.ResponseWriter, r *http.Request) {
 	cfg := app.LoadConfig()
 	user, ok := app.NewSessionManager(cfg).User(r)
 	if !ok {
-		app.Error(w, app.NewHTTPError(401, "sessao expirada"))
+		app.JSON(w, http.StatusOK, nil)
 		return
 	}
 	app.JSON(w, http.StatusOK, user)
