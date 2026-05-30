@@ -187,7 +187,9 @@ func cardsForStudentCells(table TableConfig, cells []studentCell) []CardResult {
 }
 
 func shouldShowSummaryCard(cell studentCell) bool {
-	return shouldShowColumn(cell.Header) && hasVisibleCellData(cell)
+	return shouldShowColumn(cell.Header) &&
+		hasVisibleCellData(cell) &&
+		(isProofColumn(cell.Header) || isAverageColumn(cell.Header))
 }
 
 func fallbackCards(cells []studentCell) []CardResult {

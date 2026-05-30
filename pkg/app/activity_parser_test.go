@@ -1,6 +1,10 @@
 package app
 
-import "testing"
+import (
+	"testing"
+
+	"google.golang.org/api/sheets/v4"
+)
 
 func TestActivityCommentPrecedence(t *testing.T) {
 	tests := []struct {
@@ -36,6 +40,34 @@ func TestActivityCommentPrecedence(t *testing.T) {
 				t.Fatalf("comment = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestActivitySubtopicCommentsComeFromSheetsNotes(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Aluno", ""), cellData("Critério", "")),
+		rowData(cellData("Subtópico", ""), cellData("Modelagem", "comentario do subtopico")),
+		rowData(cellData("Nota maxima", ""), cellData("2", "")),
+		rowData(cellData("Alice", ""), cellData("1,5", "")),
+	}, nil)
+
+	table, found, err := parseActivityRubric(grid, TableConfig{
+		Key:       "at1",
+		Label:     "AT. 1",
+		SheetName: "AT. 1",
+		Kind:      "activity",
+	}, SessionUser{Name: "Alice", Matricula: "123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("student row was not found")
+	}
+	if len(table.Cards) != 1 || len(table.Cards[0].Details) != 1 {
+		t.Fatalf("unexpected cards/details: %#v", table.Cards)
+	}
+	if got := table.Cards[0].Details[0].Comment; got != "comentario do subtopico" {
+		t.Fatalf("detail comment = %q, want Sheets note", got)
 	}
 }
 
@@ -79,7 +111,7 @@ func TestProjectPayloadHidesIdentityColumnsAndKeepsDetails(t *testing.T) {
 
 func TestSummaryPayloadKeepsCommonGradeColumns(t *testing.T) {
 	grid := &sheetGrid{
-		headers: []string{"Nome", "Matricula", "Nota", "Média"},
+		headers: []string{"Nome", "Matricula", "Prova", "Média"},
 		rows: [][]string{
 			{"Alice", "123", "8", "Não corrigida ainda"},
 		},
@@ -106,22 +138,22 @@ func TestSummaryPayloadKeepsCommonGradeColumns(t *testing.T) {
 	if len(table.Cards) != 1 {
 		t.Fatalf("cards len = %d, want 1: %#v", len(table.Cards), table.Cards)
 	}
-	if table.Cards[0].Label != "Nota" || table.Cards[0].Value != "8" {
+	if table.Cards[0].Label != "Prova AB" || table.Cards[0].Value != "8" {
 		t.Fatalf("unexpected summary card: %#v", table.Cards[0])
 	}
 }
 
-func TestSummaryPayloadKeepsUnexpectedGradeHeaders(t *testing.T) {
+func TestSummaryPayloadHidesActivityColumns(t *testing.T) {
 	grid := &sheetGrid{
-		headers: []string{"Nome", "Matricula", "Banco de Dados"},
+		headers: []string{"Nome", "Matricula", "Pesquisa", "Artigo", "Lista", "AT. Total Atividades", "Prova", "Média"},
 		rows: [][]string{
-			{"Alice", "123", "9,5"},
+			{"Alice", "123", "0,98", "0,85", "0,65", "2,48", "7", "8"},
 		},
 		rowNotes: [][]string{
-			{"", "", ""},
+			{"", "", "", "", "", "", "", ""},
 		},
 		rowNoteAuthors: [][]string{
-			{"", "", ""},
+			{"", "", "", "", "", "", "", ""},
 		},
 	}
 
@@ -137,11 +169,11 @@ func TestSummaryPayloadKeepsUnexpectedGradeHeaders(t *testing.T) {
 	if !found {
 		t.Fatal("student row was not found")
 	}
-	if len(table.Cards) != 1 {
-		t.Fatalf("cards len = %d, want 1: %#v", len(table.Cards), table.Cards)
+	if len(table.Cards) != 2 {
+		t.Fatalf("cards len = %d, want 2: %#v", len(table.Cards), table.Cards)
 	}
-	if table.Cards[0].Label != "Banco de Dados" || table.Cards[0].Value != "9,5" {
-		t.Fatalf("unexpected fallback summary card: %#v", table.Cards[0])
+	if table.Cards[0].Label != "Prova AB" || table.Cards[1].Label != "Média AB" {
+		t.Fatalf("unexpected summary cards: %#v", table.Cards)
 	}
 }
 

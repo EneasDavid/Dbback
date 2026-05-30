@@ -6,7 +6,7 @@ import { EmptyState, ExamSwitch, GradeCard, InlineError, LoginView, SummaryTable
 import type { GradeCache, GradeResult, GradeTable, SessionUser } from './types';
 import './styles.scss';
 
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5';
 const EMPTY_STATE_MS = 5_000;
 
 type LegacyColumn = {
@@ -269,7 +269,10 @@ function normalizeGradeTable(table: LegacyGradeTable): GradeTable {
   const cards = Array.isArray(table.cards) && table.cards.length > 0 ? table.cards : legacyCards(table);
   return {
     ...table,
-    cards: cards.filter(Boolean).filter((card) => !isPendingAverageCard(table, card)),
+    cards: cards
+      .filter(Boolean)
+      .filter((card) => !isPendingAverageCard(table, card))
+      .filter((card) => !isSummaryTable(table.kind) || isVisibleSummaryCard(card)),
   };
 }
 
@@ -345,6 +348,11 @@ function isPendingAverageCard(table: GradeTable, card: { label?: string; display
   const label = (card.label || '').toLowerCase();
   const value = `${card.displayValue || card.value || ''}`.toLowerCase();
   return (label.includes('média') || label.includes('media')) && value.includes('não corrigida');
+}
+
+function isVisibleSummaryCard(card: { label?: string }) {
+  const label = normalized(card.label || '');
+  return label.includes('prova') || label.includes('media');
 }
 
 function isVisibleLegacyColumn(column: LegacyColumn) {

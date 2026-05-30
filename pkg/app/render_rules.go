@@ -173,9 +173,9 @@ func summaryCardLabel(header string) string {
 	label := normalizeHeader(header)
 	switch {
 	case strings.Contains(label, "prova"):
-		return "Nota da prova"
+		return "Prova AB"
 	case isAverageColumn(header):
-		return "Média da AB"
+		return "Média AB"
 	case isActivityColumn(header):
 		return activityLabel(header)
 	case label == "total":
@@ -327,6 +327,11 @@ func isActivityColumn(header string) bool {
 func isAverageColumn(header string) bool {
 	label := normalizeHeader(header)
 	return strings.Contains(label, "media")
+}
+
+func isProofColumn(header string) bool {
+	label := normalizeHeader(header)
+	return strings.Contains(label, "prova")
 }
 
 func isGradeLabel(label string) bool {
