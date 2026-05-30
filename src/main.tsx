@@ -208,6 +208,8 @@ function App() {
 
       {error && <InlineError message={error} />}
 
+      {studentStatus && <StatusBanner status={studentStatus} />}
+
       {loading && <div className="loading">Carregando notas...</div>}
 
       {!loading && visibleColumns.length > 0 && (
@@ -248,7 +250,7 @@ function GradeCard({
           <h2>{table.label}</h2>
         </div>
       </header>
-      {table.columns.filter((column) => shouldShowMainColumn(column, table)).map((column) => (
+      {table.columns.filter((column) => shouldShowMainColumn(column)).map((column) => (
         <div key={`${table.key}-${column.key}`}>
           <GradeRow
             column={column}
@@ -274,20 +276,34 @@ function GradeCard({
 }
 
 function SummaryTable({ table }: { table: GradeTable }) {
+  const summaryColumns = table.columns.filter(shouldShowMainColumn);
+  const sortedColumns = [...summaryColumns].sort((a, b) => {
+    const labelA = normalized(a.label);
+    const labelB = normalized(b.label);
+
+    if (labelA.includes('prova') && !labelB.includes('prova')) return -1;
+    if (!labelA.includes('prova') && labelB.includes('prova')) return 1;
+    if (isAverageColumn(a) && !isAverageColumn(b)) return -1;
+    if (!isAverageColumn(a) && isAverageColumn(b)) return 1;
+    if (isActivityColumn(a) && !isActivityColumn(b)) return -1;
+    if (!isActivityColumn(a) && isActivityColumn(b)) return 1;
+    return labelA.localeCompare(labelB, 'pt-BR', { numeric: true });
+  });
+
   return (
     <article className="grade-table summary">
       <header>
         <h2>{table.label}</h2>
       </header>
       <div className="summary-grid">
-        {table.columns.filter(shouldShowColumn).map((column) => {
+        {sortedColumns.map((column) => {
           const isAverage = isAverageColumn(column);
           return (
             <section
               className={`summary-score ${isAverage ? 'highlight' : ''} ${isAverage ? scoreTone(column) : ''}`}
               key={`${table.key}-${column.key}`}
             >
-              <span>{normalized(column.label).includes('prova') ? 'Nota da prova' : isAverage ? 'Média da AB' : column.label}</span>
+              <span>{getSummaryLabel(column)}</span>
               <strong>{displayValue(column)}</strong>
               {column.comment && (
                 <p>
@@ -323,7 +339,7 @@ function GradeRow({
         disabled={!clickable}
       >
         <div>
-          <span>{column.label}</span>
+          <span>{getColumnLabel(column)}</span>
           <strong>{displayValue(column)}</strong>
         </div>
         {clickable && <ChevronRight size={18} className={expanded ? 'rotated' : ''} />}
@@ -339,15 +355,16 @@ function GradeRow({
 }
 
 function GradeDetailPanel({ table, mainColumn }: { table: GradeTable; mainColumn: Column }) {
-  const compositionItems = table.columns.filter(
-    (item) => shouldShowColumn(item) && item.key !== mainColumn.key && !isAverageColumn(item),
-  );
+  const compositionItems = table.columns
+    .filter((item) => shouldShowColumn(item) && !shouldShowMainColumn(item) && item.key !== mainColumn.key && !isAverageColumn(item))
+    .sort((a, b) => compareDetailItemOrder(a, b));
 
   const parsedItems = compositionItems.map((item) => {
     const obtained = parseScore(item.value);
     const maxFromLabel = parseMaxFromLabel(item.label);
     const maxFromValue = parseMaxFromValue(item.value);
-    const max = maxFromLabel ?? maxFromValue ?? 1;
+    const inferred = inferMaxForLabel(item.label);
+    const max = maxFromLabel ?? maxFromValue ?? inferred ?? 1;
     const ratio = obtained !== null && max > 0 ? Math.min((obtained / max) * 100, 100) : 0;
 
     return {
@@ -377,7 +394,7 @@ function GradeDetailPanel({ table, mainColumn }: { table: GradeTable; mainColumn
           <article className="detail-item" key={item.key}>
             <div className="detail-item-row">
               <div>
-                <strong>{item.label}</strong>
+                <strong>{getColumnLabel(item)}</strong>
                 <span>{item.value || '-'}</span>
               </div>
               {item.max ? (
@@ -432,11 +449,59 @@ function InlineError({ message }: { message: string }) {
 
 function shouldShowColumn(column: Column) {
   const label = normalized(column.label);
-  return label !== '' && label !== 'grupo' && !label.includes('matricula') && !label.includes('nome do aluno') && label !== 'nome' && label !== 'aluno';
+  return (
+    label !== '' &&
+    label !== 'grupo' &&
+    label !== 'equipe' &&
+    !label.includes('matricula') &&
+    !label.includes('nome do aluno') &&
+    label !== 'nome' &&
+    label !== 'aluno'
+  );
+}
+
+function isDetailOnlyColumn(column: Column) {
+  const label = normalized(column.label);
+  return (
+    label.startsWith('semana') ||
+    label === 'sgbd' ||
+    label === 'dataset' ||
+    label === 'crud' ||
+    label.includes('apresentacao') ||
+    label.includes('organizacao') ||
+    label.includes('organização') ||
+    label.includes('q.') ||
+    label.startsWith('q')
+  );
+}
+
+function isActivityColumn(column: Column) {
+  const label = normalized(column.label);
+  return (
+    /^at\.?\s*\d+/i.test(label) ||
+    /atividade/.test(label) ||
+    /at\.?\s*4/.test(label)
+  );
+}
+
+function shouldShowMainColumn(column: Column) {
+  if (!shouldShowColumn(column)) return false;
+  if (isDetailOnlyColumn(column)) return false;
+  const label = normalized(column.label);
+  return (
+    label === 'nota' ||
+    label.includes('prova') ||
+    label === 'total' ||
+    label.includes('média') ||
+    isActivityColumn(column) ||
+    label.includes('projeto') ||
+    label === 'ab1' ||
+    label === 'ab2'
+  );
 }
 
 function shouldShowTable(table: GradeTable) {
-  return table.kind === 'summary' || table.columns.some(shouldShowColumn) || feedbackComments(table).length > 0;
+  return table.kind === 'summary' || table.columns.some(shouldShowMainColumn) || feedbackComments(table).length > 0;
 }
 
 function feedbackComments(table: GradeTable) {
@@ -496,10 +561,75 @@ function displayValue(column: Column) {
   if (isGradeColumn(column)) {
     const score = parseScore(column.value);
     if (score === null) {
-      return 'Não corrigida ainda';
+      return 'não corrigido';
     }
   }
-  return column.value || '-';
+  return column.value || 'não corrigido';
+}
+
+function getSummaryLabel(column: Column) {
+  const label = normalized(column.label);
+  if (label.includes('prova')) return 'Nota da prova';
+  if (isAverageColumn(column)) return 'Média da AB';
+  if (isActivityColumn(column)) return label.toUpperCase().replace(/at\.?\s*/, 'AT. ');
+  if (label === 'total') return 'Total';
+  if (label.includes('projeto')) return 'Projeto';
+  return humanizeLabel(column.label);
+}
+
+function getColumnLabel(column: Column) {
+  const label = normalized(column.label);
+  if (label.startsWith('semana')) return humanizeLabel(column.label);
+  if (label.startsWith('q.') || label.startsWith('q')) return label.toUpperCase().replace('Q.', 'Q.').replace('Q', 'Q.');
+  if (label === 'sgbd') return 'SGBD';
+  if (label === 'dataset') return 'Dataset';
+  if (label === 'crud') return 'CRUD';
+  if (label.includes('apresentacao')) return 'Apresentação';
+  if (label.includes('organizacao') || label.includes('organização')) return 'Organização';
+  if (label.includes('referencias')) return 'Referências';
+  if (label.includes('discussao')) return 'Discussão em aula';
+  return humanizeLabel(column.label);
+}
+
+function humanizeLabel(label: string) {
+  return label
+    .replace(/\b(at\.?\s*\d+)\b/i, (match) => match.toUpperCase().replace('AT', 'AT.'))
+    .replace(/\bq\.?\s*(\d+)\b/i, (match) => match.toUpperCase().replace('Q', 'Q.'))
+    .replace(/\bsgbd\b/i, 'SGBD')
+    .replace(/\bdataset\b/i, 'Dataset')
+    .replace(/\bcrud\b/i, 'CRUD')
+    .replace(/\bapresentacao\b/i, 'Apresentação')
+    .replace(/\borganizacao\b/i, 'Organização')
+    .replace(/\breferencias\b/i, 'Referências')
+    .replace(/\bdiscussao\b/i, 'Discussão')
+    .replace(/\bnota\b/i, 'Nota')
+    .replace(/\bm[ée]dia\b/i, 'Média')
+    .replace(/\btotal\b/i, 'Total')
+    .replace(/\bsemana\b/i, 'Semana')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function StatusBanner({ status }: { status: StudentStatus }) {
+  return (
+    <section className={`status-banner ${status.approved ? 'approved' : 'pending'}`}>
+      <div>
+        <span>Média das AB</span>
+        <strong>{formatScore(status.average)}</strong>
+      </div>
+      <div className="status-details">
+        <span>AB1</span>
+        <strong>{formatScore(status.ab1)}</strong>
+      </div>
+      <div className="status-details">
+        <span>AB2</span>
+        <strong>{formatScore(status.ab2)}</strong>
+      </div>
+      <div className="status-summary">
+        <span>{status.approved ? 'Aprovado' : 'Em acompanhamento'}</span>
+      </div>
+    </section>
+  );
 }
 
 function isGradeColumn(column: Column) {
@@ -530,6 +660,70 @@ function parseMaxFromValue(value: string) {
   }
   const [, max] = value.split('/').map((part) => part.trim());
   return max ? parseScore(max) : null;
+}
+
+function inferMaxForLabel(label: string) {
+  const l = normalized(label);
+  const map: Record<string, number> = {
+    'organizacao': 0.5,
+    'organização': 0.5,
+    'q.1': 1.5,
+    'q.2': 1,
+    'q.3': 1.5,
+    'q.4': 2,
+    'q.5': 1.5,
+    'q.6': 2,
+    'semana 1': 0.25,
+    'semana 2': 0.25,
+    'semana 3': 0.25,
+    'semana 4': 0.25,
+    sgbd: 1,
+    dataset: 1,
+    crud: 1,
+    apresentacao: 2,
+    'apresentação': 2,
+  };
+
+  for (const key of Object.keys(map)) {
+    if (l.includes(key)) return map[key];
+  }
+  return null;
+}
+
+function compareDetailItemOrder(a: Column, b: Column) {
+  const order = [
+    'organizacao',
+    'organização',
+    'q.1',
+    'q.2',
+    'q.3',
+    'q.4',
+    'q.5',
+    'q.6',
+    'semana 1',
+    'semana 2',
+    'semana 3',
+    'semana 4',
+    'sgbd',
+    'dataset',
+    'crud',
+    'apresentacao',
+    'referencias',
+    'discussao',
+  ];
+
+  const labelA = normalized(a.label);
+  const labelB = normalized(b.label);
+  const indexA = order.findIndex((item) => labelA.includes(item));
+  const indexB = order.findIndex((item) => labelB.includes(item));
+
+  if (indexA !== indexB) {
+    if (indexA === -1) return 1;
+    if (indexB === -1) return -1;
+    return indexA - indexB;
+  }
+
+  return labelA.localeCompare(labelB, 'pt-BR', { numeric: true });
 }
 
 function formatScore(value: number) {

@@ -327,6 +327,30 @@ input {
   background: var(--panel);
 }
 
+.status-banner {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid var(--border-soft);
+  background: var(--panel);
+}
+
+.status-banner .status-details,
+.status-banner .status-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.status-banner .status-summary {
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+  font-weight: 700;
+}
+
 .status-banner.approved {
   color: var(--success);
   background: var(--success-bg);
