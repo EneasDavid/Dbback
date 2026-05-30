@@ -15,6 +15,7 @@
   --brand: #145943;
   --brand-hover: #196755;
   --brand-soft: rgba(20, 122, 82, 0.12);
+  --accent-at4: #145943;
   --brand-contrast: #ffffff;
   --danger: #9B2B22;
   --danger-bg: #FBE7E5;
@@ -49,6 +50,8 @@
   --brand: #60a5fa;
   --brand-hover: #93c5fd;
   --brand-soft: rgba(96, 165, 250, 0.16);
+  /* force AT.4 accent to green in dark mode */
+  --accent-at4: #176B4F;
   --brand-contrast: #07111f;
   --danger: #fca5a5;
   --danger-bg: rgba(127, 29, 29, 0.38);
@@ -416,6 +419,19 @@ input {
   border: 1px solid var(--border-soft);
   border-radius: 18px;
   background: var(--panel);
+}
+
+.at4-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--brand-contrast);
+  background: var(--accent-at4);
+  box-shadow: 0 6px 18px rgba(20, 122, 82, 0.12);
 }
 
 .summary-score.highlight {

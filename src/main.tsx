@@ -207,16 +207,13 @@ function App() {
       </section>
 
       {error && <InlineError message={error} />}
-
-      {studentStatus && <StatusBanner status={studentStatus} />}
-
       {loading && <div className="loading">Carregando notas...</div>}
 
       {!loading && visibleColumns.length > 0 && (
         <section className="grade-list">
           {visibleColumns.filter(shouldShowTable).map((table) =>
             table.kind === 'summary' ? (
-              <SummaryTable table={table} key={table.key} />
+              <SummaryTable table={table} key={table.key} exam={exam} status={studentStatus} />
             ) : (
               <GradeCard
                 table={table}
@@ -275,7 +272,7 @@ function GradeCard({
   );
 }
 
-function SummaryTable({ table }: { table: GradeTable }) {
+function SummaryTable({ table, exam, status }: { table: GradeTable; exam: 'ab1' | 'ab2'; status: StudentStatus | null }) {
   const summaryColumns = table.columns.filter(shouldShowMainColumn);
   const sortedColumns = [...summaryColumns].sort((a, b) => {
     const labelA = normalized(a.label);
@@ -296,24 +293,48 @@ function SummaryTable({ table }: { table: GradeTable }) {
         <h2>{table.label}</h2>
       </header>
       <div className="summary-grid">
-        {sortedColumns.map((column) => {
-          const isAverage = isAverageColumn(column);
-          return (
-            <section
-              className={`summary-score ${isAverage ? 'highlight' : ''} ${isAverage ? scoreTone(column) : ''}`}
-              key={`${table.key}-${column.key}`}
-            >
-              <span>{getSummaryLabel(column)}</span>
-              <strong>{displayValue(column)}</strong>
-              {column.comment && (
-                <p>
-                  <MessageSquareText size={15} />
-                  {column.comment}
-                </p>
-              )}
-            </section>
-          );
-        })}
+        {(() => {
+          let insertedAvg = false;
+          return sortedColumns.flatMap((column) => {
+            const isAverage = isAverageColumn(column);
+            const isAT4 = /\bat\.?\s*4\b/.test(normalized(column.label)) || normalized(column.label).includes('atividade 4');
+            const parts: any[] = [];
+            parts.push(
+              <section
+                className={`summary-score ${isAverage ? 'highlight' : ''} ${isAverage ? scoreTone(column) : ''}`}
+                key={`${table.key}-${column.key}`}
+              >
+                <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8}}>
+                  <span>{getSummaryLabel(column)}</span>
+                  {isAT4 && exam === 'ab2' ? <span className="at4-badge">AT.4</span> : null}
+                </div>
+                <strong>{displayValue(column)}</strong>
+                {column.comment && (
+                  <p>
+                    <MessageSquareText size={15} />
+                    {column.comment}
+                  </p>
+                )}
+              </section>,
+            );
+
+            if (!insertedAvg && normalized(column.label).includes('prova') && status) {
+              // insert AB average right after the proof column
+              const avgValue = exam === 'ab1' ? status.ab1 : exam === 'ab2' ? status.ab2 : null;
+              if (avgValue !== null && avgValue !== undefined) {
+                insertedAvg = true;
+                parts.push(
+                  <section className={`summary-score highlight`} key={`${table.key}-ab-average`}>
+                    <span>{`Média ${exam.toUpperCase()}`}</span>
+                    <strong>{formatScore(avgValue)}</strong>
+                  </section>,
+                );
+              }
+            }
+
+            return parts;
+          });
+        })()}
       </div>
     </article>
   );
@@ -488,6 +509,8 @@ function shouldShowMainColumn(column: Column) {
   if (!shouldShowColumn(column)) return false;
   if (isDetailOnlyColumn(column)) return false;
   const label = normalized(column.label);
+  // explicit AT.4 detection (covers 'at 4', 'at.4', 'atividade 4')
+  if (/\bat\.?\s*4\b/.test(label) || label.includes('atividade 4')) return true;
   return (
     label === 'nota' ||
     label.includes('prova') ||
