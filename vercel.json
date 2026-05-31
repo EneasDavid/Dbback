@@ -25,15 +25,11 @@
   "rewrites": [
     {
       "source": "/api",
-      "destination": "/api/index.go"
-    },
-    {
-      "source": "/api/docs",
-      "destination": "/api/index.go/docs"
+      "destination": "/api/index"
     },
     {
       "source": "/api/:path*",
-      "destination": "/api/index.go/:path*"
+      "destination": "/api/index"
     },
     {
       "source": "/((?!api/.*).*)",
