@@ -71,21 +71,23 @@ func docsPayload() map[string]any {
 				},
 				"result": "Retorna o usuário da sessão atual ou null.",
 			},
-			{
-				"method": "GET",
-				"path":   "/api/grades?exam=ab1|ab2",
-				"aliases": []string{
-					"/api/grades/exam=ab1",
-					"/api/grades/exam=ab2",
-					"/api/grades/ab1",
-					"/api/grades/ab2",
-				},
-				"auth":     true,
-				"result":   "Retorna tabelas render-ready da avaliação solicitada.",
-				"query":    map[string]string{"exam": "ab1|ab2", "refresh": "1 opcional; limpa cache em memória"},
-				"response": gradeResponseSchema(),
-			},
-			{
+     {
+        "method": "GET",
+        "path":   "/api/grades",
+        "aliases": []string{
+          "/api/grades/exam=ab1",
+          "/api/grades/exam=ab2",
+          "/api/grades/ab1",
+          "/api/grades/ab2",
+        },
+        "auth":   true,
+        "result": "Retorna tabelas render-ready da avaliação solicitada.",
+        "query": map[string]string{
+          "exam":    "ab1 ou ab2", // <-- Mudado de "ab1|ab2" para "ab1 ou ab2" (ou apenas "string")
+          "refresh": "1 opcional; limpa cache em memória",
+        },
+        "response": gradeResponseSchema(),
+      },{
 				"method":   "GET",
 				"path":     "/api/grades/all",
 				"auth":     true,
