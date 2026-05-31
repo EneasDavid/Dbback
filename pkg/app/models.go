@@ -70,12 +70,15 @@ type sheetGrid struct {
 }
 
 type driveCellComment struct {
-	Text       string
-	Author     string
-	QuotedText string
-	Anchor     string
-	SheetID    int64
-	HasSheetID bool
+	Text        string
+	Author      string
+	QuotedText  string
+	Anchor      string
+	SheetID     int64
+	HasSheetID  bool
+	RowIndex    int
+	ColumnIndex int
+	HasCell     bool
 }
 
 type SheetComment struct {
@@ -84,16 +87,32 @@ type SheetComment struct {
 	Author string
 }
 
+type workbookCellComment struct {
+	SheetName   string
+	RowIndex    int
+	ColumnIndex int
+	Text        string
+	Author      string
+}
+
 type DriveCommentDebug struct {
-	Text       string
-	Author     string
-	QuotedText string
-	Anchor     string
-	SheetID    int64
-	HasSheetID bool
+	Text        string
+	Author      string
+	QuotedText  string
+	Anchor      string
+	SheetID     int64
+	HasSheetID  bool
+	RowIndex    int
+	ColumnIndex int
+	HasCell     bool
 }
 
 type cachedDriveComments struct {
 	expires  time.Time
 	comments []driveCellComment
+}
+
+type cachedWorkbookComments struct {
+	expires  time.Time
+	comments map[string][]workbookCellComment
 }

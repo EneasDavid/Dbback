@@ -73,11 +73,32 @@ func (g *sheetGrid) applyDriveComments(comments []driveCellComment, sheetID int6
 		if strings.TrimSpace(comment.Text) == "" {
 			continue
 		}
-		if strings.TrimSpace(comment.Text) == "" || strings.TrimSpace(comment.QuotedText) == "" {
+		if comment.HasCell {
+			rowIdx, colIdx := logicalMergedCell(comment.RowIndex, comment.ColumnIndex, merges)
+			quoted := strings.TrimSpace(comment.QuotedText)
+			needsValueCheck := !comment.HasSheetID || comment.SheetID == 0
+			if !needsValueCheck || (quoted != "" && strings.TrimSpace(g.valueAtAbsolute(rowIdx, colIdx)) == quoted) {
+				if g.noteAtAbsolute(rowIdx, colIdx) == "" {
+					g.setNoteAtAbsolute(rowIdx, colIdx, comment.Text, comment.Author)
+				}
+				continue
+			}
+		}
+		if strings.TrimSpace(comment.QuotedText) == "" {
 			continue
 		}
 		rowIdx, colIdx, ok := g.uniqueCellForQuotedText(comment.QuotedText, merges)
 		if !ok || g.noteAtAbsolute(rowIdx, colIdx) != "" {
+			continue
+		}
+		g.setNoteAtAbsolute(rowIdx, colIdx, comment.Text, comment.Author)
+	}
+}
+
+func (g *sheetGrid) applyWorkbookComments(comments []workbookCellComment, merges []*sheets.GridRange) {
+	for _, comment := range comments {
+		rowIdx, colIdx := logicalMergedCell(comment.RowIndex, comment.ColumnIndex, merges)
+		if g.noteAtAbsolute(rowIdx, colIdx) != "" {
 			continue
 		}
 		g.setNoteAtAbsolute(rowIdx, colIdx, comment.Text, comment.Author)
@@ -174,6 +195,18 @@ func (g *sheetGrid) noteAtAbsolute(rowIdx int, colIdx int) string {
 	for idx, actualRow := range g.rowIndices {
 		if actualRow == rowIdx {
 			return noteAt(g.rowNotes[idx], colIdx)
+		}
+	}
+	return ""
+}
+
+func (g *sheetGrid) valueAtAbsolute(rowIdx int, colIdx int) string {
+	if rowIdx == g.headerRow {
+		return valueAt(g.headers, colIdx)
+	}
+	for idx, actualRow := range g.rowIndices {
+		if actualRow == rowIdx {
+			return valueAt(g.rows[idx], colIdx)
 		}
 	}
 	return ""

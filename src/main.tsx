@@ -6,9 +6,13 @@ import { EmptyState, ExamSwitch, GradeCard, InlineError, LoginView, SummaryTable
 import type { GradeCache, GradeCard as GradeCardPayload, GradeDetail, GradeResult, GradeResults, GradeTable, SessionUser } from './types';
 import './styles.scss';
 
-const CACHE_VERSION = 'v10';
+const CACHE_VERSION = 'v11';
 const EMPTY_STATE_MS = 5_000;
 const LAST_MATRICULA_KEY = 'dbback-last-matricula';
+const THEME_KEY = 'dbback-theme';
+const THEME_QUERY = '(prefers-color-scheme: dark)';
+
+type Theme = 'light' | 'dark';
 
 type LegacyColumn = {
   key?: string;
@@ -32,13 +36,24 @@ type LegacyGradeTable = GradeTable & {
   items?: LegacyItem[];
 };
 
+function storedThemeOverride(): Theme | null {
+  const stored = window.localStorage.getItem(THEME_KEY);
+  return stored === 'light' || stored === 'dark' ? stored : null;
+}
+
+function systemTheme(): Theme {
+  return window.matchMedia?.(THEME_QUERY).matches ? 'dark' : 'light';
+}
+
+function initialTheme(): Theme {
+  return storedThemeOverride() ?? systemTheme();
+}
+
 function App() {
   const [matricula, setMatricula] = useState(() => window.localStorage.getItem(LAST_MATRICULA_KEY) || '');
   const [session, setSession] = useState<SessionUser | null>(null);
   const [exam, setExam] = useState<'ab1' | 'ab2'>('ab1');
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    return window.localStorage.getItem('theme') === 'light' ? 'light' : 'dark';
-  });
+  const [theme, setTheme] = useState<Theme>(() => initialTheme());
   const [grades, setGrades] = useState<GradeCache>({});
   const gradesRef = useRef<GradeCache>({});
   const [activeDetail, setActiveDetail] = useState<{ tableKey: string; cardKey: string } | null>(null);
@@ -66,8 +81,24 @@ function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#07111f' : '#eef2f8');
-    window.localStorage.setItem('theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    const media = window.matchMedia?.(THEME_QUERY);
+    if (!media) return;
+
+    const syncWithSystem = () => {
+      if (!storedThemeOverride()) setTheme(media.matches ? 'dark' : 'light');
+    };
+    syncWithSystem();
+
+    if (media.addEventListener) {
+      media.addEventListener('change', syncWithSystem);
+      return () => media.removeEventListener('change', syncWithSystem);
+    }
+    media.addListener(syncWithSystem);
+    return () => media.removeListener(syncWithSystem);
+  }, []);
 
   useEffect(() => {
     api<SessionUser | null>('/api/me')
@@ -189,6 +220,11 @@ function App() {
     setError('');
   }
 
+  function handleThemeChange(nextTheme: Theme) {
+    window.localStorage.setItem(THEME_KEY, nextTheme);
+    setTheme(nextTheme);
+  }
+
   if (!session) {
     return (
       <LoginView
@@ -197,7 +233,7 @@ function App() {
         loading={loading}
         error={error}
         theme={theme}
-        setTheme={setTheme}
+        setTheme={handleThemeChange}
         onSubmit={handleLogin}
       />
     );
@@ -205,7 +241,7 @@ function App() {
 
   return (
     <main className="shell">
-      <Topbar session={session} theme={theme} setTheme={setTheme} onLogout={handleLogout} />
+      <Topbar session={session} theme={theme} setTheme={handleThemeChange} onLogout={handleLogout} />
       <ExamSwitch exam={exam} setExam={setExam} />
 
       {error && <InlineError message={error} />}

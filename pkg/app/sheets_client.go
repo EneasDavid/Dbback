@@ -21,13 +21,14 @@ import (
 )
 
 type SheetsClient struct {
-	cfg           Config
-	service       *sheets.Service
-	httpClient    *http.Client
-	mu            sync.Mutex
-	cache         map[string]cachedGrid
-	driveComments cachedDriveComments
-	group         singleflight.Group
+	cfg              Config
+	service          *sheets.Service
+	httpClient       *http.Client
+	mu               sync.Mutex
+	cache            map[string]cachedGrid
+	driveComments    cachedDriveComments
+	workbookComments cachedWorkbookComments
+	group            singleflight.Group
 }
 
 type cachedGrid struct {
@@ -58,6 +59,7 @@ func (c *SheetsClient) ClearCache() {
 	defer c.mu.Unlock()
 	c.cache = map[string]cachedGrid{}
 	c.driveComments = cachedDriveComments{}
+	c.workbookComments = cachedWorkbookComments{}
 }
 
 func (c *SheetsClient) loadSheet(ctx context.Context, sheetName string) (*sheetGrid, error) {
@@ -88,6 +90,7 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 		}
 
 		driveCommentsCh := c.optionalDriveCommentsAsync(ctx, missing)
+		workbookCommentsCh := c.optionalWorkbookCommentsAsync(ctx, missing)
 
 		ranges := make([]string, 0, len(missing))
 		for _, sheetName := range missing {
@@ -103,6 +106,7 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 		}
 
 		driveComments := <-driveCommentsCh
+		workbookComments := <-workbookCommentsCh
 		found := map[string]bool{}
 		now := time.Now()
 		c.mu.Lock()
@@ -116,6 +120,7 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 				continue
 			}
 			grid := parseGrid(sheet.Data[0].RowData, sheet.Merges)
+			grid.applyWorkbookComments(workbookComments[name], sheet.Merges)
 			grid.applyDriveComments(driveComments, sheet.Properties.SheetId, sheet.Merges)
 			grid.applyCommentMerges(sheet.Merges)
 			c.cache[name] = cachedGrid{expires: now.Add(c.cfg.CacheTTL), grid: grid}
@@ -149,6 +154,25 @@ func (c *SheetsClient) optionalDriveCommentsAsync(ctx context.Context, sheetName
 	ch := make(chan []driveCellComment, 1)
 	go func() {
 		ch <- c.optionalDriveComments(ctx, sheetNames)
+	}()
+	return ch
+}
+
+func (c *SheetsClient) optionalWorkbookComments(ctx context.Context, sheetNames []string) map[string][]workbookCellComment {
+	if !requiresDriveComments(sheetNames, c.cfg.LoginSheet) {
+		return nil
+	}
+	comments, err := c.workbookCommentsForSpreadsheet(ctx)
+	if err != nil {
+		return nil
+	}
+	return comments
+}
+
+func (c *SheetsClient) optionalWorkbookCommentsAsync(ctx context.Context, sheetNames []string) <-chan map[string][]workbookCellComment {
+	ch := make(chan map[string][]workbookCellComment, 1)
+	go func() {
+		ch <- c.optionalWorkbookComments(ctx, sheetNames)
 	}()
 	return ch
 }
@@ -232,7 +256,7 @@ var (
 		version:       "v3",
 		pageSizeParam: "pageSize",
 		pageSize:      "100",
-		fields:        "nextPageToken,comments(content,anchor,author(displayName),quotedFileContent(value),deleted)",
+		fields:        "nextPageToken,comments(content,anchor,author(displayName),quotedFileContent(value),deleted,replies(content,author(displayName),deleted))",
 		errorLabel:    "comments",
 		decode:        decodeDriveComments,
 	}
@@ -240,7 +264,7 @@ var (
 		version:       "v2",
 		pageSizeParam: "maxResults",
 		pageSize:      "100",
-		fields:        "nextPageToken,items(content,anchor,author(displayName),context(value),deleted,status)",
+		fields:        "nextPageToken,items(content,anchor,author(displayName),context(value),deleted,status,replies(content,author(displayName),deleted))",
 		errorLabel:    "comments v2",
 		decode:        decodeDriveV2Comments,
 	}

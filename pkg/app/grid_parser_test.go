@@ -110,6 +110,34 @@ func TestDriveCommentWithZeroSheetIDSkipsAmbiguousNumericQuotedText(t *testing.T
 	}
 }
 
+func TestDriveCommentWithCellAnchorUsesExactRepeatedValue(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Nome", ""), cellData("Critério", "")),
+		rowData(cellData("Alice", ""), cellData("0,3", "")),
+		rowData(cellData("Bob", ""), cellData("0,3", "")),
+	}, nil)
+
+	grid.applyDriveComments([]driveCellComment{
+		{
+			Text:        "feedback do Bob",
+			Author:      "Professor",
+			QuotedText:  "0,3",
+			SheetID:     0,
+			HasSheetID:  true,
+			RowIndex:    2,
+			ColumnIndex: 1,
+			HasCell:     true,
+		},
+	}, 987654321, nil)
+
+	if got := noteAt(grid.rowNotes[0], 1); got != "" {
+		t.Fatalf("first drive note = %q, want empty", got)
+	}
+	if got := noteAt(grid.rowNotes[1], 1); got != "feedback do Bob" {
+		t.Fatalf("second drive note = %q, want feedback do Bob", got)
+	}
+}
+
 func rowData(cells ...*sheets.CellData) *sheets.RowData {
 	return &sheets.RowData{Values: cells}
 }
