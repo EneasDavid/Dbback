@@ -71,23 +71,24 @@ func docsPayload() map[string]any {
 				},
 				"result": "Retorna o usuário da sessão atual ou null.",
 			},
-     {
-        "method": "GET",
-        "path":   "/api/grades",
-        "aliases": []string{
-          "/api/grades/exam=ab1",
-          "/api/grades/exam=ab2",
-          "/api/grades/ab1",
-          "/api/grades/ab2",
-        },
-        "auth":   true,
-        "result": "Retorna tabelas render-ready da avaliação solicitada.",
-        "query": map[string]string{
-          "exam":    "ab1 ou ab2", // <-- Mudado de "ab1|ab2" para "ab1 ou ab2" (ou apenas "string")
-          "refresh": "1 opcional; limpa cache em memória",
-        },
-        "response": gradeResponseSchema(),
-      },{
+			{
+				"method": "GET",
+				"path":   "/api/grades",
+				"aliases": []string{
+					"/api/grades?exam=ab1",
+					"/api/grades?exam=ab2",
+					"/api/grades/ab1",
+					"/api/grades/ab2",
+				},
+				"auth":   true,
+				"result": "Retorna tabelas render-ready da avaliação solicitada.",
+				"query": map[string]string{
+					"exam":    "ab1 ou ab2; aceita ab1|ab2 e usa o primeiro valor válido",
+					"refresh": "1 opcional; limpa cache em memória",
+				},
+				"response": gradeResponseSchema(),
+			},
+			{
 				"method":   "GET",
 				"path":     "/api/grades/all",
 				"auth":     true,
@@ -112,7 +113,7 @@ func docsPayload() map[string]any {
 		"gradeOrganization": map[string]any{
 			"identitySource": "Base de dados",
 			"rowSelection":   "A matrícula resolve um nome; cada aba de notas é lida pela linha cuja célula de identidade contém esse nome ou matrícula.",
-			"feedbackSource": "O comentário exibido vem da célula de identidade da linha selecionada: Nome, Grupo/Equipe, Matrícula ou primeira coluna.",
+			"feedbackSource": "Comentários exibidos vêm primeiro da célula de nota/valor; atividades e projeto também aceitam comentários nas células de subtópico/cabeçalho. O comentário da identidade da linha é usado como fallback geral.",
 			"rendering":      "Os valores da linha são normalizados em cards e detalhes pelo backend; o frontend só renderiza o payload.",
 		},
 	}
@@ -322,8 +323,8 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
       --text: #18202f;
       --muted: #5e6c81;
       --line: #d9e1ec;
-      --accent: #156f73;
-      --accent-soft: #dff5f2;
+      --accent: #145A3A;
+      --accent-soft: #e4f2e9;
       --code: #101828;
       --code-bg: #f0f4f8;
       --danger: #9f3a43;
@@ -337,8 +338,8 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
         --text: #f3f1ea;
         --muted: #bcc7bd;
         --line: #4b574f;
-        --accent: #a6d7ad;
-        --accent-soft: #263c2c;
+        --accent: #145A3A;
+        --accent-soft: #1b2e24;
         --code: #f4f1e8;
         --code-bg: #1a211d;
         --danger: #e4aaa5;
@@ -348,7 +349,7 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
     body {
       margin: 0;
       background:
-        radial-gradient(circle at top left, rgba(21, 111, 115, .14), transparent 30rem),
+        radial-gradient(circle at top left, rgba(20, 90, 58, .16), transparent 30rem),
         var(--bg);
       color: var(--text);
       line-height: 1.5;

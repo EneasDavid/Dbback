@@ -97,6 +97,14 @@ func noteAt(notes []string, idx int) string {
 	return visibleFeedbackComment(notes[idx])
 }
 
+func commentAt(notes []string, authors []string, idx int) (string, string) {
+	comment := noteAt(notes, idx)
+	if comment == "" {
+		return "", ""
+	}
+	return comment, noteAt(authors, idx)
+}
+
 func visibleFeedbackComment(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {

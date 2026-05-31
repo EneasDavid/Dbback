@@ -112,6 +112,33 @@ func TestActivityCriterionCommentBecomesDetailComment(t *testing.T) {
 	}
 }
 
+func TestActivitySubtopicCommentBecomesDetailComment(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Grupo", ""), cellData("Critério", "")),
+		rowData(cellData("Subtópico", ""), cellData("Modelagem", "comentario do subtopico")),
+		rowData(cellData("Nota maxima", ""), cellData("10", "")),
+		rowData(cellData("Alice", ""), cellData("7", "")),
+	}, nil)
+
+	table, found, err := parseActivityRubric(grid, TableConfig{
+		Key:          "at3",
+		Label:        "AT. 3",
+		SheetName:    "AT. 3",
+		Kind:         "activity",
+		ScoreDivisor: 10,
+	}, SessionUser{Name: "Alice", Matricula: "18113089"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("student row was not found")
+	}
+	detail := table.Cards[0].Details[0]
+	if detail.Comment != "comentario do subtopico" {
+		t.Fatalf("detail comment = %q, want subtopic comment", detail.Comment)
+	}
+}
+
 func TestActivityTotalCommentBecomesCardComment(t *testing.T) {
 	grid := parseGrid([]*sheets.RowData{
 		rowData(cellData("Grupo", ""), cellData("Total", "")),
@@ -240,6 +267,11 @@ func TestProjectPayloadKeepsAllSubtopicsInDropdown(t *testing.T) {
 	for label, found := range wantLabels {
 		if !found {
 			t.Fatalf("missing project detail %q in %#v", label, details)
+		}
+	}
+	for _, detail := range details {
+		if detail.Label == "CRUD" && detail.Comment != "comentario crud" {
+			t.Fatalf("project detail comment = %q, want comentario crud", detail.Comment)
 		}
 	}
 }

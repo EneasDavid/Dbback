@@ -73,9 +73,9 @@ func TestDocsRouteRendersHTMLForBrowser(t *testing.T) {
 			if got := rec.Header().Get("Content-Type"); !strings.Contains(got, "text/html") {
 				t.Fatalf("Content-Type = %q, want text/html", got)
 			}
-			
+
 			body := rec.Body.String()
-			
+
 			// Validações fixas que devem existir em ambos
 			stringsFixas := []string{"dbBack Documentação da API", "Abrir JSON"}
 			for _, want := range stringsFixas {
@@ -179,6 +179,8 @@ func TestGradeExamSupportsPathAliases(t *testing.T) {
 		{name: "query", path: "/api/grades", raw: "exam=ab1", want: "ab1"},
 		{name: "exam path", path: "/api/grades/exam=ab2", want: "ab2"},
 		{name: "short path", path: "/api/grades/ab1", want: "ab1"},
+		{name: "pipe query uses first valid exam", path: "/api/grades", raw: "exam=ab1|ab2", want: "ab1"},
+		{name: "pipe query accepts second valid exam", path: "/api/grades", raw: "exam=invalid|ab2", want: "ab2"},
 		{name: "query wins", path: "/api/grades/ab1", raw: "exam=ab2", want: "ab2"},
 	}
 

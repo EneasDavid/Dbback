@@ -68,7 +68,7 @@ func (GradesController) All(w http.ResponseWriter, r *http.Request) {
 }
 
 func gradeExam(r *http.Request, path string) string {
-	if exam := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("exam"))); exam != "" {
+	if exam := normalizeGradeExam(r.URL.Query().Get("exam")); exam != "" {
 		return exam
 	}
 	suffix := strings.Trim(strings.TrimPrefix(path, "/api/grades"), "/")
@@ -76,7 +76,21 @@ func gradeExam(r *http.Request, path string) string {
 		return ""
 	}
 	if value, ok := strings.CutPrefix(suffix, "exam="); ok {
-		return strings.ToLower(strings.TrimSpace(value))
+		return normalizeGradeExam(value)
 	}
-	return strings.ToLower(strings.TrimSpace(suffix))
+	return normalizeGradeExam(suffix)
+}
+
+func normalizeGradeExam(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return ""
+	}
+	for _, part := range strings.Split(value, "|") {
+		part = strings.ToLower(strings.TrimSpace(part))
+		if part == "ab1" || part == "ab2" {
+			return part
+		}
+	}
+	return value
 }

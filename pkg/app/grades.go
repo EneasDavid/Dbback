@@ -173,7 +173,7 @@ func parseStudentTable(grid *sheetGrid, table TableConfig, user SessionUser) (Ta
 		if excludesStudentFromGrades(rowComment) {
 			return TableResult{}, false, nil
 		}
-		cells := studentCellsForRow(grid.headers, row, rowNotesAt(grid, rowIdx), rowNoteAuthorsAt(grid, rowIdx), table.Kind)
+		cells := studentCellsForRow(grid, rowIdx, row, table.Kind)
 		cards := cardsForStudentCells(table, cells)
 		applyRowCommentToCards(cards, rowComment, rowCommentAuthor)
 		return TableResult{
@@ -188,22 +188,33 @@ func parseStudentTable(grid *sheetGrid, table TableConfig, user SessionUser) (Ta
 	return TableResult{}, false, nil
 }
 
-func studentCellsForRow(headers []string, row []string, notes []string, authors []string, tableKind string) []studentCell {
-	cells := make([]studentCell, 0, len(headers))
-	for colIdx, header := range headers {
+func studentCellsForRow(grid *sheetGrid, rowIdx int, row []string, tableKind string) []studentCell {
+	cells := make([]studentCell, 0, len(grid.headers))
+	for colIdx, header := range grid.headers {
 		if strings.TrimSpace(header) == "" || !includeColumn(tableKind, header) || !shouldShowColumn(header) {
 			continue
 		}
+		comment, author := studentCellComment(grid, rowIdx, colIdx, tableKind)
 		cells = append(cells, studentCell{
 			Key:           fmt.Sprintf("c%d", colIdx),
 			Header:        header,
 			Label:         cardLabel(header),
 			Value:         valueAt(row, colIdx),
-			Comment:       noteAt(notes, colIdx),
-			CommentAuthor: noteAt(authors, colIdx),
+			Comment:       comment,
+			CommentAuthor: author,
 		})
 	}
 	return cells
+}
+
+func studentCellComment(grid *sheetGrid, rowIdx int, colIdx int, tableKind string) (string, string) {
+	if comment, author := commentAt(rowNotesAt(grid, rowIdx), rowNoteAuthorsAt(grid, rowIdx), colIdx); comment != "" {
+		return comment, author
+	}
+	if tableKind == "project" {
+		return commentAt(grid.notes, grid.noteAuthors, colIdx)
+	}
+	return "", ""
 }
 
 func rowNotesAt(grid *sheetGrid, rowIdx int) []string {

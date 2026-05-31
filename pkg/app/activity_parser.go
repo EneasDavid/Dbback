@@ -36,13 +36,14 @@ func parseActivityRubric(grid *sheetGrid, table TableConfig, user SessionUser) (
 		if _, ok := parseNumber(maximum); !ok {
 			continue
 		}
+		comment, author := activityItemComment(grid, maxRowIdx, studentRowIdx, colIdx)
 		items = append(items, activityItem{
 			Key:           fmt.Sprintf("i%d", colIdx),
 			Subtopic:      subtopic,
 			NotaMaxima:    maximum,
 			NotaAlcancada: valueAt(grid.rows[studentRowIdx], colIdx),
-			Comment:       noteAt(rowNotesAt(grid, studentRowIdx), colIdx),
-			CommentAuthor: noteAt(rowNoteAuthorsAt(grid, studentRowIdx), colIdx),
+			Comment:       comment,
+			CommentAuthor: author,
 		})
 	}
 	if len(items) == 0 {
@@ -94,6 +95,37 @@ func findStudentRow(grid *sheetGrid, start int, user SessionUser) int {
 		}
 	}
 	return -1
+}
+
+func activityItemComment(grid *sheetGrid, maxRowIdx int, studentRowIdx int, colIdx int) (string, string) {
+	candidates := []struct {
+		notes   []string
+		authors []string
+	}{
+		{rowNotesAt(grid, studentRowIdx), rowNoteAuthorsAt(grid, studentRowIdx)},
+	}
+	if maxRowIdx > 0 {
+		candidates = append(candidates, struct {
+			notes   []string
+			authors []string
+		}{rowNotesAt(grid, maxRowIdx-1), rowNoteAuthorsAt(grid, maxRowIdx-1)})
+	}
+	candidates = append(candidates,
+		struct {
+			notes   []string
+			authors []string
+		}{grid.notes, grid.noteAuthors},
+		struct {
+			notes   []string
+			authors []string
+		}{rowNotesAt(grid, maxRowIdx), rowNoteAuthorsAt(grid, maxRowIdx)},
+	)
+	for _, candidate := range candidates {
+		if comment, author := commentAt(candidate.notes, candidate.authors, colIdx); comment != "" {
+			return comment, author
+		}
+	}
+	return "", ""
 }
 
 func rubricLabel(grid *sheetGrid, maxRowIdx int, colIdx int) string {

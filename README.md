@@ -71,6 +71,31 @@ Nao envie arquivos fisicos de service account para o GitHub. O `.gitignore` bloq
 
 Compartilhe a planilha com o `client_email` da service account. Para comentarios ricos, habilite a Drive API no projeto Google Cloud; sem ela, os valores da planilha ainda sao lidos. Se um comentario aparece no navegador mas nao no diagnostico, verifique se a service account consegue ver esse comentario e se ele esta na mesma linha/celula do aluno ou do criterio avaliado.
 
+### Gerar o JSON da service account
+
+O site correto e o Google Cloud Console: <https://console.cloud.google.com/>. Use o mesmo projeto do arquivo esperado, por exemplo `spheric-radio-495913-q2`.
+
+1. Entre em <https://console.cloud.google.com/> e selecione o projeto.
+2. Ative as APIs no projeto:
+   - Google Sheets API: <https://console.cloud.google.com/apis/library/sheets.googleapis.com>
+   - Google Drive API: <https://console.cloud.google.com/apis/library/drive.googleapis.com>
+3. Abra IAM e administrador > Contas de servico, ou entre direto em <https://console.cloud.google.com/iam-admin/serviceaccounts>.
+4. Clique em Criar conta de servico, informe um nome como `dbback-sheets-reader` e finalize.
+5. Abra a conta criada, va em Chaves > Adicionar chave > Criar nova chave, escolha JSON e baixe o arquivo.
+6. Para desenvolvimento local, renomeie o arquivo baixado para `spheric-radio-495913-q2-1fd5fc001597.json` e use:
+
+```env
+GOOGLE_SERVICE_ACCOUNT_FILE=./spheric-radio-495913-q2-1fd5fc001597.json
+```
+
+7. Abra a planilha no Google Sheets, clique em Compartilhar e adicione o `client_email` que aparece dentro do JSON como leitor da planilha.
+
+Para Vercel/GitHub, nao envie esse JSON. Gere base64 e salve somente como variavel de ambiente:
+
+```bash
+base64 < spheric-radio-495913-q2-1fd5fc001597.json | tr -d '\n'
+```
+
 ## Desenvolvimento
 
 ```bash
