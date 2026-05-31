@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime"
 	"sort"
@@ -23,10 +24,45 @@ func (c *SheetsClient) GradeFor(ctx context.Context, exam string, user SessionUs
 	if err != nil {
 		return GradeResult{}, err
 	}
-	result := GradeResult{Exam: strings.ToUpper(strings.TrimSpace(exam)), Matricula: user.Matricula, Name: user.Name}
 	if err := c.loadSheets(ctx, sheetNamesForTables(tables)); err != nil {
 		return GradeResult{}, err
 	}
+	return c.gradeForTables(ctx, exam, tables, user)
+}
+
+func (c *SheetsClient) GradesFor(ctx context.Context, exams []string, user SessionUser) (GradeResults, error) {
+	exams = normalizedExams(exams)
+	tablesByExam := make(map[string][]TableConfig, len(exams))
+	var allSheetNames []string
+	for _, exam := range exams {
+		tables, err := c.tablesForExam(exam)
+		if err != nil {
+			return nil, err
+		}
+		tablesByExam[exam] = tables
+		allSheetNames = append(allSheetNames, sheetNamesForTables(tables)...)
+	}
+	if err := c.loadSheets(ctx, allSheetNames); err != nil {
+		return nil, err
+	}
+
+	results := make(GradeResults, len(exams))
+	for _, exam := range exams {
+		result, err := c.gradeForTables(ctx, exam, tablesByExam[exam], user)
+		if isNotFound(err) {
+			results[exam] = emptyGradeResult(exam, user)
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		results[exam] = result
+	}
+	return results, nil
+}
+
+func (c *SheetsClient) gradeForTables(ctx context.Context, exam string, tables []TableConfig, user SessionUser) (GradeResult, error) {
+	result := emptyGradeResult(exam, user)
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -87,6 +123,29 @@ func (c *SheetsClient) GradeFor(ctx context.Context, exam string, user SessionUs
 	return result, nil
 }
 
+func normalizedExams(exams []string) []string {
+	seen := map[string]bool{}
+	result := make([]string, 0, len(exams))
+	for _, exam := range exams {
+		exam = strings.ToLower(strings.TrimSpace(exam))
+		if exam == "" || seen[exam] {
+			continue
+		}
+		seen[exam] = true
+		result = append(result, exam)
+	}
+	return result
+}
+
+func emptyGradeResult(exam string, user SessionUser) GradeResult {
+	return GradeResult{Exam: strings.ToUpper(strings.TrimSpace(exam)), Matricula: user.Matricula, Name: user.Name}
+}
+
+func isNotFound(err error) bool {
+	var httpErr HTTPError
+	return err != nil && errors.As(err, &httpErr) && httpErr.Status == 404
+}
+
 func (c *SheetsClient) gradeTableFor(ctx context.Context, table TableConfig, user SessionUser) (TableResult, bool, error) {
 	grid, err := c.loadSheet(ctx, table.SheetName)
 	if err != nil {
@@ -114,7 +173,7 @@ func parseStudentTable(grid *sheetGrid, table TableConfig, user SessionUser) (Ta
 		if excludesStudentFromGrades(rowComment) {
 			return TableResult{}, false, nil
 		}
-		cells := studentCellsForRow(grid.headers, row, table.Kind)
+		cells := studentCellsForRow(grid.headers, row, rowNotesAt(grid, rowIdx), rowNoteAuthorsAt(grid, rowIdx), table.Kind)
 		cards := cardsForStudentCells(table, cells)
 		applyRowCommentToCards(cards, rowComment, rowCommentAuthor)
 		return TableResult{
@@ -129,20 +188,36 @@ func parseStudentTable(grid *sheetGrid, table TableConfig, user SessionUser) (Ta
 	return TableResult{}, false, nil
 }
 
-func studentCellsForRow(headers []string, row []string, tableKind string) []studentCell {
+func studentCellsForRow(headers []string, row []string, notes []string, authors []string, tableKind string) []studentCell {
 	cells := make([]studentCell, 0, len(headers))
 	for colIdx, header := range headers {
 		if strings.TrimSpace(header) == "" || !includeColumn(tableKind, header) || !shouldShowColumn(header) {
 			continue
 		}
 		cells = append(cells, studentCell{
-			Key:    fmt.Sprintf("c%d", colIdx),
-			Header: header,
-			Label:  cardLabel(header),
-			Value:  valueAt(row, colIdx),
+			Key:           fmt.Sprintf("c%d", colIdx),
+			Header:        header,
+			Label:         cardLabel(header),
+			Value:         valueAt(row, colIdx),
+			Comment:       noteAt(notes, colIdx),
+			CommentAuthor: noteAt(authors, colIdx),
 		})
 	}
 	return cells
+}
+
+func rowNotesAt(grid *sheetGrid, rowIdx int) []string {
+	if grid == nil || rowIdx < 0 || rowIdx >= len(grid.rowNotes) {
+		return nil
+	}
+	return grid.rowNotes[rowIdx]
+}
+
+func rowNoteAuthorsAt(grid *sheetGrid, rowIdx int) []string {
+	if grid == nil || rowIdx < 0 || rowIdx >= len(grid.rowNoteAuthors) {
+		return nil
+	}
+	return grid.rowNoteAuthors[rowIdx]
 }
 
 func applyRowCommentToCards(cards []CardResult, comment string, author string) {
@@ -182,7 +257,7 @@ func cardsForStudentCells(table TableConfig, cells []studentCell) []CardResult {
 			if isAverageColumn(cell.Header) && isPendingValue(cell.Value) {
 				continue
 			}
-			cards = append(cards, makeCard(cell.Key, summaryCardLabel(cell.Header), cell.Value, "", "", nil))
+			cards = append(cards, makeCard(cell.Key, summaryCardLabel(cell.Header), cell.Value, cell.Comment, cell.CommentAuthor, nil))
 		}
 		sort.SliceStable(cards, func(i, j int) bool {
 			return summaryCardOrder(cards[i].Label) < summaryCardOrder(cards[j].Label)
@@ -214,7 +289,7 @@ func projectCards(table TableConfig, cells []studentCell) []CardResult {
 	details := projectDetails(cells)
 	for _, cell := range cells {
 		if projectMainColumn(cell.Header) && hasVisibleCellData(cell) {
-			return []CardResult{makeCard(cell.Key, cardLabel(cell.Header), cell.Value, "", "", details)}
+			return []CardResult{makeCard(cell.Key, cardLabel(cell.Header), cell.Value, cell.Comment, cell.CommentAuthor, details)}
 		}
 	}
 	if len(details) > 0 {
@@ -235,7 +310,7 @@ func fallbackCards(cells []studentCell) []CardResult {
 		if !shouldShowColumn(cell.Header) || !hasVisibleCellData(cell) {
 			continue
 		}
-		cards = append(cards, makeCard(cell.Key, cardLabel(cell.Header), cell.Value, "", "", nil))
+		cards = append(cards, makeCard(cell.Key, cardLabel(cell.Header), cell.Value, cell.Comment, cell.CommentAuthor, nil))
 	}
 	return cards
 }

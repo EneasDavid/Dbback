@@ -86,6 +86,14 @@ func docsPayload() map[string]any {
 				"response": gradeResponseSchema(),
 			},
 			{
+				"method":   "GET",
+				"path":     "/api/grades/all",
+				"auth":     true,
+				"result":   "Retorna AB1 e AB2 no mesmo payload, compartilhando a mesma leitura de planilha.",
+				"query":    map[string]string{"refresh": "1 opcional; limpa cache em memória"},
+				"response": map[string]any{"ab1": gradeResponseSchema(), "ab2": gradeResponseSchema()},
+			},
+			{
 				"method": "GET",
 				"path":   "/api/docs",
 				"auth":   true,

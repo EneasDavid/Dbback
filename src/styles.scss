@@ -46,19 +46,19 @@
 }
 
 :root[data-theme="dark"] {
-  color: #f3f1ea;
-  background: #202823;
+  color: #edf6ff;
+  background: #020817;
   color-scheme: dark;
-  --page: #202823;
-  --shell: rgba(37, 47, 41, 0.76);
-  --panel: rgba(55, 65, 58, 0.66);
-  --panel-solid: #303a34;
-  --panel-soft: rgba(80, 93, 83, 0.42);
-  --text: #f3f1ea;
-  --muted: #bcc7bd;
-  --muted-strong: #dde3da;
-  --border: rgba(239, 242, 233, 0.18);
-  --border-soft: rgba(239, 242, 233, 0.1);
+  --page: #020817;
+  --shell: rgba(4, 13, 28, 0.82);
+  --panel: rgba(8, 20, 39, 0.74);
+  --panel-solid: #071120;
+  --panel-soft: rgba(18, 33, 58, 0.52);
+  --text: #edf6ff;
+  --muted: #9fb0c7;
+  --muted-strong: #d6e4f5;
+  --border: rgba(198, 219, 245, 0.18);
+  --border-soft: rgba(198, 219, 245, 0.1);
   --brand: #93cfa3;
   --brand-hover: #adddbc;
   --brand-soft: rgba(147, 207, 163, 0.17);
@@ -78,12 +78,12 @@
   --score-badge-border: rgba(147, 207, 163, 0.23);
   --progress-track: rgba(236, 239, 230, 0.16);
   --progress-track-border: rgba(236, 239, 230, 0.12);
-  --pending-text: #ece8dc;
-  --pending-bg: rgba(239, 235, 222, 0.1);
-  --pending-border: rgba(239, 235, 222, 0.2);
+  --pending-text: #dce9f8;
+  --pending-bg: rgba(220, 233, 248, 0.1);
+  --pending-border: rgba(220, 233, 248, 0.2);
   --glass-line: rgba(255, 255, 255, 0.13);
-  --shadow: 0 30px 74px rgba(10, 16, 13, 0.34);
-  --shadow-soft: 0 16px 40px rgba(10, 16, 13, 0.24);
+  --shadow: 0 30px 74px rgba(0, 3, 10, 0.48);
+  --shadow-soft: 0 16px 40px rgba(0, 3, 10, 0.34);
   --inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.13), inset 0 -1px 0 rgba(0, 0, 0, 0.08);
   --focus: 0 0 0 4px rgba(147, 207, 163, 0.24);
 }
@@ -101,7 +101,7 @@ body {
 }
 
 :root[data-theme="dark"] body {
-  background: linear-gradient(180deg, #2b352d 0%, var(--page) 48%, #191f1b 100%);
+  background: linear-gradient(180deg, #061226 0%, var(--page) 48%, #00040d 100%);
 }
 
 :root[data-screen="login"],
@@ -151,7 +151,7 @@ input:focus-visible {
 }
 
 :root[data-theme="dark"] .login-shell {
-  background: linear-gradient(180deg, #2f3a32 0%, var(--page) 54%, #1a201c 100%);
+  background: linear-gradient(180deg, #061226 0%, var(--page) 58%, #00040d 100%);
 }
 
 .login-panel {

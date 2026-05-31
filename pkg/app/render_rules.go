@@ -12,13 +12,17 @@ type activityItem struct {
 	Subtopic      string
 	NotaMaxima    string
 	NotaAlcancada string
+	Comment       string
+	CommentAuthor string
 }
 
 type studentCell struct {
-	Key    string
-	Header string
-	Label  string
-	Value  string
+	Key           string
+	Header        string
+	Label         string
+	Value         string
+	Comment       string
+	CommentAuthor string
 }
 
 func makeCard(key string, label string, value string, comment string, commentAuthor string, details []DetailResult) CardResult {
@@ -41,7 +45,10 @@ func activityDetails(items []activityItem, divisor float64) []DetailResult {
 			continue
 		}
 		maximum, _ := parseScore(item.NotaMaxima)
-		details = append(details, scaledScoreDetail(item.Key, humanizeLabel(item.Subtopic), item.NotaAlcancada, maximum, divisor))
+		detail := scaledScoreDetail(item.Key, humanizeLabel(item.Subtopic), item.NotaAlcancada, maximum, divisor)
+		detail.Comment = item.Comment
+		detail.CommentAuthor = item.CommentAuthor
+		details = append(details, detail)
 	}
 	return details
 }
@@ -64,7 +71,10 @@ func cellDetails(cells []studentCell, include func(string) bool) []DetailResult 
 		if maximum <= 0 {
 			maximum = 1
 		}
-		details = append(details, scoreDetail(cell.Key, cell.Label, cell.Value, maximum))
+		detail := scoreDetail(cell.Key, cell.Label, cell.Value, maximum)
+		detail.Comment = cell.Comment
+		detail.CommentAuthor = cell.CommentAuthor
+		details = append(details, detail)
 	}
 	sort.SliceStable(details, func(i, j int) bool {
 		return compareDetailLabels(details[i].Label, details[j].Label) < 0

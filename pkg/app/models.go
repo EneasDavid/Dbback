@@ -10,6 +10,8 @@ type GradeResult struct {
 	StudentStatus *StudentStatus `json:"studentStatus,omitempty"`
 }
 
+type GradeResults map[string]GradeResult
+
 type TableResult struct {
 	Key       string       `json:"key"`
 	Label     string       `json:"label"`

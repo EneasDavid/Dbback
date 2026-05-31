@@ -76,7 +76,7 @@ func TestDriveCommentWithZeroSheetIDUsesNonNumericQuotedText(t *testing.T) {
 	}
 }
 
-func TestDriveCommentWithZeroSheetIDSkipsNumericQuotedText(t *testing.T) {
+func TestDriveCommentWithZeroSheetIDUsesUniqueNumericQuotedText(t *testing.T) {
 	grid := parseGrid([]*sheets.RowData{
 		rowData(cellData("Nome", ""), cellData("Critério", "")),
 		rowData(cellData("Alice", ""), cellData("0,3", "")),
@@ -86,8 +86,27 @@ func TestDriveCommentWithZeroSheetIDSkipsNumericQuotedText(t *testing.T) {
 		{Text: "feedback do Drive", Author: "Professor", QuotedText: "0,3", SheetID: 0, HasSheetID: true},
 	}, 987654321, nil)
 
+	if got := noteAt(grid.rowNotes[0], 1); got != "feedback do Drive" {
+		t.Fatalf("drive note = %q, want feedback do Drive", got)
+	}
+}
+
+func TestDriveCommentWithZeroSheetIDSkipsAmbiguousNumericQuotedText(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Nome", ""), cellData("Critério", "")),
+		rowData(cellData("Alice", ""), cellData("0,3", "")),
+		rowData(cellData("Bob", ""), cellData("0,3", "")),
+	}, nil)
+
+	grid.applyDriveComments([]driveCellComment{
+		{Text: "feedback do Drive", Author: "Professor", QuotedText: "0,3", SheetID: 0, HasSheetID: true},
+	}, 987654321, nil)
+
 	if got := noteAt(grid.rowNotes[0], 1); got != "" {
-		t.Fatalf("drive note = %q, want empty for untrusted numeric quoted text", got)
+		t.Fatalf("first drive note = %q, want empty for ambiguous numeric quoted text", got)
+	}
+	if got := noteAt(grid.rowNotes[1], 1); got != "" {
+		t.Fatalf("second drive note = %q, want empty for ambiguous numeric quoted text", got)
 	}
 }
 

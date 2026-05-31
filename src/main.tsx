@@ -3,10 +3,10 @@ import type { FormEvent, MutableRefObject } from 'react';
 import { createRoot } from 'react-dom/client';
 import { api } from './api';
 import { EmptyState, ExamSwitch, GradeCard, InlineError, LoginView, SummaryTable, Topbar } from './components';
-import type { GradeCache, GradeCard as GradeCardPayload, GradeDetail, GradeResult, GradeTable, SessionUser } from './types';
+import type { GradeCache, GradeCard as GradeCardPayload, GradeDetail, GradeResult, GradeResults, GradeTable, SessionUser } from './types';
 import './styles.scss';
 
-const CACHE_VERSION = 'v9';
+const CACHE_VERSION = 'v10';
 const EMPTY_STATE_MS = 5_000;
 const LAST_MATRICULA_KEY = 'dbback-last-matricula';
 
@@ -37,7 +37,7 @@ function App() {
   const [session, setSession] = useState<SessionUser | null>(null);
   const [exam, setExam] = useState<'ab1' | 'ab2'>('ab1');
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    return window.localStorage.getItem('theme') === 'dark' ? 'dark' : 'light';
+    return window.localStorage.getItem('theme') === 'light' ? 'light' : 'dark';
   });
   const [grades, setGrades] = useState<GradeCache>({});
   const gradesRef = useRef<GradeCache>({});
@@ -65,7 +65,7 @@ function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#182131' : '#eef2f8');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#020817' : '#eef2f8');
     window.localStorage.setItem('theme', theme);
   }, [theme]);
 
@@ -96,21 +96,19 @@ function App() {
 
   useEffect(() => {
     if (!session) return;
-    const currentSession = session;
     let cancelled = false;
+    const currentSession = session;
     const cacheKey = gradeCacheKey(currentSession.matricula);
+    const cached = readGradeCache(cacheKey);
+    const hasAnyCachedGrade = Object.values({ ...cached, ...gradesRef.current }).some(hasRenderableGrade);
 
-    async function fetchExam(target: 'ab1' | 'ab2', foreground: boolean) {
-      if (foreground) {
-        setLoading(true);
-        setError('');
-      }
+    async function fetchAllGrades() {
+      setLoading(!hasAnyCachedGrade);
+      setError('');
       try {
-        const params = new URLSearchParams({ exam: target });
-        if (foreground) params.set('refresh', '1');
-        const result = normalizeGradeResult(await api<GradeResult>(`/api/grades?${params.toString()}`));
+        const result = normalizeGradeCache(await api<GradeResults>('/api/grades/all'));
         if (cancelled) return;
-        setGrades((current) => storeGradeCache(current, { [target]: result }, cacheKey, gradesRef));
+        setGrades((current) => storeGradeCache(current, result, cacheKey, gradesRef));
       } catch (err) {
         if (cancelled) return;
         if (isSessionExpired(err)) {
@@ -120,27 +118,20 @@ function App() {
           setSession(null);
           return;
         }
-        if (foreground || !hasRenderableGrade(gradesRef.current[target])) {
+        if (!hasAnyCachedGrade) {
           setError(err instanceof Error ? err.message : 'Erro ao carregar as notas.');
         }
       } finally {
-        if (foreground && !cancelled) setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
-    const cached = readGradeCache(cacheKey);
-    const hasActive = hasRenderableGrade(gradesRef.current[exam]) || hasRenderableGrade(cached[exam]);
-    void fetchExam(exam, !hasActive).then(() => {
-      const other = exam === 'ab1' ? 'ab2' : 'ab1';
-      if (!cancelled && canPreload() && !gradesRef.current[other]) {
-        void fetchExam(other, false);
-      }
-    });
+    void fetchAllGrades();
 
     return () => {
       cancelled = true;
     };
-  }, [session, exam]);
+  }, [session]);
 
   const visibleTables = useMemo(() => grades[exam]?.tables ?? [], [grades, exam]);
 
@@ -535,13 +526,6 @@ function asText(value: unknown) {
 
 function gradesStorageSet(cacheKey: string, grades: GradeCache) {
   window.sessionStorage.setItem(cacheKey, JSON.stringify(grades));
-}
-
-function canPreload() {
-  const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
-  if (!connection) return true;
-  if (connection.saveData) return false;
-  return connection.effectiveType !== 'slow-2g' && connection.effectiveType !== '2g';
 }
 
 function isSummaryTable(kind: string) {

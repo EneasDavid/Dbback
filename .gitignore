@@ -2,6 +2,10 @@ dist
 node_modules
 .env
 .vercel
+
+# Credenciais locais de service account. Use GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 no deploy.
+service-account*.json
+spheric-radio-*.json
 *.json
 !package-lock.json
 !package.json

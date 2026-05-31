@@ -35,6 +35,8 @@ func (router Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		router.Auth.Logout(w, r)
 	case path == "/api/me":
 		router.Auth.Me(w, r)
+	case path == "/api/grades/all":
+		router.Grades.All(w, r)
 	case path == "/api/grades" || strings.HasPrefix(path, "/api/grades/"):
 		router.Grades.Show(w, r, path)
 	case path == "/api/docs":

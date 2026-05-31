@@ -8,7 +8,7 @@ import (
 
 func TestActivityIdentityColumnCommentBecomesCardComment(t *testing.T) {
 	grid := parseGrid([]*sheets.RowData{
-		rowData(cellData("Grupo", ""), cellData("Critério", "")),
+		rowData(cellData("Grupo", ""), cellData("Total", "")),
 		rowData(cellData("Nota maxima", ""), cellData("1", "")),
 		rowData(cellData("Alice", "comentario geral da linha"), cellData("0,7", "")),
 	}, nil)
@@ -83,6 +83,57 @@ func TestActivityAB1DetailsUseConfiguredScoreDivisor(t *testing.T) {
 	detail := table.Cards[0].Details[0]
 	if detail.Value != "0,7" || detail.Max != 1 || detail.DisplayScore != "0,7 / 1" || detail.Ratio != 70 {
 		t.Fatalf("unexpected scaled detail: %#v", detail)
+	}
+}
+
+func TestActivityCriterionCommentBecomesDetailComment(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Grupo", ""), cellData("Critério", "")),
+		rowData(cellData("Nota maxima", ""), cellData("10", "")),
+		rowData(cellData("Alice", ""), cellData("7", "comentario do criterio")),
+	}, nil)
+
+	table, found, err := parseActivityRubric(grid, TableConfig{
+		Key:          "at3",
+		Label:        "AT. 3",
+		SheetName:    "AT. 3",
+		Kind:         "activity",
+		ScoreDivisor: 10,
+	}, SessionUser{Name: "Alice", Matricula: "18113089"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("student row was not found")
+	}
+	detail := table.Cards[0].Details[0]
+	if detail.Comment != "comentario do criterio" {
+		t.Fatalf("detail comment = %q, want criterion comment", detail.Comment)
+	}
+}
+
+func TestActivityTotalCommentBecomesCardComment(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Grupo", ""), cellData("Total", "")),
+		rowData(cellData("Nota maxima", ""), cellData("10", "")),
+		rowData(cellData("Alice", ""), cellData("8", "comentario total")),
+	}, nil)
+
+	table, found, err := parseActivityRubric(grid, TableConfig{
+		Key:          "at3",
+		Label:        "AT. 3",
+		SheetName:    "AT. 3",
+		Kind:         "activity",
+		ScoreDivisor: 10,
+	}, SessionUser{Name: "Alice", Matricula: "18113089"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("student row was not found")
+	}
+	if table.Cards[0].Comment != "comentario total" {
+		t.Fatalf("card comment = %q, want total comment", table.Cards[0].Comment)
 	}
 }
 

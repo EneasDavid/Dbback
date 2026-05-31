@@ -87,7 +87,7 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 			return nil, nil
 		}
 
-		driveComments := c.optionalDriveComments(ctx, missing)
+		driveCommentsCh := c.optionalDriveCommentsAsync(ctx, missing)
 
 		ranges := make([]string, 0, len(missing))
 		for _, sheetName := range missing {
@@ -102,6 +102,7 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 			return nil, sheetReadError(err)
 		}
 
+		driveComments := <-driveCommentsCh
 		found := map[string]bool{}
 		now := time.Now()
 		c.mu.Lock()
@@ -142,6 +143,14 @@ func (c *SheetsClient) optionalDriveComments(ctx context.Context, sheetNames []s
 		return nil
 	}
 	return comments
+}
+
+func (c *SheetsClient) optionalDriveCommentsAsync(ctx context.Context, sheetNames []string) <-chan []driveCellComment {
+	ch := make(chan []driveCellComment, 1)
+	go func() {
+		ch <- c.optionalDriveComments(ctx, sheetNames)
+	}()
+	return ch
 }
 
 func (c *SheetsClient) cachedSheet(sheetName string) (cachedGrid, bool) {

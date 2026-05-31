@@ -102,6 +102,7 @@ func printStudentFeedbacks(ctx context.Context, client *app.SheetsClient, matric
 	if err != nil {
 		return err
 	}
+	fmt.Printf("Aluno: %s (%s)\n", identity.Name, identity.Matricula)
 	result, err := client.GradeFor(ctx, exam, app.SessionUser{Matricula: identity.Matricula, Name: identity.Name})
 	if err != nil {
 		return err

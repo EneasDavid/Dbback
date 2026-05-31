@@ -53,3 +53,4 @@ export type SessionUser = {
 };
 
 export type GradeCache = Partial<Record<'ab1' | 'ab2', GradeResult>>;
+export type GradeResults = Record<'ab1' | 'ab2', GradeResult>;

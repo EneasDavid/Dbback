@@ -41,6 +41,8 @@ func parseActivityRubric(grid *sheetGrid, table TableConfig, user SessionUser) (
 			Subtopic:      subtopic,
 			NotaMaxima:    maximum,
 			NotaAlcancada: valueAt(grid.rows[studentRowIdx], colIdx),
+			Comment:       noteAt(rowNotesAt(grid, studentRowIdx), colIdx),
+			CommentAuthor: noteAt(rowNoteAuthorsAt(grid, studentRowIdx), colIdx),
 		})
 	}
 	if len(items) == 0 {
@@ -71,11 +73,6 @@ func activityStatus(items []activityItem) string {
 		}
 	}
 	return "Encerrado"
-}
-
-func isNumericCellText(value string) bool {
-	_, ok := parseNumber(value)
-	return ok
 }
 
 func findMaxRow(rows [][]string) int {
@@ -117,7 +114,7 @@ func rubricLabel(grid *sheetGrid, maxRowIdx int, colIdx int) string {
 func activityTotalCard(items []activityItem, details []DetailResult) CardResult {
 	for _, item := range items {
 		if normalizeHeader(item.Subtopic) == "total" {
-			return makeCard("nota", "Nota", activityScore(item.NotaAlcancada, item.NotaMaxima), "", "", details)
+			return makeCard("nota", "Nota", activityScore(item.NotaAlcancada, item.NotaMaxima), item.Comment, item.CommentAuthor, details)
 		}
 	}
 	total := 0.0

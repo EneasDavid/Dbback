@@ -29,6 +29,18 @@ React/Vite -> api Router -> Controllers -> pkg/app services -> Google Sheets/Dri
 
 Os comentarios ricos do Google Drive sao usados apenas como enriquecimento. Se a Drive API ou os comentarios falharem, a leitura dos valores da planilha via Sheets continua funcionando.
 
+## Otimizacoes tecnicas
+
+- `GET /api/grades/all` carrega AB1 e AB2 em uma unica chamada HTTP do frontend.
+- O backend agrega as abas configuradas e faz uma unica leitura em lote no Google Sheets sempre que possivel.
+- Valores, notas de celula e metadados de merges sao buscados juntos pelo Sheets API com `Fields` restrito.
+- Comentarios ricos do Drive sao buscados em paralelo com a leitura das abas e aplicados como enriquecimento.
+- Comentarios em celulas de criterio/nota entram no mesmo payload das notas, sem requisicao extra do frontend.
+- Cache em memoria por aba com TTL reduz chamadas repetidas ao Google durante a mesma janela de uso.
+- `singleflight` evita chamadas duplicadas quando varias requisicoes pedem as mesmas abas ao mesmo tempo.
+- O frontend guarda AB1 e AB2 em `sessionStorage`; alternar entre avaliacoes nao dispara nova chamada de rede.
+- A UI usa o payload normalizado do backend e nao recalcula regras sensiveis de nota no navegador.
+
 ## Configuracao
 
 Copie `env.example` para `.env` no desenvolvimento local e configure as variaveis do projeto. As principais sao:
@@ -55,7 +67,9 @@ Credenciais Google aceitas:
 - `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64`
 - `GOOGLE_SERVICE_ACCOUNT_FILE` apenas em desenvolvimento local
 
-Compartilhe a planilha com o `client_email` da service account. Para comentarios ricos, habilite a Drive API no projeto Google Cloud; sem ela, os valores da planilha ainda sao lidos.
+Nao envie arquivos fisicos de service account para o GitHub. O `.gitignore` bloqueia JSONs locais de credencial, incluindo `service-account*.json` e `spheric-radio-*.json`; no deploy, prefira `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64`.
+
+Compartilhe a planilha com o `client_email` da service account. Para comentarios ricos, habilite a Drive API no projeto Google Cloud; sem ela, os valores da planilha ainda sao lidos. Se um comentario aparece no navegador mas nao no diagnostico, verifique se a service account consegue ver esse comentario e se ele esta na mesma linha/celula do aluno ou do criterio avaliado.
 
 ## Desenvolvimento
 
