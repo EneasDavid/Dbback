@@ -1,4 +1,4 @@
-package handler
+package httpapi
 
 import (
 	"encoding/json"
@@ -171,17 +171,22 @@ func TestAPIPathUsesOriginalURLHeader(t *testing.T) {
 
 func TestGradeExamSupportsPathAliases(t *testing.T) {
 	tests := []struct {
-		name string
-		path string
-		raw  string
-		want string
+		name     string
+		path     string
+		raw      string
+		original string
+		want     string
 	}{
 		{name: "query", path: "/api/grades", raw: "exam=ab1", want: "ab1"},
 		{name: "exam path", path: "/api/grades/exam=ab2", want: "ab2"},
+		{name: "exam path encoded pipe", path: "/api/grades/exam=ab1%7Cab2", want: "ab1"},
 		{name: "short path", path: "/api/grades/ab1", want: "ab1"},
 		{name: "pipe query uses first valid exam", path: "/api/grades", raw: "exam=ab1|ab2", want: "ab1"},
 		{name: "pipe query accepts second valid exam", path: "/api/grades", raw: "exam=invalid|ab2", want: "ab2"},
+		{name: "double encoded pipe query still finds first exam", path: "/api/grades", raw: "exam=ab1%257Cab2", want: "ab1"},
 		{name: "query wins", path: "/api/grades/ab1", raw: "exam=ab2", want: "ab2"},
+		{name: "vercel original url encoded query", path: "/api/index.go", original: "/api/grades?exam=ab1%7Cab2", want: "ab1"},
+		{name: "vercel original url plain query", path: "/api/index.go", original: "/api/grades?exam=ab2|ab1", want: "ab2"},
 	}
 
 	for _, tt := range tests {
@@ -191,6 +196,9 @@ func TestGradeExamSupportsPathAliases(t *testing.T) {
 				target += "?" + tt.raw
 			}
 			req := httptest.NewRequest(http.MethodGet, target, nil)
+			if tt.original != "" {
+				req.Header.Set("X-Vercel-Original-Url", tt.original)
+			}
 			if got := gradeExam(req, apiPath(req)); got != tt.want {
 				t.Fatalf("gradeExam = %q, want %q", got, tt.want)
 			}

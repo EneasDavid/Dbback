@@ -46,46 +46,46 @@
 }
 
 :root[data-theme="dark"] {
-  color: #edf6ff;
-  background: #020817;
+  color: #f1f5f9;
+  background: #07111f;
   color-scheme: dark;
-  --page: #020817;
-  --shell: rgba(4, 13, 28, 0.82);
-  --panel: rgba(8, 20, 39, 0.74);
-  --panel-solid: #071120;
-  --panel-soft: rgba(18, 33, 58, 0.52);
-  --text: #edf6ff;
-  --muted: #9fb0c7;
-  --muted-strong: #d6e4f5;
-  --border: rgba(198, 219, 245, 0.18);
-  --border-soft: rgba(198, 219, 245, 0.1);
-  --brand: #145A3A;
-  --brand-hover: #0B3A26;
-  --brand-soft: rgba(20, 90, 58, 0.24);
-  --accent: #1C6A46;
-  --accent-soft: rgba(20, 90, 58, 0.22);
-  --accent-at4: #145A3A;
+  --page: #07111f;
+  --shell: rgba(8, 17, 30, 0.9);
+  --panel: rgba(13, 25, 41, 0.86);
+  --panel-solid: #0d1929;
+  --panel-soft: rgba(21, 35, 53, 0.58);
+  --text: #f1f5f9;
+  --muted: #9aabc0;
+  --muted-strong: #c8d4e3;
+  --border: rgba(169, 187, 210, 0.16);
+  --border-soft: rgba(169, 187, 210, 0.09);
+  --brand: #17613f;
+  --brand-hover: #10482f;
+  --brand-soft: rgba(23, 97, 63, 0.2);
+  --accent: #237149;
+  --accent-soft: rgba(35, 113, 73, 0.18);
+  --accent-at4: #17613f;
   --brand-contrast: #ffffff;
-  --danger: #e4aaa5;
-  --danger-bg: rgba(117, 66, 62, 0.34);
-  --danger-border: rgba(228, 170, 165, 0.34);
-  --success: #2F8A5A;
-  --success-bg: rgba(20, 90, 58, 0.34);
-  --warning: #e5cb91;
-  --warning-bg: rgba(119, 94, 52, 0.32);
-  --score-badge-bg: rgba(20, 90, 58, 0.28);
-  --score-badge-text: #d9efe2;
-  --score-badge-border: rgba(47, 138, 90, 0.32);
-  --progress-track: rgba(20, 90, 58, 0.28);
-  --progress-track-border: rgba(47, 138, 90, 0.18);
-  --pending-text: #dce9f8;
-  --pending-bg: rgba(220, 233, 248, 0.1);
-  --pending-border: rgba(220, 233, 248, 0.2);
-  --glass-line: rgba(255, 255, 255, 0.13);
-  --shadow: 0 30px 74px rgba(0, 3, 10, 0.48);
-  --shadow-soft: 0 16px 40px rgba(0, 3, 10, 0.34);
-  --inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.13), inset 0 -1px 0 rgba(0, 0, 0, 0.08);
-  --focus: 0 0 0 4px rgba(20, 90, 58, 0.42);
+  --danger: #d8a19c;
+  --danger-bg: rgba(91, 48, 45, 0.3);
+  --danger-border: rgba(216, 161, 156, 0.28);
+  --success: #5aa476;
+  --success-bg: rgba(31, 91, 59, 0.28);
+  --warning: #d7be7c;
+  --warning-bg: rgba(93, 76, 38, 0.28);
+  --score-badge-bg: rgba(35, 113, 73, 0.22);
+  --score-badge-text: #dbeee3;
+  --score-badge-border: rgba(90, 164, 118, 0.26);
+  --progress-track: rgba(174, 188, 178, 0.12);
+  --progress-track-border: rgba(174, 188, 178, 0.1);
+  --pending-text: #b6c3d1;
+  --pending-bg: rgba(182, 195, 209, 0.08);
+  --pending-border: rgba(182, 195, 209, 0.16);
+  --glass-line: rgba(255, 255, 255, 0.08);
+  --shadow: 0 30px 74px rgba(0, 0, 0, 0.46);
+  --shadow-soft: 0 16px 40px rgba(0, 0, 0, 0.28);
+  --inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -1px 0 rgba(0, 0, 0, 0.18);
+  --focus: 0 0 0 4px rgba(35, 113, 73, 0.32);
 }
 
 * {
@@ -101,7 +101,7 @@ body {
 }
 
 :root[data-theme="dark"] body {
-  background: linear-gradient(180deg, #061226 0%, var(--page) 48%, #00040d 100%);
+  background: linear-gradient(180deg, #0d1b2e 0%, var(--page) 52%, #030712 100%);
 }
 
 :root[data-screen="login"],
@@ -151,7 +151,7 @@ input:focus-visible {
 }
 
 :root[data-theme="dark"] .login-shell {
-  background: linear-gradient(180deg, #061226 0%, var(--page) 58%, #00040d 100%);
+  background: linear-gradient(180deg, #0d1b2e 0%, var(--page) 58%, #030712 100%);
 }
 
 .login-panel {
@@ -402,6 +402,11 @@ input:focus-visible {
   color: var(--text);
   background: color-mix(in srgb, var(--panel) 92%, transparent);
   box-shadow: 0 8px 18px rgba(33, 43, 63, 0.1), var(--inner-highlight);
+}
+
+:root[data-theme="dark"] .exam-switch button.active {
+  background: color-mix(in srgb, var(--panel-solid) 88%, var(--accent-soft));
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22), var(--inner-highlight);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -702,7 +707,7 @@ input:focus-visible {
   background: color-mix(in srgb, var(--panel-soft) 76%, var(--panel));
   border: 1px solid var(--border);
   overflow: hidden;
-  box-shadow: 0 16px 30px color-mix(in srgb, var(--text) 6%, transparent), var(--inner-highlight);
+  box-shadow: var(--shadow-soft), var(--inner-highlight);
 }
 
 .detail-header {
@@ -845,7 +850,7 @@ input:focus-visible {
   gap: 12px;
   margin-top: 16px;
   padding: 16px;
-  border: 1px dashed color-mix(in srgb, var(--accent) 34%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
   border-radius: 24px;
   color: var(--muted);
   background: color-mix(in srgb, var(--panel) 78%, var(--accent-soft));
