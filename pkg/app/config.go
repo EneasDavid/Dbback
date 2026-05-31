@@ -32,7 +32,7 @@ type TableConfig struct {
 
 func LoadConfig() Config {
 	return Config{
-		SpreadsheetID: firstNonEmpty(os.Getenv("GOOGLE_SHEET_ID"), "12zXd1oCQOdBhI88JWMrZ2req0c3XfFLJcVPXQ9CaKT8"),
+		SpreadsheetID: strings.TrimSpace(os.Getenv("GOOGLE_SHEET_ID")),
 		LoginSheet:    firstNonEmpty(os.Getenv("LOGIN_SHEET_NAME"), "Base de dados"),
 		AB1Tables: []TableConfig{
 			tableFromEnv("at1", "AT. 1", "SHEET_AB1_PESQUISA", "AT. 1", "activity", 10),
@@ -57,6 +57,9 @@ func LoadConfig() Config {
 func (c Config) Validate() error {
 	if c.SessionSecret == "" {
 		return NewHTTPError(500, "SESSION_SECRET nao configurado")
+	}
+	if c.SpreadsheetID == "" {
+		return NewHTTPError(500, "GOOGLE_SHEET_ID nao configurado")
 	}
 	if c.ServiceJSON == "" {
 		if strings.TrimSpace(c.ServiceFile) != "" {

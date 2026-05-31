@@ -23,12 +23,12 @@ func TestAddAB1ScoreAverageAddsVisibleScoreCards(t *testing.T) {
 	if len(result.Tables) != 5 {
 		t.Fatalf("tables len = %d, want 5: %#v", len(result.Tables), result.Tables)
 	}
-	
+
 	summary := result.Tables[4]
 	if summary.Key != "media-ab1" || summary.Kind != "ab1summary" || summary.Label != "Média AB1" {
 		t.Fatalf("unexpected AB1 summary table: %#v", summary)
 	}
-	
+
 	// A soma deve ser: 0.98 + 0.85 + 0.65 + 6 = 8.48
 	if len(summary.Cards) != 1 || summary.Cards[0].Label != "" || summary.Cards[0].Value != "8,48" {
 		t.Fatalf("unexpected AB1 summary card: %#v", summary.Cards)

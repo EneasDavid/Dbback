@@ -16,7 +16,7 @@ func main() {
 	os.Setenv("COOKIE_SECURE", "false")
 	port := strings.TrimSpace(os.Getenv("PORT"))
 	if port == "" {
-		port = "8080"
+		port = "3000"
 	}
 
 	static := http.FileServer(http.Dir("dist"))
@@ -33,7 +33,7 @@ func main() {
 		http.ServeFile(w, r, "dist/index.html")
 	})
 
-	log.Printf("dev server em http://localhost:%s", port)
+	log.Printf("dev server na porta %s", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 

@@ -480,17 +480,17 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
     }
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg: #111827;
-        --panel: #182132;
-        --panel-soft: #202b3d;
-        --text: #edf2f7;
-        --muted: #aab6c8;
-        --line: #2e3b4e;
-        --accent: #64d8c8;
-        --accent-soft: #143b3d;
-        --code: #f7fafc;
-        --code-bg: #101620;
-        --danger: #ff9aa2;
+        --bg: #202823;
+        --panel: #303a34;
+        --panel-soft: #39453d;
+        --text: #f3f1ea;
+        --muted: #bcc7bd;
+        --line: #4b574f;
+        --accent: #a6d7ad;
+        --accent-soft: #263c2c;
+        --code: #f4f1e8;
+        --code-bg: #1a211d;
+        --danger: #e4aaa5;
       }
     }
     * { box-sizing: border-box; }

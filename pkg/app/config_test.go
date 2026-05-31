@@ -32,6 +32,7 @@ func TestServiceAccountJSONAcceptsWrappedBase64(t *testing.T) {
 }
 
 func TestValidateExplainsMissingServiceAccountFileOnVercel(t *testing.T) {
+	t.Setenv("GOOGLE_SHEET_ID", "sheet-test-id")
 	t.Setenv("SESSION_SECRET", "test-secret")
 	t.Setenv("GOOGLE_SERVICE_ACCOUNT_JSON", "")
 	t.Setenv("GOOGLE_SERVICE_ACCOUNT_JSON_BASE64", "")
@@ -48,6 +49,27 @@ func TestValidateExplainsMissingServiceAccountFileOnVercel(t *testing.T) {
 	}
 	if !strings.Contains(httpErr.Message, "GOOGLE_SERVICE_ACCOUNT_FILE") || !strings.Contains(httpErr.Message, "Vercel") {
 		t.Fatalf("Validate() message = %q, want file and Vercel guidance", httpErr.Message)
+	}
+}
+
+func TestValidateExplainsMissingSpreadsheetID(t *testing.T) {
+	t.Setenv("GOOGLE_SHEET_ID", "")
+	t.Setenv("SESSION_SECRET", "test-secret")
+	t.Setenv("GOOGLE_SERVICE_ACCOUNT_JSON", testServiceAccountJSON)
+	t.Setenv("GOOGLE_SERVICE_ACCOUNT_JSON_BASE64", "")
+	t.Setenv("GOOGLE_SERVICE_ACCOUNT_FILE", "")
+
+	err := LoadConfig().Validate()
+	if err == nil {
+		t.Fatal("Validate() error = nil, want missing spreadsheet ID error")
+	}
+
+	var httpErr HTTPError
+	if !errors.As(err, &httpErr) {
+		t.Fatalf("Validate() error type = %T, want HTTPError", err)
+	}
+	if !strings.Contains(httpErr.Message, "GOOGLE_SHEET_ID") {
+		t.Fatalf("Validate() message = %q, want GOOGLE_SHEET_ID guidance", httpErr.Message)
 	}
 }
 

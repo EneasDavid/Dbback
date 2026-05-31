@@ -46,46 +46,46 @@
 }
 
 :root[data-theme="dark"] {
-  color: #eef3f2;
-  background: #182131;
+  color: #f3f1ea;
+  background: #202823;
   color-scheme: dark;
-  --page: #182131;
-  --shell: rgba(31, 41, 57, 0.78);
-  --panel: rgba(39, 50, 66, 0.72);
-  --panel-solid: #273242;
-  --panel-soft: rgba(64, 76, 94, 0.52);
-  --text: #eef3f2;
-  --muted: #b8c4c0;
-  --muted-strong: #d8e1dd;
-  --border: rgba(220, 229, 225, 0.2);
-  --border-soft: rgba(220, 229, 225, 0.12);
-  --brand: #9bcfb0;
-  --brand-hover: #b4dcc3;
-  --brand-soft: rgba(155, 207, 176, 0.15);
-  --accent: #9bcfb0;
-  --accent-soft: rgba(155, 207, 176, 0.13);
-  --accent-at4: #9bcfb0;
-  --brand-contrast: #14231c;
-  --danger: #e4a09b;
-  --danger-bg: rgba(120, 57, 54, 0.32);
-  --danger-border: rgba(228, 160, 155, 0.36);
+  --page: #202823;
+  --shell: rgba(37, 47, 41, 0.76);
+  --panel: rgba(55, 65, 58, 0.66);
+  --panel-solid: #303a34;
+  --panel-soft: rgba(80, 93, 83, 0.42);
+  --text: #f3f1ea;
+  --muted: #bcc7bd;
+  --muted-strong: #dde3da;
+  --border: rgba(239, 242, 233, 0.18);
+  --border-soft: rgba(239, 242, 233, 0.1);
+  --brand: #93cfa3;
+  --brand-hover: #adddbc;
+  --brand-soft: rgba(147, 207, 163, 0.17);
+  --accent: #a6d7ad;
+  --accent-soft: rgba(166, 215, 173, 0.14);
+  --accent-at4: #93cfa3;
+  --brand-contrast: #142019;
+  --danger: #e4aaa5;
+  --danger-bg: rgba(117, 66, 62, 0.34);
+  --danger-border: rgba(228, 170, 165, 0.34);
   --success: #a8d6b8;
-  --success-bg: rgba(74, 112, 86, 0.32);
-  --warning: #e3c789;
-  --warning-bg: rgba(119, 91, 44, 0.32);
-  --score-badge-bg: rgba(155, 207, 176, 0.14);
-  --score-badge-text: #dceee3;
-  --score-badge-border: rgba(155, 207, 176, 0.24);
-  --progress-track: rgba(229, 236, 232, 0.18);
-  --progress-track-border: rgba(229, 236, 232, 0.14);
-  --pending-text: #ffffff;
-  --pending-bg: rgba(238, 243, 242, 0.1);
-  --pending-border: rgba(238, 243, 242, 0.22);
-  --glass-line: rgba(255, 255, 255, 0.12);
-  --shadow: 0 28px 70px rgba(6, 10, 18, 0.28);
-  --shadow-soft: 0 16px 38px rgba(6, 10, 18, 0.22);
-  --inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.11);
-  --focus: 0 0 0 4px rgba(155, 207, 176, 0.26);
+  --success-bg: rgba(83, 116, 92, 0.34);
+  --warning: #e5cb91;
+  --warning-bg: rgba(119, 94, 52, 0.32);
+  --score-badge-bg: rgba(147, 207, 163, 0.15);
+  --score-badge-text: #e4f2e7;
+  --score-badge-border: rgba(147, 207, 163, 0.23);
+  --progress-track: rgba(236, 239, 230, 0.16);
+  --progress-track-border: rgba(236, 239, 230, 0.12);
+  --pending-text: #ece8dc;
+  --pending-bg: rgba(239, 235, 222, 0.1);
+  --pending-border: rgba(239, 235, 222, 0.2);
+  --glass-line: rgba(255, 255, 255, 0.13);
+  --shadow: 0 30px 74px rgba(10, 16, 13, 0.34);
+  --shadow-soft: 0 16px 40px rgba(10, 16, 13, 0.24);
+  --inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.13), inset 0 -1px 0 rgba(0, 0, 0, 0.08);
+  --focus: 0 0 0 4px rgba(147, 207, 163, 0.24);
 }
 
 * {
@@ -98,6 +98,10 @@ body {
   min-height: 100vh;
   line-height: 1.5;
   background: linear-gradient(180deg, color-mix(in srgb, var(--page) 84%, #ffffff 16%) 0%, var(--page) 48%, color-mix(in srgb, var(--page) 92%, #dbe5f2 8%) 100%);
+}
+
+:root[data-theme="dark"] body {
+  background: linear-gradient(180deg, #2b352d 0%, var(--page) 48%, #191f1b 100%);
 }
 
 :root[data-screen="login"],
@@ -144,6 +148,10 @@ input:focus-visible {
   overflow: hidden;
   padding: 24px 16px;
   background: linear-gradient(180deg, color-mix(in srgb, var(--page) 80%, #ffffff 20%), var(--page));
+}
+
+:root[data-theme="dark"] .login-shell {
+  background: linear-gradient(180deg, #2f3a32 0%, var(--page) 54%, #1a201c 100%);
 }
 
 .login-panel {

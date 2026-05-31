@@ -10,5 +10,6 @@ node_modules
 !vercel.json
 *.log
 coverage
+.bin
 .gocache
 .gomodcache

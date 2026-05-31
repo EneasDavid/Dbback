@@ -2,6 +2,16 @@
 set -eu
 
 echo "Running local quality gate before push..."
+git diff --check
+files="$(gofmt -l $(git ls-files '*.go' ':!:node_modules/*'))"
+test -z "$files" || { echo "$files"; exit 1; }
+go mod verify
+test -z "$(find . -maxdepth 3 -type d -empty -not -path './.git/*' -not -path './node_modules/*' -not -path './.bin/*' -not -path './.gocache/*' -not -path './.gomodcache/*' -print)"
+test -z "$(git ls-files | grep -E '(^dev$|\.patch$|\.xlsx$|\.key$|\.pem$|service.*account.*json$)')" || {
+  echo "Tracked generated or secret-like file found"
+  git ls-files | grep -E '(^dev$|\.patch$|\.xlsx$|\.key$|\.pem$|service.*account.*json$)'
+  exit 1
+}
 go vet $(go list ./... | grep -v /node_modules/)
 go test -race $(go list ./... | grep -v /node_modules/)
 npm run lint

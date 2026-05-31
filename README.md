@@ -305,6 +305,9 @@ npm run dev:full
 npm run production:full
 ```
 
+O servidor local usa `PORT` e, quando a variavel nao e definida, sobe na porta `3000`.
+Nao publique ou mantenha ambientes locais nas portas antigas de desenvolvimento.
+
 Comandos de qualidade:
 
 ```bash
@@ -313,13 +316,18 @@ npm run lint
 npm run build
 ```
 
+O quality gate do GitHub tambem valida `git diff --check`, `gofmt`, `go mod verify` e rejeita sobras geradas ou arquivos com cara de segredo.
+
 Diagnostico de comentarios:
 
 ```bash
 go run ./cmd/comments
 go run ./cmd/comments -matricula 2024001339 -exam ab1
 go run ./cmd/comments -raw-drive
+GOOGLE_SERVICE_ACCOUNT_FILE=./service-account.local.json PORT=3000 bash test-comments.sh
 ```
+
+O `test-comments.sh` usa `GOOGLE_SERVICE_ACCOUNT_FILE` ou `./service-account.local.json`, mascara a identidade da service account no terminal e consulta `/api/grades?exam=ab1` pela porta configurada. Use esse teste para confirmar rapidamente que os feedbacks da linha real do aluno estao chegando no payload antes do deploy.
 
 ## Deploy
 

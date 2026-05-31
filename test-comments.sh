@@ -4,6 +4,9 @@
 # Use: bash test-comments.sh
 
 set -e
+PORT="${PORT:-3000}"
+API_BASE="${API_BASE:-http://127.0.0.1:$PORT}"
+CREDENTIAL_FILE="${GOOGLE_SERVICE_ACCOUNT_FILE:-./service-account.local.json}"
 
 echo "🔍 Testando configuração de comentários..."
 echo ""
@@ -16,32 +19,31 @@ NC='\033[0m' # No Color
 
 # 1. Verificar arquivo de credenciais
 echo -n "1️⃣  Verificando credenciais do Google... "
-if [ -f "spheric-radio-495913-q2-1fd5fc001597.json" ]; then
+if [ -f "$CREDENTIAL_FILE" ]; then
     echo -e "${GREEN}✓${NC} Arquivo encontrado"
-    
+
     # Verificar se é JSON válido
-    if jq . spheric-radio-495913-q2-1fd5fc001597.json > /dev/null 2>&1; then
+    if jq . "$CREDENTIAL_FILE" > /dev/null 2>&1; then
         echo -e "   ${GREEN}✓ JSON válido${NC}"
     else
         echo -e "   ${RED}✗ JSON inválido${NC}"
         exit 1
     fi
-    
+
     # Verificar se tem os campos esperados
-    if jq -e '.type == "service_account"' spheric-radio-495913-q2-1fd5fc001597.json > /dev/null 2>&1; then
+    if jq -e '.type == "service_account"' "$CREDENTIAL_FILE" > /dev/null 2>&1; then
         echo -e "   ${GREEN}✓ Tipo correto (service_account)${NC}"
     else
         echo -e "   ${RED}✗ Tipo incorreto${NC}"
         exit 1
     fi
-    
-    # Mostrar email da conta de serviço
-    EMAIL=$(jq -r '.client_email' spheric-radio-495913-q2-1fd5fc001597.json)
-    echo -e "   Email da conta: ${YELLOW}${EMAIL}${NC}"
+
+    EMAIL_DOMAIN=$(jq -r '.client_email // "" | split("@") | .[1] // "dominio-nao-informado"' "$CREDENTIAL_FILE")
+    echo -e "   ${GREEN}✓ Conta de serviço detectada${NC} (${YELLOW}${EMAIL_DOMAIN}${NC})"
     echo ""
 else
     echo -e "${RED}✗${NC} Arquivo não encontrado"
-    echo "   Você precisa gerar as credenciais do Google Cloud"
+    echo "   Defina GOOGLE_SERVICE_ACCOUNT_FILE ou use ./service-account.local.json"
     exit 1
 fi
 
@@ -65,7 +67,7 @@ fi
 # 4. Testar credenciais com curl (requer servidor rodando)
 echo ""
 echo -n "4️⃣  Iniciando servidor... "
-/tmp/dbback-test &
+GOOGLE_SERVICE_ACCOUNT_FILE="$CREDENTIAL_FILE" PORT="$PORT" /tmp/dbback-test &
 SERVER_PID=$!
 sleep 2
 
@@ -77,7 +79,7 @@ echo -e "${GREEN}✓${NC} Servidor rodando (PID: $SERVER_PID)"
 
 # 5. Testar login
 echo -n "5️⃣  Testando login (matrícula: 000001)... "
-LOGIN_RESPONSE=$(curl -s -X POST http://localhost:8080/api/login \
+LOGIN_RESPONSE=$(curl -s -X POST "$API_BASE/api/login" \
     -H "Content-Type: application/json" \
     -d '{"matricula":"000001"}' 2>/dev/null)
 
@@ -86,7 +88,7 @@ if echo "$LOGIN_RESPONSE" | jq -e '.matricula' > /dev/null 2>&1; then
     echo "   Usuário: $(echo $LOGIN_RESPONSE | jq -r '.name')"
     
     # Extrair cookie da resposta
-    COOKIE=$(curl -s -i -X POST http://localhost:8080/api/login \
+    COOKIE=$(curl -s -i -X POST "$API_BASE/api/login" \
         -H "Content-Type: application/json" \
         -d '{"matricula":"000001"}' 2>/dev/null | grep "Set-Cookie" | cut -d' ' -f2 | cut -d';' -f1)
     
@@ -102,7 +104,7 @@ fi
 
 # 6. Testar busca de notas com comentários
 echo -n "6️⃣  Buscando notas (exam=ab1)... "
-GRADES_RESPONSE=$(curl -s http://localhost:8080/api/grades?exam=ab1 \
+GRADES_RESPONSE=$(curl -s "$API_BASE/api/grades?exam=ab1" \
     -H "Cookie: $COOKIE" 2>/dev/null)
 
 if echo "$GRADES_RESPONSE" | jq -e '.tables[0].cards[0]' > /dev/null 2>&1; then
