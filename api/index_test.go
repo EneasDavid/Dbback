@@ -47,27 +47,50 @@ func TestDocsRoute(t *testing.T) {
 
 func TestDocsRouteRendersHTMLForBrowser(t *testing.T) {
 	setDocsCredentials(t)
-	req := httptest.NewRequest(http.MethodGet, "/api/docs", nil)
-	req.Header.Set("Accept", "text/html,application/xhtml+xml")
-	setDocsBasicAuth(req)
-	rec := httptest.NewRecorder()
 
-	Handler(rec, req)
+	// Definimos os cenários que queremos testar, garantindo a ordem: ab1 e depois ab2
+	cenarios := []struct {
+		nome  string
+		busca string
+	}{
+		{nome: "Cenário AB1", busca: "/api/grades?exam=ab1"},
+		{nome: "Cenário AB2", busca: "/api/grades?exam=ab2"},
+	}
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
-	}
-	if got := rec.Header().Get("Content-Type"); !strings.Contains(got, "text/html") {
-		t.Fatalf("Content-Type = %q, want text/html", got)
-	}
-	body := rec.Body.String()
-	for _, want := range []string{"dbBack Documentação da API", "/api/grades?exam=ab1|ab2", "Abrir JSON"} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("HTML body should contain %q", want)
-		}
+	for _, c := range cenarios {
+		// t.Run isola a execução de cada cenário sequencialmente
+		t.Run(c.nome, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/docs", nil)
+			req.Header.Set("Accept", "text/html,application/xhtml+xml")
+			setDocsBasicAuth(req)
+			rec := httptest.NewRecorder()
+
+			Handler(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+			}
+			if got := rec.Header().Get("Content-Type"); !strings.Contains(got, "text/html") {
+				t.Fatalf("Content-Type = %q, want text/html", got)
+			}
+			
+			body := rec.Body.String()
+			
+			// Validações fixas que devem existir em ambos
+			stringsFixas := []string{"dbBack Documentação da API", "Abrir JSON"}
+			for _, want := range stringsFixas {
+				if !strings.Contains(body, want) {
+					t.Fatalf("HTML body should contain %q", want)
+				}
+			}
+
+			// Validação específica do cenário atual (ab1 ou ab2)
+			if !strings.Contains(body, c.busca) {
+				t.Fatalf("HTML body should contain %q", c.busca)
+			}
+		})
 	}
 }
-
 func TestDocsRouteFormatJSONOverridesHTMLAccept(t *testing.T) {
 	setDocsCredentials(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/docs?format=json", nil)
