@@ -16,6 +16,7 @@ import (
 )
 
 const xlsxMimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+const maxXLSXExportBytes int64 = 25 << 20
 
 type xlsxWorkbookXML struct {
 	Sheets []xlsxWorkbookSheetXML `xml:"sheets>sheet"`
@@ -85,6 +86,7 @@ func (c *SheetsClient) workbookCommentsForSpreadsheet(ctx context.Context) (map[
 		if err != nil {
 			return nil, err
 		}
+		comments = filterWorkbookComments(comments, configuredGradeSheetSet(c.cfg))
 		c.mu.Lock()
 		c.workbookComments = cachedWorkbookComments{expires: time.Now().Add(c.cfg.CacheTTL), comments: comments}
 		c.mu.Unlock()
@@ -113,7 +115,7 @@ func (c *SheetsClient) fetchWorkbookComments(ctx context.Context) (map[string][]
 	if err != nil {
 		return nil, err
 	}
-	body, readErr := io.ReadAll(resp.Body)
+	body, readErr := readBoundedXLSXExportBody(resp.Body)
 	closeErr := resp.Body.Close()
 	if readErr != nil {
 		return nil, readErr
@@ -289,6 +291,45 @@ func appendWorkbookComments(target map[string][]workbookCellComment, comments []
 	}
 }
 
+func configuredGradeSheetSet(cfg Config) map[string]bool {
+	names := map[string]bool{}
+	for _, table := range append(cfg.AB1Tables, cfg.AB2Tables...) {
+		name := strings.TrimSpace(table.SheetName)
+		if name != "" && name != strings.TrimSpace(cfg.LoginSheet) {
+			names[name] = true
+		}
+	}
+	return names
+}
+
+func sheetNameSet(sheetNames []string) map[string]bool {
+	names := map[string]bool{}
+	for _, sheetName := range sheetNames {
+		sheetName = strings.TrimSpace(sheetName)
+		if sheetName != "" {
+			names[sheetName] = true
+		}
+	}
+	return names
+}
+
+func filterWorkbookComments(input map[string][]workbookCellComment, allowed map[string]bool) map[string][]workbookCellComment {
+	if input == nil {
+		return nil
+	}
+	if len(allowed) == 0 {
+		return map[string][]workbookCellComment{}
+	}
+	output := make(map[string][]workbookCellComment, len(allowed))
+	for sheetName, comments := range input {
+		if !allowed[strings.TrimSpace(sheetName)] {
+			continue
+		}
+		output[sheetName] = append([]workbookCellComment(nil), comments...)
+	}
+	return output
+}
+
 func cloneWorkbookComments(input map[string][]workbookCellComment) map[string][]workbookCellComment {
 	if input == nil {
 		return nil
@@ -298,6 +339,17 @@ func cloneWorkbookComments(input map[string][]workbookCellComment) map[string][]
 		output[sheetName] = append([]workbookCellComment(nil), comments...)
 	}
 	return output
+}
+
+func readBoundedXLSXExportBody(reader io.Reader) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(reader, maxXLSXExportBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > maxXLSXExportBytes {
+		return nil, fmt.Errorf("exportacao XLSX excedeu o limite seguro de %d bytes", maxXLSXExportBytes)
+	}
+	return body, nil
 }
 
 func readZipXML(file *zip.File, target any) error {

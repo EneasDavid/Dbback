@@ -166,7 +166,7 @@ func (c *SheetsClient) optionalWorkbookComments(ctx context.Context, sheetNames 
 	if err != nil {
 		return nil
 	}
-	return comments
+	return filterWorkbookComments(comments, sheetNameSet(sheetNames))
 }
 
 func (c *SheetsClient) optionalWorkbookCommentsAsync(ctx context.Context, sheetNames []string) <-chan map[string][]workbookCellComment {

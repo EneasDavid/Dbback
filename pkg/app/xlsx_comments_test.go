@@ -64,6 +64,42 @@ Comment:
 	}
 }
 
+func TestWorkbookCommentsAreFilteredToConfiguredGradeSheets(t *testing.T) {
+	input := map[string][]workbookCellComment{
+		"AT. 1": {
+			{SheetName: "AT. 1", Text: "feedback atividade"},
+		},
+		"Projeto AB2": {
+			{SheetName: "Projeto AB2", Text: "feedback projeto"},
+		},
+		"Base de dados": {
+			{SheetName: "Base de dados", Text: "comentario de login"},
+		},
+		"Controle interno": {
+			{SheetName: "Controle interno", Text: "comentario interno"},
+		},
+	}
+	allowed := configuredGradeSheetSet(Config{
+		LoginSheet: "Base de dados",
+		AB1Tables:  []TableConfig{{SheetName: "AT. 1"}},
+		AB2Tables:  []TableConfig{{SheetName: "Projeto AB2"}},
+	})
+
+	filtered := filterWorkbookComments(input, allowed)
+	if len(filtered) != 2 {
+		t.Fatalf("filtered sheets = %d, want 2: %#v", len(filtered), filtered)
+	}
+	if len(filtered["AT. 1"]) != 1 || len(filtered["Projeto AB2"]) != 1 {
+		t.Fatalf("expected configured grade sheets in %#v", filtered)
+	}
+	if _, ok := filtered["Base de dados"]; ok {
+		t.Fatal("login sheet comments must not be cached")
+	}
+	if _, ok := filtered["Controle interno"]; ok {
+		t.Fatal("unconfigured sheet comments must not be cached")
+	}
+}
+
 func writeTestZipFile(t *testing.T, writer *zip.Writer, name string, body string) {
 	t.Helper()
 	file, err := writer.Create(name)

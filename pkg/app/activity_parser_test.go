@@ -442,6 +442,93 @@ func TestSummaryIdentityColumnCommentCanExcludeStudent(t *testing.T) {
 	}
 }
 
+func TestActivityWorkbookCommentDoesNotLeakBetweenStudents(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Nome", ""), cellData("Critério", "")),
+		rowData(cellData("Nota maxima", ""), cellData("1", "")),
+		rowData(cellData("Alice", ""), cellData("0,8", "")),
+		rowData(cellData("Bob", ""), cellData("0,7", "")),
+	}, nil)
+	grid.applyWorkbookComments([]workbookCellComment{
+		{SheetName: "AT. 1", RowIndex: 3, ColumnIndex: 1, Text: "comentario privado do Bob", Author: "Professor"},
+	}, nil)
+
+	aliceTable, found, err := parseActivityRubric(grid, TableConfig{
+		Key:       "at1",
+		Label:     "AT. 1",
+		SheetName: "AT. 1",
+		Kind:      "activity",
+	}, SessionUser{Name: "Alice", Matricula: "123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("Alice row was not found")
+	}
+	if got := aliceTable.Cards[0].Details[0].Comment; got != "" {
+		t.Fatalf("Alice detail comment = %q, want empty", got)
+	}
+
+	bobTable, found, err := parseActivityRubric(grid, TableConfig{
+		Key:       "at1",
+		Label:     "AT. 1",
+		SheetName: "AT. 1",
+		Kind:      "activity",
+	}, SessionUser{Name: "Bob", Matricula: "456"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("Bob row was not found")
+	}
+	if got := bobTable.Cards[0].Details[0].Comment; got != "comentario privado do Bob" {
+		t.Fatalf("Bob detail comment = %q, want private workbook comment", got)
+	}
+}
+
+func TestSummaryWorkbookCommentDoesNotLeakBetweenStudents(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Nome", ""), cellData("Matricula", ""), cellData("Prova", "")),
+		rowData(cellData("Alice", ""), cellData("123", ""), cellData("8", "")),
+		rowData(cellData("Bob", ""), cellData("456", ""), cellData("7", "")),
+	}, nil)
+	grid.applyWorkbookComments([]workbookCellComment{
+		{SheetName: "Notas AB1", RowIndex: 2, ColumnIndex: 2, Text: "comentario privado do Bob", Author: "Professor"},
+	}, nil)
+
+	aliceTable, found, err := parseStudentTable(grid, TableConfig{
+		Key:       "prova",
+		Label:     "Prova AB1",
+		SheetName: "Notas AB1",
+		Kind:      "summary",
+	}, SessionUser{Name: "Alice", Matricula: "123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("Alice row was not found")
+	}
+	if got := aliceTable.Cards[0].Comment; got != "" {
+		t.Fatalf("Alice card comment = %q, want empty", got)
+	}
+
+	bobTable, found, err := parseStudentTable(grid, TableConfig{
+		Key:       "prova",
+		Label:     "Prova AB1",
+		SheetName: "Notas AB1",
+		Kind:      "summary",
+	}, SessionUser{Name: "Bob", Matricula: "456"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("Bob row was not found")
+	}
+	if got := bobTable.Cards[0].Comment; got != "comentario privado do Bob" {
+		t.Fatalf("Bob card comment = %q, want private workbook comment", got)
+	}
+}
+
 func activityGrid(studentNote string, detailNote string, headerNote string) *sheetGrid {
 	return &sheetGrid{
 		headers:     []string{"Aluno", "Critério"},
