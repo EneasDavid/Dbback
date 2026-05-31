@@ -60,7 +60,7 @@ func rowIdentityComment(grid *sheetGrid, rowIdx int) (string, string) {
 }
 
 func identityCommentColumns(headers []string) []int {
-	candidates := []int{groupColumn(headers), matriculaColumn(headers), nameColumn(headers), 0}
+	candidates := []int{nameColumn(headers), groupColumn(headers), matriculaColumn(headers), 0}
 	seen := map[int]bool{}
 	columns := make([]int, 0, len(candidates))
 	for _, colIdx := range candidates {

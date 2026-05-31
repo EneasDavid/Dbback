@@ -185,6 +185,34 @@ var sheetsGridFields = googleapi.Field(
 
 const driveReadonlyScope = "https://www.googleapis.com/auth/drive.readonly"
 
+type driveCommentEndpoint struct {
+	version       string
+	pageSizeParam string
+	pageSize      string
+	fields        string
+	errorLabel    string
+	decode        func([]byte) (driveCommentsPayload, error)
+}
+
+var (
+	driveV3CommentEndpoint = driveCommentEndpoint{
+		version:       "v3",
+		pageSizeParam: "pageSize",
+		pageSize:      "100",
+		fields:        "nextPageToken,comments(content,anchor,author(displayName),quotedFileContent(value),deleted)",
+		errorLabel:    "comments",
+		decode:        decodeDriveComments,
+	}
+	driveV2CommentEndpoint = driveCommentEndpoint{
+		version:       "v2",
+		pageSizeParam: "maxResults",
+		pageSize:      "100",
+		fields:        "nextPageToken,items(content,anchor,author(displayName),context(value),deleted,status)",
+		errorLabel:    "comments v2",
+		decode:        decodeDriveV2Comments,
+	}
+)
+
 func requiresDriveComments(sheetNames []string, loginSheet string) bool {
 	for _, sheetName := range sheetNames {
 		sheetName = strings.TrimSpace(sheetName)
@@ -221,69 +249,28 @@ func (c *SheetsClient) driveCommentsForSpreadsheet(ctx context.Context) ([]drive
 }
 
 func (c *SheetsClient) fetchDriveComments(ctx context.Context) ([]driveCellComment, error) {
-	var all []driveCellComment
-	pageToken := ""
-	for {
-		endpoint, err := url.Parse(fmt.Sprintf("https://www.googleapis.com/drive/v3/files/%s/comments", url.PathEscape(c.cfg.SpreadsheetID)))
-		if err != nil {
-			return nil, err
-		}
-		query := endpoint.Query()
-		query.Set("pageSize", "100")
-		query.Set("includeDeleted", "false")
-		query.Set("fields", "nextPageToken,comments(content,anchor,author(displayName),quotedFileContent(value),deleted)")
-		if pageToken != "" {
-			query.Set("pageToken", pageToken)
-		}
-		endpoint.RawQuery = query.Encode()
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.httpClient.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		body, readErr := io.ReadAll(resp.Body)
-		closeErr := resp.Body.Close()
-		if readErr != nil {
-			return nil, readErr
-		}
-		if closeErr != nil {
-			return nil, closeErr
-		}
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return nil, fmt.Errorf("comments retornou HTTP %d: %s", resp.StatusCode, driveErrorMessage(body))
-		}
-
-		payload, err := decodeDriveComments(body)
-		if err != nil {
-			return nil, err
-		}
-		all = append(all, payload.comments...)
-		if strings.TrimSpace(payload.nextPageToken) == "" {
-			if len(all) > 0 {
-				return all, nil
-			}
-			return c.fetchDriveV2Comments(ctx)
-		}
-		pageToken = payload.nextPageToken
+	comments, err := c.fetchDriveCommentPages(ctx, driveV3CommentEndpoint)
+	if err != nil {
+		return nil, err
 	}
+	if len(comments) > 0 {
+		return comments, nil
+	}
+	return c.fetchDriveCommentPages(ctx, driveV2CommentEndpoint)
 }
 
-func (c *SheetsClient) fetchDriveV2Comments(ctx context.Context) ([]driveCellComment, error) {
+func (c *SheetsClient) fetchDriveCommentPages(ctx context.Context, spec driveCommentEndpoint) ([]driveCellComment, error) {
 	var all []driveCellComment
 	pageToken := ""
 	for {
-		endpoint, err := url.Parse(fmt.Sprintf("https://www.googleapis.com/drive/v2/files/%s/comments", url.PathEscape(c.cfg.SpreadsheetID)))
+		endpoint, err := url.Parse(fmt.Sprintf("https://www.googleapis.com/drive/%s/files/%s/comments", spec.version, url.PathEscape(c.cfg.SpreadsheetID)))
 		if err != nil {
 			return nil, err
 		}
 		query := endpoint.Query()
-		query.Set("maxResults", "100")
+		query.Set(spec.pageSizeParam, spec.pageSize)
 		query.Set("includeDeleted", "false")
-		query.Set("fields", "nextPageToken,items(content,anchor,author(displayName),context(value),deleted,status)")
+		query.Set("fields", spec.fields)
 		if pageToken != "" {
 			query.Set("pageToken", pageToken)
 		}
@@ -306,10 +293,10 @@ func (c *SheetsClient) fetchDriveV2Comments(ctx context.Context) ([]driveCellCom
 			return nil, closeErr
 		}
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return nil, fmt.Errorf("comments v2 retornou HTTP %d: %s", resp.StatusCode, driveErrorMessage(body))
+			return nil, fmt.Errorf("%s retornou HTTP %d: %s", spec.errorLabel, resp.StatusCode, driveErrorMessage(body))
 		}
 
-		payload, err := decodeDriveV2Comments(body)
+		payload, err := spec.decode(body)
 		if err != nil {
 			return nil, err
 		}

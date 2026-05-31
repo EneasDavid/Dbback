@@ -299,8 +299,7 @@ input:focus-visible {
 
 .topbar span,
 .grade-row span,
-.summary-score span,
-.feedback-list span {
+.summary-score span {
   color: var(--muted);
   font-size: 0.8rem;
   font-weight: 800;
@@ -492,68 +491,6 @@ input:focus-visible {
   box-shadow: var(--inner-highlight);
 }
 
-.summary-average-stack {
-  display: grid;
-  gap: 12px;
-  padding-top: 14px;
-}
-
-.summary-average {
-  display: grid;
-  gap: 12px;
-  padding: 18px;
-  border: 1px solid color-mix(in srgb, var(--brand) 20%, var(--border-soft));
-  border-radius: 26px;
-  background:
-    linear-gradient(145deg, color-mix(in srgb, var(--brand-soft) 74%, var(--panel)), color-mix(in srgb, var(--panel) 88%, transparent));
-  box-shadow: 0 18px 38px color-mix(in srgb, var(--brand) 12%, transparent), var(--inner-highlight);
-}
-
-.summary-average div {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.summary-average span {
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
-.summary-average strong {
-  color: var(--text);
-  font-size: 3rem;
-  line-height: 0.95;
-  letter-spacing: 0;
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-
-.summary-average p {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 0.92rem;
-  line-height: 1.42;
-}
-
-.at4-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 8px;
-  border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 800;
-  color: var(--brand-contrast);
-  background: var(--accent-at4);
-  box-shadow: 0 6px 18px rgba(20, 122, 82, 0.12);
-}
-
 .summary-score.highlight {
   border-color: color-mix(in srgb, var(--accent) 28%, var(--border-soft));
   background: var(--success-bg);
@@ -566,8 +503,7 @@ input:focus-visible {
   overflow-wrap: anywhere;
 }
 
-.summary-score p,
-.feedback-list p {
+.summary-score p {
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -695,11 +631,7 @@ input:focus-visible {
 .summary-score.score-danger strong,
 .summary-score.score-warning strong,
 .summary-score.score-success strong,
-.summary-score.score-pending strong,
-.summary-average.score-danger strong,
-.summary-average.score-warning strong,
-.summary-average.score-success strong,
-.summary-average.score-pending strong {
+.summary-score.score-pending strong {
   color: currentColor;
 }
 
@@ -734,37 +666,6 @@ input:focus-visible {
   color: var(--pending-text);
   border-color: var(--pending-border);
   background: var(--pending-bg);
-}
-
-.summary-average.score-danger,
-.summary-average.score-warning,
-.summary-average.score-success,
-.summary-average.score-pending {
-  color: currentColor;
-}
-
-.summary-average.score-danger {
-  color: var(--danger);
-  border-color: var(--danger-border);
-  background: linear-gradient(145deg, color-mix(in srgb, var(--danger-bg) 72%, var(--panel)), color-mix(in srgb, var(--panel) 86%, transparent));
-}
-
-.summary-average.score-warning {
-  color: var(--warning);
-  border-color: color-mix(in srgb, var(--warning) 36%, var(--border-soft));
-  background: linear-gradient(145deg, color-mix(in srgb, var(--warning-bg) 72%, var(--panel)), color-mix(in srgb, var(--panel) 86%, transparent));
-}
-
-.summary-average.score-success {
-  color: var(--success);
-  border-color: color-mix(in srgb, var(--success) 32%, var(--border-soft));
-  background: linear-gradient(145deg, color-mix(in srgb, var(--success-bg) 72%, var(--panel)), color-mix(in srgb, var(--panel) 86%, transparent));
-}
-
-.summary-average.score-pending {
-  color: var(--pending-text);
-  border-color: var(--pending-border);
-  background: linear-gradient(145deg, color-mix(in srgb, var(--pending-bg) 72%, var(--panel)), color-mix(in srgb, var(--panel) 86%, transparent));
 }
 
 .grade-row p {
@@ -1029,27 +930,6 @@ input:focus-visible {
   font-size: 0.82rem;
 }
 
-.feedback-list {
-  display: grid;
-  gap: 8px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-soft);
-}
-
-.inline-feedback {
-  margin: 0;
-  padding: 14px 16px 16px;
-  border-top: 1px solid var(--border-soft);
-}
-
-.feedback-list p {
-  padding: 10px;
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--panel-soft) 88%, transparent);
-}
-
-.feedback-list svg,
 .summary-score svg {
   flex: 0 0 auto;
   margin-top: 2px;
@@ -1098,22 +978,17 @@ input:focus-visible {
 }
 
 @media (max-width: 380px) {
-  .summary-average div,
   .grade-row-trigger div {
     align-items: flex-start;
     flex-direction: column;
     gap: 8px;
   }
 
-  .summary-average strong,
   .grade-row-trigger strong {
     max-width: 100%;
     text-align: left;
   }
 
-  .summary-average strong {
-    font-size: 2.35rem;
-  }
 }
 
 @media (min-width: 720px) {

@@ -31,6 +31,14 @@ type driveCommentsPayload struct {
 	comments      []driveCellComment
 }
 
+type driveCommentRecord struct {
+	text    string
+	author  string
+	quoted  string
+	anchor  string
+	deleted bool
+}
+
 func decodeDriveComments(body []byte) (driveCommentsPayload, error) {
 	var payload struct {
 		NextPageToken string `json:"nextPageToken"`
@@ -52,19 +60,12 @@ func decodeDriveComments(body []byte) (driveCommentsPayload, error) {
 
 	result := driveCommentsPayload{nextPageToken: payload.NextPageToken}
 	for _, comment := range payload.Comments {
-		text := strings.TrimSpace(comment.Content)
-		quoted := strings.TrimSpace(comment.QuotedFileContent.Value)
-		if comment.Deleted || text == "" {
-			continue
-		}
-		sheetID, hasSheetID := driveCommentSheetID(comment.Anchor)
-		result.comments = append(result.comments, driveCellComment{
-			Text:       text,
-			Author:     authorDisplayName(comment.Author.DisplayName),
-			QuotedText: quoted,
-			Anchor:     strings.TrimSpace(comment.Anchor),
-			SheetID:    sheetID,
-			HasSheetID: hasSheetID,
+		result.appendDriveComment(driveCommentRecord{
+			text:    comment.Content,
+			author:  comment.Author.DisplayName,
+			quoted:  comment.QuotedFileContent.Value,
+			anchor:  comment.Anchor,
+			deleted: comment.Deleted,
 		})
 	}
 	return result, nil
@@ -92,22 +93,32 @@ func decodeDriveV2Comments(body []byte) (driveCommentsPayload, error) {
 
 	result := driveCommentsPayload{nextPageToken: payload.NextPageToken}
 	for _, comment := range payload.Items {
-		text := strings.TrimSpace(comment.Content)
-		quoted := strings.TrimSpace(comment.Context.Value)
-		if comment.Deleted || text == "" {
-			continue
-		}
-		sheetID, hasSheetID := driveCommentSheetID(comment.Anchor)
-		result.comments = append(result.comments, driveCellComment{
-			Text:       text,
-			Author:     authorDisplayName(comment.Author.DisplayName),
-			QuotedText: quoted,
-			Anchor:     strings.TrimSpace(comment.Anchor),
-			SheetID:    sheetID,
-			HasSheetID: hasSheetID,
+		result.appendDriveComment(driveCommentRecord{
+			text:    comment.Content,
+			author:  comment.Author.DisplayName,
+			quoted:  comment.Context.Value,
+			anchor:  comment.Anchor,
+			deleted: comment.Deleted,
 		})
 	}
 	return result, nil
+}
+
+func (p *driveCommentsPayload) appendDriveComment(comment driveCommentRecord) {
+	text := strings.TrimSpace(comment.text)
+	if comment.deleted || text == "" {
+		return
+	}
+	anchor := strings.TrimSpace(comment.anchor)
+	sheetID, hasSheetID := driveCommentSheetID(anchor)
+	p.comments = append(p.comments, driveCellComment{
+		Text:       text,
+		Author:     authorDisplayName(comment.author),
+		QuotedText: strings.TrimSpace(comment.quoted),
+		Anchor:     anchor,
+		SheetID:    sheetID,
+		HasSheetID: hasSheetID,
+	})
 }
 
 func driveCommentSheetID(anchor string) (int64, bool) {

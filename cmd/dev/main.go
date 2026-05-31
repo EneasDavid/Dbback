@@ -14,6 +14,10 @@ import (
 func main() {
 	loadDotEnv(".env")
 	os.Setenv("COOKIE_SECURE", "false")
+	port := strings.TrimSpace(os.Getenv("PORT"))
+	if port == "" {
+		port = "8080"
+	}
 
 	static := http.FileServer(http.Dir("dist"))
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -21,6 +25,7 @@ func main() {
 			handler.Handler(w, r)
 			return
 		}
+		w.Header().Set("Cache-Control", "no-store")
 		if _, err := os.Stat("dist" + r.URL.Path); err == nil && r.URL.Path != "/" {
 			static.ServeHTTP(w, r)
 			return
@@ -28,8 +33,8 @@ func main() {
 		http.ServeFile(w, r, "dist/index.html")
 	})
 
-	log.Println("dev server em http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Printf("dev server em http://localhost:%s", port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
 func loadDotEnv(path string) {

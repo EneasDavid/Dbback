@@ -15,16 +15,19 @@ type Config struct {
 	AB2Tables     []TableConfig
 	SessionSecret string
 	CookieSecure  bool
+	DocsUsername  string
+	DocsPassword  string
 	ServiceJSON   string
 	ServiceFile   string
 	CacheTTL      time.Duration
 }
 
 type TableConfig struct {
-	Key       string
-	Label     string
-	SheetName string
-	Kind      string
+	Key          string
+	Label        string
+	SheetName    string
+	Kind         string
+	ScoreDivisor float64
 }
 
 func LoadConfig() Config {
@@ -32,17 +35,19 @@ func LoadConfig() Config {
 		SpreadsheetID: firstNonEmpty(os.Getenv("GOOGLE_SHEET_ID"), "12zXd1oCQOdBhI88JWMrZ2req0c3XfFLJcVPXQ9CaKT8"),
 		LoginSheet:    firstNonEmpty(os.Getenv("LOGIN_SHEET_NAME"), "Base de dados"),
 		AB1Tables: []TableConfig{
-			tableFromEnv("at1", "AT. 1", "SHEET_AB1_PESQUISA", "AT. 1", "activity"),
-			tableFromEnv("at2", "AT. 2", "SHEET_AB1_ARTIGO", "AT. 2", "activity"),
-			tableFromEnv("at3", "AT. 3", "SHEET_AB1_LISTA", "AT. 3", "activity"),
-			tableFromEnv("prova", "Prova AB1", "SHEET_AB1_PROVA", firstNonEmpty(os.Getenv("SHEET_AB1_NAME"), "Notas AB1"), "summary"),
+			tableFromEnv("at1", "AT. 1", "SHEET_AB1_PESQUISA", "AT. 1", "activity", 10),
+			tableFromEnv("at2", "AT. 2", "SHEET_AB1_ARTIGO", "AT. 2", "activity", 10),
+			tableFromEnv("at3", "AT. 3", "SHEET_AB1_LISTA", "AT. 3", "activity", 10),
+			tableFromEnv("prova", "Prova AB1", "SHEET_AB1_PROVA", firstNonEmpty(os.Getenv("SHEET_AB1_NAME"), "Notas AB1"), "summary", 1),
 		},
 		AB2Tables: []TableConfig{
-			tableFromEnv("at4", "AT. 4", "SHEET_AB2_LISTA", "AT. 4", "activity"),
-			tableFromEnv("projeto", "Projeto AB2", "SHEET_AB2_PROJETO", firstNonEmpty(os.Getenv("SHEET_AB2_NAME"), "Projeto AB2"), "project"),
+			tableFromEnv("at4", "AT. 4", "SHEET_AB2_LISTA", "AT. 4", "activity", 10),
+			tableFromEnv("projeto", "Projeto AB2", "SHEET_AB2_PROJETO", firstNonEmpty(os.Getenv("SHEET_AB2_NAME"), "Projeto AB2"), "project", 1),
 		},
 		SessionSecret: os.Getenv("SESSION_SECRET"),
 		CookieSecure:  strings.EqualFold(firstNonEmpty(os.Getenv("COOKIE_SECURE"), "true"), "true"),
+		DocsUsername:  firstNonEmpty(os.Getenv("DOCS_USERNAME"), os.Getenv("DOCS_USER"), "adão"),
+		DocsPassword:  firstNonEmpty(os.Getenv("DOCS_PASSWORD"), os.Getenv("DOCS_PASS"), "primeiro"),
 		ServiceJSON:   serviceAccountJSON(),
 		ServiceFile:   os.Getenv("GOOGLE_SERVICE_ACCOUNT_FILE"),
 		CacheTTL:      7 * time.Hour,
@@ -74,12 +79,13 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func tableFromEnv(key string, label string, envName string, fallback string, kind string) TableConfig {
+func tableFromEnv(key string, label string, envName string, fallback string, kind string, scoreDivisor float64) TableConfig {
 	return TableConfig{
-		Key:       key,
-		Label:     label,
-		SheetName: firstNonEmpty(os.Getenv(envName), fallback),
-		Kind:      kind,
+		Key:          key,
+		Label:        label,
+		SheetName:    firstNonEmpty(os.Getenv(envName), fallback),
+		Kind:         kind,
+		ScoreDivisor: scoreDivisor,
 	}
 }
 

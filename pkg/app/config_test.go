@@ -50,3 +50,36 @@ func TestValidateExplainsMissingServiceAccountFileOnVercel(t *testing.T) {
 		t.Fatalf("Validate() message = %q, want file and Vercel guidance", httpErr.Message)
 	}
 }
+
+func TestLoadConfigScoreDivisors(t *testing.T) {
+	cfg := LoadConfig()
+
+	for _, table := range cfg.AB1Tables {
+		if table.Kind == "activity" && table.ScoreDivisor != 10 {
+			t.Fatalf("%s ScoreDivisor = %v, want 10", table.Key, table.ScoreDivisor)
+		}
+	}
+	for _, table := range cfg.AB2Tables {
+		switch table.Key {
+		case "at4":
+			if table.ScoreDivisor != 10 {
+				t.Fatalf("at4 ScoreDivisor = %v, want 10", table.ScoreDivisor)
+			}
+		case "projeto":
+			if table.ScoreDivisor != 1 {
+				t.Fatalf("projeto ScoreDivisor = %v, want 1", table.ScoreDivisor)
+			}
+		}
+	}
+}
+
+func TestLoadConfigDocsCredentials(t *testing.T) {
+	t.Setenv("DOCS_USERNAME", "docs")
+	t.Setenv("DOCS_PASSWORD", "senha")
+
+	cfg := LoadConfig()
+
+	if cfg.DocsUsername != "docs" || cfg.DocsPassword != "senha" {
+		t.Fatalf("docs credentials = %q/%q, want docs/senha", cfg.DocsUsername, cfg.DocsPassword)
+	}
+}

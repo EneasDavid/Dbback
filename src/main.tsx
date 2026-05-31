@@ -3,26 +3,26 @@ import type { FormEvent, MutableRefObject } from 'react';
 import { createRoot } from 'react-dom/client';
 import { api } from './api';
 import { EmptyState, ExamSwitch, GradeCard, InlineError, LoginView, SummaryTable, Topbar } from './components';
-import type { GradeCache, GradeResult, GradeTable, SessionUser } from './types';
+import type { GradeCache, GradeCard as GradeCardPayload, GradeDetail, GradeResult, GradeTable, SessionUser } from './types';
 import './styles.scss';
 
-const CACHE_VERSION = 'v7';
+const CACHE_VERSION = 'v9';
 const EMPTY_STATE_MS = 5_000;
 const LAST_MATRICULA_KEY = 'dbback-last-matricula';
 
 type LegacyColumn = {
-  key: string;
-  label: string;
-  value: string;
+  key?: string;
+  label?: string;
+  value?: string;
   comment?: string;
   commentAuthor?: string;
 };
 
 type LegacyItem = {
-  key: string;
-  subtopic: string;
-  notaMaxima: string;
-  notaAlcancada: string;
+  key?: string;
+  subtopic?: string;
+  notaMaxima?: string;
+  notaAlcancada?: string;
   comentario?: string;
   comentarioAutor?: string;
 };
@@ -88,7 +88,6 @@ function App() {
   useEffect(() => {
     if (!session) return;
     const cacheKey = gradeCacheKey(session.matricula);
-    clearLegacyGradeCache(session.matricula);
     const cached = readGradeCache(cacheKey);
     if (Object.keys(cached).length > 0) {
       setGrades((current) => storeGradeCache(current, cached, cacheKey, gradesRef));
@@ -121,7 +120,7 @@ function App() {
           setSession(null);
           return;
         }
-        if (foreground) {
+        if (foreground || !hasRenderableGrade(gradesRef.current[target])) {
           setError(err instanceof Error ? err.message : 'Erro ao carregar as notas.');
         }
       } finally {
@@ -130,7 +129,7 @@ function App() {
     }
 
     const cached = readGradeCache(cacheKey);
-    const hasActive = Boolean(gradesRef.current[exam] || cached[exam]);
+    const hasActive = hasRenderableGrade(gradesRef.current[exam]) || hasRenderableGrade(cached[exam]);
     void fetchExam(exam, !hasActive).then(() => {
       const other = exam === 'ab1' ? 'ab2' : 'ab1';
       if (!cancelled && canPreload() && !gradesRef.current[other]) {
@@ -177,6 +176,11 @@ function App() {
         body: JSON.stringify({ matricula: normalizedMatricula }),
       });
       window.localStorage.setItem(LAST_MATRICULA_KEY, result.matricula || normalizedMatricula);
+      clearClientSession(result.matricula || normalizedMatricula);
+      gradesRef.current = {};
+      setGrades({});
+      setActiveDetail(null);
+      setExam('ab1');
       setSession(result);
       setMatricula('');
     } catch (err) {
@@ -287,25 +291,71 @@ function normalizeGradeTable(table: LegacyGradeTable): GradeTable {
     ...table,
     cards: cards
       .filter(Boolean)
+      .map((card, index) => normalizeGradeCard(card, index))
       .filter((card) => !isPendingAverageCard(table, card))
       .filter((card) => !isSummaryTable(table.kind) || isMediaTable(table) || isVisibleSummaryCard(card)),
   };
 }
 
-function legacyCards(table: LegacyGradeTable) {
+function normalizeGradeCard(card: GradeCardPayload, index: number): GradeCardPayload {
+  const label = asText(card.label) || 'Nota';
+  const value = asText(card.value);
+  const display = asText(card.displayValue) || displayValue(label, value);
+  const details = normalizeGradeDetails(card.details);
+  return {
+    ...card,
+    key: asText(card.key) || `card-${index}`,
+    label,
+    value,
+    displayValue: display,
+    tone: card.tone || scoreTone(label, value),
+    details: details.length > 0 ? details : undefined,
+  };
+}
+
+function normalizeGradeDetails(details?: GradeDetail[]) {
+  if (!Array.isArray(details)) return [];
+  return details.filter(Boolean).map((detail, index) => {
+    const label = asText(detail.label) || `Critério ${index + 1}`;
+    const value = asText(detail.value);
+    const max = Number.isFinite(detail.max) ? detail.max : 0;
+    const pending = Boolean(detail.pending) || isPendingValue(value);
+    const obtained = parseScore(value);
+    const ratio = Number.isFinite(detail.ratio)
+      ? detail.ratio
+      : !pending && obtained !== null && max > 0
+        ? Math.min((obtained / max) * 100, 100)
+        : 0;
+    return {
+      ...detail,
+      key: asText(detail.key) || `detail-${index}`,
+      label,
+      value,
+      max,
+      displayScore: asText(detail.displayScore) || detailDisplayScore(value, max, pending),
+      ratio,
+      pending,
+      tone: detail.tone || scoreToneFromRatio(ratio, pending),
+    };
+  });
+}
+
+function legacyCards(table: LegacyGradeTable): GradeCardPayload[] {
   const columns = Array.isArray(table.columns) ? table.columns : [];
   const items = Array.isArray(table.items) ? table.items : [];
   if (items.length > 0) {
     const details = legacyDetails(items);
     const total = columns[0] ?? legacyTotalColumn(items);
     if (!total) return [];
+    const label = asText(total.label) || 'Nota';
+    const value = asText(total.value);
     return [
       {
-        key: total.key || 'nota',
-        label: total.label || 'Nota',
-        value: total.value || '',
-        displayValue: displayValue(total.label || 'Nota', total.value || ''),
-        tone: scoreTone(total.label || 'Nota', total.value || ''),
+        key: asText(total.key) || 'nota',
+        label,
+        value,
+        displayValue: displayValue(label, value),
+        tone: scoreTone(label, value),
         comment: total.comment,
         commentAuthor: total.commentAuthor,
         details,
@@ -314,31 +364,36 @@ function legacyCards(table: LegacyGradeTable) {
   }
   return columns
     .filter((column) => isVisibleLegacyColumn(column))
-    .map((column) => ({
-      key: column.key,
-      label: column.label,
-      value: column.value,
-      displayValue: displayValue(column.label, column.value),
-      tone: scoreTone(column.label, column.value),
-      comment: column.comment,
-      commentAuthor: column.commentAuthor,
-    }));
+    .map((column, index) => {
+      const label = asText(column.label) || `Nota ${index + 1}`;
+      const value = asText(column.value);
+      return {
+        key: asText(column.key) || `column-${index}`,
+        label,
+        value,
+        displayValue: displayValue(label, value),
+        tone: scoreTone(label, value),
+        comment: column.comment,
+        commentAuthor: column.commentAuthor,
+      };
+    });
 }
 
-function legacyDetails(items: LegacyItem[]) {
+function legacyDetails(items: LegacyItem[]): GradeDetail[] {
   return items
-    .filter((item) => normalized(item.subtopic) !== 'total')
-    .map((item) => {
-      const max = parseScore(item.notaMaxima) ?? 0;
-      const obtained = parseScore(item.notaAlcancada);
-      const pending = item.notaAlcancada.trim() === '';
+    .filter((item) => normalized(asText(item.subtopic)) !== 'total')
+    .map((item, index) => {
+      const value = asText(item.notaAlcancada);
+      const max = parseScore(asText(item.notaMaxima)) ?? 0;
+      const obtained = parseScore(value);
+      const pending = value.trim() === '';
       const ratio = !pending && obtained !== null && max > 0 ? Math.min((obtained / max) * 100, 100) : 0;
       return {
-        key: item.key,
-        label: humanizeLabel(item.subtopic),
-        value: item.notaAlcancada,
+        key: asText(item.key) || `item-${index}`,
+        label: humanizeLabel(asText(item.subtopic)),
+        value,
         max,
-        displayScore: detailDisplayScore(item.notaAlcancada, max, pending),
+        displayScore: detailDisplayScore(value, max, pending),
         ratio,
         pending,
         tone: scoreToneFromRatio(ratio, pending),
@@ -349,14 +404,18 @@ function legacyDetails(items: LegacyItem[]) {
 }
 
 function legacyTotalColumn(items: LegacyItem[]): LegacyColumn | null {
-  const total = items.find((item) => normalized(item.subtopic) === 'total');
+  const total = items.find((item) => normalized(asText(item.subtopic)) === 'total');
   if (!total) return null;
-  const value = activityScore(total.notaAlcancada, total.notaMaxima);
+  const value = activityScore(asText(total.notaAlcancada), asText(total.notaMaxima));
   return { key: 'nota', label: 'Nota', value, comment: total.comentario, commentAuthor: total.comentarioAutor };
 }
 
 function cardsFor(table: GradeTable) {
   return Array.isArray(table.cards) ? table.cards : [];
+}
+
+function hasRenderableGrade(grade?: GradeResult) {
+  return Boolean(grade?.tables?.some((table) => cardsFor(table).length > 0));
 }
 
 function isPendingAverageCard(table: GradeTable, card: { label?: string; displayValue?: string; value?: string }) {
@@ -372,7 +431,7 @@ function isVisibleSummaryCard(card: { label?: string }) {
 }
 
 function isVisibleLegacyColumn(column: LegacyColumn) {
-  const label = normalized(column.label);
+  const label = normalized(asText(column.label));
   return label !== '' &&
     label !== 'grupo' &&
     label !== 'equipe' &&
@@ -380,7 +439,7 @@ function isVisibleLegacyColumn(column: LegacyColumn) {
     !label.includes('nome do aluno') &&
     label !== 'nome' &&
     label !== 'aluno' &&
-    (column.value.trim() !== '' || Boolean(column.comment?.trim()));
+    (asText(column.value).trim() !== '' || Boolean(column.comment?.trim()));
 }
 
 function displayValue(label: string, value: string) {
@@ -470,6 +529,10 @@ function humanizeLabel(label: string) {
     .trim();
 }
 
+function asText(value: unknown) {
+  return typeof value === 'string' ? value : '';
+}
+
 function gradesStorageSet(cacheKey: string, grades: GradeCache) {
   window.sessionStorage.setItem(cacheKey, JSON.stringify(grades));
 }
@@ -490,19 +553,12 @@ function isMediaTable(table: GradeTable) {
 }
 
 function clearClientSession(matricula?: string) {
-  if (matricula) {
-    window.sessionStorage.removeItem(gradeCacheKey(matricula));
-    clearLegacyGradeCache(matricula);
-  }
-  if (!matricula) {
-    for (const key of Object.keys(window.sessionStorage)) {
-      if (key.startsWith('dbback-grades:')) window.sessionStorage.removeItem(key);
+  for (const key of Object.keys(window.sessionStorage)) {
+    if (!key.startsWith('dbback-grades:')) continue;
+    if (!matricula || key.endsWith(`:${matricula}`)) {
+      window.sessionStorage.removeItem(key);
     }
   }
-}
-
-function clearLegacyGradeCache(matricula: string) {
-  window.sessionStorage.removeItem(`dbback-grades:${matricula}`);
 }
 
 function isSessionExpired(error: unknown) {

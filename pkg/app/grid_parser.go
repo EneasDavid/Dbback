@@ -27,7 +27,7 @@ func parseGrid(rows []*sheets.RowData, merges []*sheets.GridRange) *sheetGrid {
 		return &sheetGrid{}
 	}
 
-	grid := &sheetGrid{headers: allValues[headerIdx], notes: allNotes[headerIdx], noteAuthors: make([]string, len(allNotes[headerIdx])), headerRow: headerIdx, merges: normalizeMergedRanges(merges)}
+	grid := &sheetGrid{headers: allValues[headerIdx], notes: allNotes[headerIdx], noteAuthors: make([]string, len(allNotes[headerIdx])), headerRow: headerIdx}
 	for idx, values := range allValues[headerIdx+1:] {
 		if hasAny(values) {
 			grid.rows = append(grid.rows, values)
@@ -37,21 +37,6 @@ func parseGrid(rows []*sheets.RowData, merges []*sheets.GridRange) *sheetGrid {
 		}
 	}
 	return grid
-}
-
-func normalizeMergedRanges(merges []*sheets.GridRange) []mergedRange {
-	result := make([]mergedRange, 0, len(merges))
-	for _, merged := range merges {
-		startRow := int(merged.StartRowIndex)
-		endRow := int(merged.EndRowIndex)
-		startCol := int(merged.StartColumnIndex)
-		endCol := int(merged.EndColumnIndex)
-		if startRow < 0 || startCol < 0 || endRow <= startRow || endCol <= startCol {
-			continue
-		}
-		result = append(result, mergedRange{startRow: startRow, endRow: endRow, startCol: startCol, endCol: endCol})
-	}
-	return result
 }
 
 func applyMergedRanges(values [][]string, notes [][]string, merges []*sheets.GridRange) {
@@ -79,7 +64,6 @@ func applyMergedRanges(values [][]string, notes [][]string, merges []*sheets.Gri
 }
 
 func (g *sheetGrid) applyDriveComments(comments []driveCellComment, sheetID int64, merges []*sheets.GridRange) {
-	g.driveComments = nil
 	for _, comment := range comments {
 		// Drive anchors for Sheets comments can expose uid:0 even when the target sheet has another sheetId.
 		if comment.HasSheetID && comment.SheetID != 0 && comment.SheetID != sheetID {
@@ -89,7 +73,6 @@ func (g *sheetGrid) applyDriveComments(comments []driveCellComment, sheetID int6
 		if strings.TrimSpace(comment.Text) == "" {
 			continue
 		}
-		g.driveComments = append(g.driveComments, comment)
 		if strings.TrimSpace(comment.Text) == "" || strings.TrimSpace(comment.QuotedText) == "" {
 			continue
 		}
@@ -146,128 +129,6 @@ func logicalMergedCell(rowIdx int, colIdx int, merges []*sheets.GridRange) (int,
 		}
 	}
 	return rowIdx, colIdx
-}
-
-func (g *sheetGrid) mergedRangeForCell(rowIdx int, colIdx int) mergedRange {
-	for _, merged := range g.merges {
-		if merged.contains(rowIdx, colIdx) {
-			return merged
-		}
-	}
-	return mergedRange{startRow: rowIdx, endRow: rowIdx + 1, startCol: colIdx, endCol: colIdx + 1}
-}
-
-func (r mergedRange) contains(rowIdx int, colIdx int) bool {
-	return rowIdx >= r.startRow && rowIdx < r.endRow && colIdx >= r.startCol && colIdx < r.endCol
-}
-
-func (r mergedRange) same(other mergedRange) bool {
-	return r.startRow == other.startRow && r.endRow == other.endRow && r.startCol == other.startCol && r.endCol == other.endCol
-}
-
-func (r mergedRange) merged() bool {
-	return r.endRow-r.startRow > 1 || r.endCol-r.startCol > 1
-}
-
-func (r mergedRange) key() string {
-	return fmt.Sprintf("%d:%d:%d:%d", r.startRow, r.endRow, r.startCol, r.endCol)
-}
-
-func (g *sheetGrid) logicalCellsForColumnValue(colIdx int, value string) []mergedRange {
-	seen := map[string]bool{}
-	var ranges []mergedRange
-	appendCell := func(rowIdx int, row []string) {
-		if !sameQuotedCellValue(value, valueAt(row, colIdx)) {
-			return
-		}
-		merged := g.mergedRangeForCell(rowIdx, colIdx)
-		key := merged.key()
-		if seen[key] {
-			return
-		}
-		seen[key] = true
-		ranges = append(ranges, merged)
-	}
-
-	appendCell(g.headerRow, g.headers)
-	for idx, row := range g.rows {
-		appendCell(g.rowIndices[idx], row)
-	}
-	return ranges
-}
-
-func (g *sheetGrid) driveCommentForUserCell(rowIdx int, colIdx int) (string, string) {
-	if rowIdx < 0 || rowIdx >= len(g.rows) || rowIdx >= len(g.rowIndices) {
-		return "", ""
-	}
-	value := valueAt(g.rows[rowIdx], colIdx)
-	if strings.TrimSpace(value) == "" {
-		return "", ""
-	}
-
-	userRow := g.rowIndices[rowIdx]
-	targetRange := g.mergedRangeForCell(userRow, colIdx)
-	if !targetRange.contains(userRow, colIdx) {
-		return "", ""
-	}
-
-	var matches []driveCellComment
-	for _, comment := range g.driveComments {
-		if visibleFeedbackComment(comment.Text) == "" || !sameQuotedCellValue(comment.QuotedText, value) {
-			continue
-		}
-		matches = append(matches, comment)
-	}
-	if len(matches) != 1 {
-		return "", ""
-	}
-	if !targetRange.merged() {
-		logicalCells := g.logicalCellsForColumnValue(colIdx, value)
-		if len(logicalCells) == 1 && logicalCells[0].same(targetRange) {
-			return visibleFeedbackComment(matches[0].Text), authorDisplayName(matches[0].Author)
-		}
-		groupRange, ok := g.groupRangeForRow(rowIdx, colIdx)
-		if !ok || !allRangesInsideRowRange(logicalCells, groupRange) {
-			return "", ""
-		}
-	}
-	return visibleFeedbackComment(matches[0].Text), authorDisplayName(matches[0].Author)
-}
-
-func (g *sheetGrid) groupRangeForRow(rowIdx int, colIdx int) (mergedRange, bool) {
-	groupCol := groupColumn(g.headers)
-	if groupCol < 0 || rowIdx < 0 || rowIdx >= len(g.rows) {
-		return mergedRange{}, false
-	}
-	group := valueAt(g.rows[rowIdx], groupCol)
-	if strings.TrimSpace(group) == "" {
-		return mergedRange{}, false
-	}
-
-	start := rowIdx
-	for start > 0 && sameLookupValue(valueAt(g.rows[start-1], groupCol), group, false) {
-		start--
-	}
-	end := rowIdx + 1
-	for end < len(g.rows) && sameLookupValue(valueAt(g.rows[end], groupCol), group, false) {
-		end++
-	}
-	if end-start <= 1 {
-		return mergedRange{}, false
-	}
-	return mergedRange{startRow: g.rowIndices[start], endRow: g.rowIndices[end-1] + 1, startCol: colIdx, endCol: colIdx + 1}, true
-}
-
-func allRangesInsideRowRange(ranges []mergedRange, rowRange mergedRange) bool {
-	if len(ranges) == 0 {
-		return false
-	}
-	for _, item := range ranges {
-		if item.startRow < rowRange.startRow || item.endRow > rowRange.endRow {
-			return false
-		}
-	}
-	return true
 }
 
 func matrixValue(values [][]string, rowIdx int, colIdx int) string {

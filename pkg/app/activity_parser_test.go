@@ -1,145 +1,10 @@
 package app
 
 import (
-	"strings"
 	"testing"
 
 	"google.golang.org/api/sheets/v4"
 )
-
-func TestActivityCommentPrecedence(t *testing.T) {
-	tests := []struct {
-		name        string
-		studentNote string
-		detailNote  string
-		headerNote  string
-		want        string
-	}{
-		{name: "student note wins", studentNote: "aluno", detailNote: "subtopico", headerNote: "cabecalho", want: "aluno"},
-		{name: "detail note wins without student note", detailNote: "subtopico", headerNote: "cabecalho", want: "subtopico"},
-		{name: "header note is fallback", headerNote: "cabecalho", want: "cabecalho"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			table, found, err := parseActivityRubric(activityGrid(tt.studentNote, tt.detailNote, tt.headerNote), TableConfig{
-				Key:       "at1",
-				Label:     "AT. 1",
-				SheetName: "AT. 1",
-				Kind:      "activity",
-			}, SessionUser{Name: "Alice", Matricula: "123"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !found {
-				t.Fatal("student row was not found")
-			}
-			if len(table.Cards) != 1 || len(table.Cards[0].Details) != 1 {
-				t.Fatalf("unexpected cards/details: %#v", table.Cards)
-			}
-			if got := table.Cards[0].Details[0].Comment; got != tt.want {
-				t.Fatalf("comment = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestActivitySubtopicCommentsComeFromSheetsNotes(t *testing.T) {
-	grid := parseGrid([]*sheets.RowData{
-		rowData(cellData("Aluno", ""), cellData("Critério", "")),
-		rowData(cellData("Subtópico", ""), cellData("Modelagem", "comentario do subtopico")),
-		rowData(cellData("Nota maxima", ""), cellData("2", "")),
-		rowData(cellData("Alice", ""), cellData("1,5", "")),
-	}, nil)
-
-	table, found, err := parseActivityRubric(grid, TableConfig{
-		Key:       "at1",
-		Label:     "AT. 1",
-		SheetName: "AT. 1",
-		Kind:      "activity",
-	}, SessionUser{Name: "Alice", Matricula: "123"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !found {
-		t.Fatal("student row was not found")
-	}
-	if len(table.Cards) != 1 || len(table.Cards[0].Details) != 1 {
-		t.Fatalf("unexpected cards/details: %#v", table.Cards)
-	}
-	if got := table.Cards[0].Details[0].Comment; got != "comentario do subtopico" {
-		t.Fatalf("detail comment = %q, want Sheets note", got)
-	}
-}
-
-func TestActivitySubtopicCommentsComeFromDriveMergedCells(t *testing.T) {
-	merges := []*sheets.GridRange{
-		{StartRowIndex: 1, EndRowIndex: 2, StartColumnIndex: 1, EndColumnIndex: 3},
-	}
-	grid := parseGrid([]*sheets.RowData{
-		rowData(cellData("Aluno", ""), cellData("Critério", ""), cellData("Critério", "")),
-		rowData(cellData("Subtópico", ""), cellData("Organização", ""), cellData("", "")),
-		rowData(cellData("Nota maxima", ""), cellData("1", ""), cellData("1", "")),
-		rowData(cellData("Alice", ""), cellData("0,8", ""), cellData("0,7", "")),
-	}, merges)
-	grid.applyDriveComments([]driveCellComment{
-		{Text: "comentario no criterio mesclado", Author: "Professor", QuotedText: "Organização", SheetID: 7, HasSheetID: true},
-	}, 7, merges)
-	grid.applyCommentMerges(merges)
-
-	table, found, err := parseActivityRubric(grid, TableConfig{
-		Key:       "at3",
-		Label:     "AT. 3",
-		SheetName: "AT. 3",
-		Kind:      "activity",
-	}, SessionUser{Name: "Alice", Matricula: "2024001339"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !found {
-		t.Fatal("student row was not found")
-	}
-	if len(table.Cards) != 1 || len(table.Cards[0].Details) != 2 {
-		t.Fatalf("unexpected cards/details: %#v", table.Cards)
-	}
-	for _, detail := range table.Cards[0].Details {
-		if got := detail.Comment; got != "comentario no criterio mesclado" {
-			t.Fatalf("detail %q comment = %q, want merged Drive comment", detail.Label, got)
-		}
-	}
-}
-
-func TestActivityCommentsPropagateThroughThreeRowMergedGroup(t *testing.T) {
-	merges := []*sheets.GridRange{
-		{StartRowIndex: 2, EndRowIndex: 5, StartColumnIndex: 1, EndColumnIndex: 2},
-	}
-	grid := parseGrid([]*sheets.RowData{
-		rowData(cellData("Aluno", ""), cellData("Critério", "")),
-		rowData(cellData("Nota maxima", ""), cellData("1", "")),
-		rowData(cellData("Colega 1", ""), cellData("0,7", "comentario do grupo")),
-		rowData(cellData("Colega 2", ""), cellData("", "")),
-		rowData(cellData("Alice", ""), cellData("", "")),
-	}, merges)
-
-	table, found, err := parseActivityRubric(grid, TableConfig{
-		Key:       "at3",
-		Label:     "AT. 3",
-		SheetName: "AT. 3",
-		Kind:      "activity",
-	}, SessionUser{Name: "Alice", Matricula: "2024001339"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !found {
-		t.Fatal("student row was not found")
-	}
-	if len(table.Cards) != 1 || len(table.Cards[0].Details) != 1 {
-		t.Fatalf("unexpected cards/details: %#v", table.Cards)
-	}
-	if got := table.Cards[0].Details[0].Comment; got != "comentario do grupo" {
-		t.Fatalf("detail comment = %q, want merged group comment", got)
-	}
-}
 
 func TestActivityIdentityColumnCommentBecomesCardComment(t *testing.T) {
 	grid := parseGrid([]*sheets.RowData{
@@ -165,6 +30,71 @@ func TestActivityIdentityColumnCommentBecomesCardComment(t *testing.T) {
 	}
 }
 
+func TestActivityDriveCommentOnIdentityCellBecomesCardComment(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Grupo", ""), cellData("Critério", "")),
+		rowData(cellData("Nota maxima", ""), cellData("1", "")),
+		rowData(cellData("Alice", ""), cellData("0,7", "")),
+	}, nil)
+	grid.applyDriveComments([]driveCellComment{
+		{Text: "comentario na celula do nome", Author: "Professor", QuotedText: "Alice", SheetID: 0, HasSheetID: true},
+	}, 123, nil)
+
+	table, found, err := parseActivityRubric(grid, TableConfig{
+		Key:       "at1",
+		Label:     "AT. 1",
+		SheetName: "AT. 1",
+		Kind:      "activity",
+	}, SessionUser{Name: "Alice", Matricula: "123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("student row was not found")
+	}
+	if got := table.Cards[0].Comment; got != "comentario na celula do nome" {
+		t.Fatalf("card comment = %q, want Drive identity comment", got)
+	}
+}
+
+func TestActivityAB1DetailsUseConfiguredScoreDivisor(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Grupo", ""), cellData("Critério", "")),
+		rowData(cellData("Nota maxima", ""), cellData("10", "")),
+		rowData(cellData("Alice", ""), cellData("7", "")),
+	}, nil)
+
+	table, found, err := parseActivityRubric(grid, TableConfig{
+		Key:          "at1",
+		Label:        "AT. 1",
+		SheetName:    "AT. 1",
+		Kind:         "activity",
+		ScoreDivisor: 10,
+	}, SessionUser{Name: "Alice", Matricula: "123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("student row was not found")
+	}
+	if got := table.Cards[0].Value; got != "0,7" {
+		t.Fatalf("card value = %q, want 0,7", got)
+	}
+	detail := table.Cards[0].Details[0]
+	if detail.Value != "0,7" || detail.Max != 1 || detail.DisplayScore != "0,7 / 1" || detail.Ratio != 70 {
+		t.Fatalf("unexpected scaled detail: %#v", detail)
+	}
+}
+
+func TestHumanizeLabelDoesNotTreatQualidadeAsQuestion(t *testing.T) {
+	if got := humanizeLabel("organização e qualidade do texto"); got != "Organização e qualidade do texto" {
+		t.Fatalf("humanizeLabel qualidade = %q", got)
+	}
+	if got := humanizeLabel("q.1"); got != "Q.1" {
+		t.Fatalf("humanizeLabel q.1 = %q", got)
+	}
+}
+
 func TestActivityIdentityColumnCommentCanExcludeStudent(t *testing.T) {
 	grid := parseGrid([]*sheets.RowData{
 		rowData(cellData("Grupo", ""), cellData("Critério", "")),
@@ -186,15 +116,14 @@ func TestActivityIdentityColumnCommentCanExcludeStudent(t *testing.T) {
 	}
 }
 
-func TestActivityPeerIdentityCommentAppliesWithinSameScoreBlock(t *testing.T) {
+func TestActivityDoesNotMatchNameOutsideIdentityColumns(t *testing.T) {
 	grid := parseGrid([]*sheets.RowData{
-		rowData(cellData("Grupo", ""), cellData("Critério", "")),
-		rowData(cellData("Nota maxima", ""), cellData("1", "")),
-		rowData(cellData("Alice", ""), cellData("0,7", "")),
-		rowData(cellData("Bob", "comentario do grupo"), cellData("0,7", "")),
+		rowData(cellData("Grupo", ""), cellData("Critério", ""), cellData("Observação", "")),
+		rowData(cellData("Nota maxima", ""), cellData("1", ""), cellData("", "")),
+		rowData(cellData("Bob", ""), cellData("0,7", ""), cellData("Alice", "")),
 	}, nil)
 
-	table, found, err := parseActivityRubric(grid, TableConfig{
+	_, found, err := parseActivityRubric(grid, TableConfig{
 		Key:       "at1",
 		Label:     "AT. 1",
 		SheetName: "AT. 1",
@@ -203,100 +132,8 @@ func TestActivityPeerIdentityCommentAppliesWithinSameScoreBlock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !found {
-		t.Fatal("student row was not found")
-	}
-	if got := table.Cards[0].Comment; got != "comentario do grupo" {
-		t.Fatalf("card comment = %q, want peer identity comment", got)
-	}
-}
-
-func TestActivityCommentsUseDriveRowSequenceWhenScoresRepeat(t *testing.T) {
-	grid := parseGrid([]*sheets.RowData{
-		rowData(cellData("Aluno", ""), cellData("Organização", ""), cellData("Q.1", ""), cellData("Q.2", ""), cellData("Q.3", ""), cellData("Q.4", ""), cellData("Q.5", ""), cellData("Q.6", "")),
-		rowData(cellData("Nota maxima", ""), cellData("0,5", ""), cellData("1,5", ""), cellData("1", ""), cellData("1,5", ""), cellData("2", ""), cellData("1,5", ""), cellData("2", "")),
-		rowData(cellData("Bob", ""), cellData("0,3", ""), cellData("0,9", ""), cellData("0,75", ""), cellData("0,85", ""), cellData("1,2", ""), cellData("1,1", ""), cellData("1,3", "")),
-		rowData(cellData("Alice", ""), cellData("0,3", ""), cellData("1", ""), cellData("0,75", ""), cellData("0,85", ""), cellData("1,2", ""), cellData("1,1", ""), cellData("1,3", "")),
-	}, nil)
-	grid.applyDriveComments([]driveCellComment{
-		{Text: "comentario de outro aluno", Author: "Professor", QuotedText: "0,3", SheetID: 0, HasSheetID: true},
-		{Text: "comentario q6", Author: "Professor", QuotedText: "1,3", SheetID: 0, HasSheetID: true},
-		{Text: "comentario q5", Author: "Professor", QuotedText: "1,1", SheetID: 0, HasSheetID: true},
-		{Text: "comentario q4", Author: "Professor", QuotedText: "1,2", SheetID: 0, HasSheetID: true},
-		{Text: "comentario q3", Author: "Professor", QuotedText: "0,85", SheetID: 0, HasSheetID: true},
-		{Text: "comentario q2", Author: "Professor", QuotedText: "0,75", SheetID: 0, HasSheetID: true},
-		{Text: "comentario q1", Author: "Professor", QuotedText: "1", SheetID: 0, HasSheetID: true},
-		{Text: "comentario organizacao", Author: "Professor", QuotedText: "0,3", SheetID: 0, HasSheetID: true},
-	}, 123, nil)
-
-	table, found, err := parseActivityRubric(grid, TableConfig{
-		Key:       "at3",
-		Label:     "AT. 3",
-		SheetName: "AT. 3",
-		Kind:      "activity",
-	}, SessionUser{Name: "Alice", Matricula: "2024001339"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !found {
-		t.Fatal("student row was not found")
-	}
-	if len(table.Cards) != 1 || len(table.Cards[0].Details) != 7 {
-		t.Fatalf("unexpected cards/details: %#v", table.Cards)
-	}
-	for _, detail := range table.Cards[0].Details {
-		if strings.TrimSpace(detail.Comment) == "" {
-			t.Fatalf("detail %q has no comment: %#v", detail.Label, table.Cards[0].Details)
-		}
-	}
-	want := map[string]string{
-		"Organização": "comentario organizacao",
-		"Q.1":         "comentario q1",
-		"Q.2":         "comentario q2",
-		"Q.3":         "comentario q3",
-		"Q.4":         "comentario q4",
-		"Q.5":         "comentario q5",
-		"Q.6":         "comentario q6",
-	}
-	for _, detail := range table.Cards[0].Details {
-		if got := detail.Comment; got != want[detail.Label] {
-			t.Fatalf("detail %q comment = %q, want %q", detail.Label, got, want[detail.Label])
-		}
-	}
-}
-
-func TestActivityCommentsIgnoreAmbiguousDriveRowSequence(t *testing.T) {
-	grid := parseGrid([]*sheets.RowData{
-		rowData(cellData("Aluno", ""), cellData("Organização", ""), cellData("Q.1", ""), cellData("Q.2", "")),
-		rowData(cellData("Nota maxima", ""), cellData("0,5", ""), cellData("1,5", ""), cellData("1", "")),
-		rowData(cellData("Bob", ""), cellData("0,4", ""), cellData("1", ""), cellData("0,75", "")),
-		rowData(cellData("Alice", ""), cellData("0,3", ""), cellData("1", ""), cellData("0,75", "")),
-	}, nil)
-	grid.applyDriveComments([]driveCellComment{
-		{Text: "outro comentario q2", Author: "Professor", QuotedText: "0,75", SheetID: 0, HasSheetID: true},
-		{Text: "outro comentario q1", Author: "Professor", QuotedText: "1", SheetID: 0, HasSheetID: true},
-		{Text: "outro comentario organizacao", Author: "Professor", QuotedText: "0,3", SheetID: 0, HasSheetID: true},
-		{Text: "comentario q2", Author: "Professor", QuotedText: "0,75", SheetID: 0, HasSheetID: true},
-		{Text: "comentario q1", Author: "Professor", QuotedText: "1", SheetID: 0, HasSheetID: true},
-		{Text: "comentario organizacao", Author: "Professor", QuotedText: "0,3", SheetID: 0, HasSheetID: true},
-	}, 123, nil)
-
-	table, found, err := parseActivityRubric(grid, TableConfig{
-		Key:       "at3",
-		Label:     "AT. 3",
-		SheetName: "AT. 3",
-		Kind:      "activity",
-	}, SessionUser{Name: "Alice", Matricula: "2024001339"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !found {
-		t.Fatal("student row was not found")
-	}
-	for _, detail := range table.Cards[0].Details {
-		if strings.TrimSpace(detail.Comment) != "" {
-			t.Fatalf("ambiguous detail %q got comment %q", detail.Label, detail.Comment)
-		}
+	if found {
+		t.Fatal("name outside identity columns should not select a grade row")
 	}
 }
 
@@ -354,84 +191,6 @@ func TestProjectPayloadKeepsAllSubtopicsInDropdown(t *testing.T) {
 			t.Fatalf("missing project detail %q in %#v", label, details)
 		}
 	}
-}
-
-func TestProjectDetailCommentComesFromMergedDriveScore(t *testing.T) {
-	merges := []*sheets.GridRange{
-		{StartRowIndex: 1, EndRowIndex: 3, StartColumnIndex: 4, EndColumnIndex: 5},
-	}
-	grid := parseGrid([]*sheets.RowData{
-		rowData(cellData("Nome", ""), cellData("Matricula", ""), cellData("Total", ""), cellData("SGBD", ""), cellData("Dataset", "")),
-		rowData(cellData("Alice", ""), cellData("18113089", ""), cellData("0,45", ""), cellData("0,25", ""), cellData("0,2", "")),
-		rowData(cellData("Colega", ""), cellData("2024000000", ""), cellData("", ""), cellData("", ""), cellData("", "")),
-	}, merges)
-	grid.applyDriveComments([]driveCellComment{
-		{Text: "Subiram atrasado a info do dataset", Author: "Professor (Enéas)", QuotedText: "0,2", SheetID: 0, HasSheetID: true},
-	}, 123, merges)
-
-	table, found, err := parseStudentTable(grid, TableConfig{
-		Key:       "projeto",
-		Label:     "Projeto AB2",
-		SheetName: "Projeto AB2",
-		Kind:      "project",
-	}, SessionUser{Name: "Alice", Matricula: "18113089"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !found {
-		t.Fatal("student row was not found")
-	}
-	if len(table.Cards) != 1 {
-		t.Fatalf("cards len = %d, want 1: %#v", len(table.Cards), table.Cards)
-	}
-	for _, detail := range table.Cards[0].Details {
-		if detail.Label != "Dataset" {
-			continue
-		}
-		if got := detail.Comment; got != "Subiram atrasado a info do dataset" {
-			t.Fatalf("dataset comment = %q, want merged Drive comment", got)
-		}
-		if got := detail.CommentAuthor; got != "Enéas" {
-			t.Fatalf("dataset comment author = %q, want Enéas", got)
-		}
-		return
-	}
-	t.Fatalf("Dataset detail not found: %#v", table.Cards[0].Details)
-}
-
-func TestProjectDetailCommentComesFromTeamBlockDriveScore(t *testing.T) {
-	grid := parseGrid([]*sheets.RowData{
-		rowData(cellData("Equipe", ""), cellData("Matricula", ""), cellData("Nome", ""), cellData("Semana 1", ""), cellData("Total", "")),
-		rowData(cellData("Equipe 6", ""), cellData("21110819", ""), cellData("Colega 1", ""), cellData("0,2", ""), cellData("0,45", "")),
-		rowData(cellData("Equipe 6", ""), cellData("18113089", ""), cellData("Alice", ""), cellData("0,2", ""), cellData("0,45", "")),
-		rowData(cellData("Equipe 6", ""), cellData("20113988", ""), cellData("Colega 2", ""), cellData("0,2", ""), cellData("0,45", "")),
-	}, nil)
-	grid.applyDriveComments([]driveCellComment{
-		{Text: "Subiram atrasado a info do dataset", Author: "Professor (Enéas)", QuotedText: "0,2", SheetID: 0, HasSheetID: true},
-	}, 123, nil)
-
-	table, found, err := parseStudentTable(grid, TableConfig{
-		Key:       "projeto",
-		Label:     "Projeto AB2",
-		SheetName: "Projeto AB2",
-		Kind:      "project",
-	}, SessionUser{Name: "Alice", Matricula: "18113089"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !found {
-		t.Fatal("student row was not found")
-	}
-	for _, detail := range table.Cards[0].Details {
-		if detail.Label != "Semana 1" {
-			continue
-		}
-		if got := detail.Comment; got != "Subiram atrasado a info do dataset" {
-			t.Fatalf("semana 1 comment = %q, want team Drive comment", got)
-		}
-		return
-	}
-	t.Fatalf("Semana 1 detail not found: %#v", table.Cards[0].Details)
 }
 
 func TestSummaryPayloadKeepsCommonGradeColumns(t *testing.T) {

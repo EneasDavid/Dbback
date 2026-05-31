@@ -8,23 +8,17 @@ import (
 )
 
 type activityItem struct {
-	ColIdx          int
-	Key             string
-	Subtopic        string
-	NotaMaxima      string
-	NotaAlcancada   string
-	Comentario      string
-	ComentarioAutor string
+	Key           string
+	Subtopic      string
+	NotaMaxima    string
+	NotaAlcancada string
 }
 
 type studentCell struct {
-	ColIdx        int
-	Key           string
-	Header        string
-	Label         string
-	Value         string
-	Comment       string
-	CommentAuthor string
+	Key    string
+	Header string
+	Label  string
+	Value  string
 }
 
 func makeCard(key string, label string, value string, comment string, commentAuthor string, details []DetailResult) CardResult {
@@ -40,63 +34,37 @@ func makeCard(key string, label string, value string, comment string, commentAut
 	}
 }
 
-func activityDetails(items []activityItem) []DetailResult {
+func activityDetails(items []activityItem, divisor float64) []DetailResult {
 	details := make([]DetailResult, 0, len(items))
 	for _, item := range items {
 		if normalizeHeader(item.Subtopic) == "total" {
 			continue
 		}
 		maximum, _ := parseScore(item.NotaMaxima)
-		obtained, hasObtained := parseScore(item.NotaAlcancada)
-		pending := strings.TrimSpace(item.NotaAlcancada) == ""
-		ratio := 0.0
-		if !pending && hasObtained && maximum > 0 {
-			ratio = math.Min((obtained/maximum)*100, 100)
-		}
-		details = append(details, DetailResult{
-			Key:           item.Key,
-			Label:         humanizeLabel(item.Subtopic),
-			Value:         item.NotaAlcancada,
-			Max:           maximum,
-			DisplayScore:  detailDisplayScore(item.NotaAlcancada, maximum, pending),
-			Ratio:         ratio,
-			Pending:       pending,
-			Tone:          scoreToneFromRatio(ratio, pending),
-			Comment:       item.Comentario,
-			CommentAuthor: item.ComentarioAutor,
-		})
+		details = append(details, scaledScoreDetail(item.Key, humanizeLabel(item.Subtopic), item.NotaAlcancada, maximum, divisor))
 	}
 	return details
 }
 
 func columnDetails(cells []studentCell) []DetailResult {
+	return cellDetails(cells, isDetailOnlyColumn)
+}
+
+func projectDetails(cells []studentCell) []DetailResult {
+	return cellDetails(cells, projectDetailColumn)
+}
+
+func cellDetails(cells []studentCell, include func(string) bool) []DetailResult {
 	details := make([]DetailResult, 0, len(cells))
 	for _, cell := range cells {
-		if !isDetailOnlyColumn(cell.Header) {
+		if !include(cell.Header) {
 			continue
 		}
 		maximum := inferMaxForLabel(cell.Header)
 		if maximum <= 0 {
 			maximum = 1
 		}
-		obtained, hasObtained := parseScore(cell.Value)
-		pending := strings.TrimSpace(cell.Value) == ""
-		ratio := 0.0
-		if !pending && hasObtained && maximum > 0 {
-			ratio = math.Min((obtained/maximum)*100, 100)
-		}
-		details = append(details, DetailResult{
-			Key:           cell.Key,
-			Label:         cell.Label,
-			Value:         cell.Value,
-			Max:           maximum,
-			DisplayScore:  detailDisplayScore(cell.Value, maximum, pending),
-			Ratio:         ratio,
-			Pending:       pending,
-			Tone:          scoreToneFromRatio(ratio, pending),
-			Comment:       cell.Comment,
-			CommentAuthor: cell.CommentAuthor,
-		})
+		details = append(details, scoreDetail(cell.Key, cell.Label, cell.Value, maximum))
 	}
 	sort.SliceStable(details, func(i, j int) bool {
 		return compareDetailLabels(details[i].Label, details[j].Label) < 0
@@ -104,39 +72,40 @@ func columnDetails(cells []studentCell) []DetailResult {
 	return details
 }
 
-func projectDetails(cells []studentCell) []DetailResult {
-	details := make([]DetailResult, 0, len(cells))
-	for _, cell := range cells {
-		if !projectDetailColumn(cell.Header) {
-			continue
-		}
-		maximum := inferMaxForLabel(cell.Header)
-		if maximum <= 0 {
-			maximum = 1
-		}
-		obtained, hasObtained := parseScore(cell.Value)
-		pending := strings.TrimSpace(cell.Value) == ""
-		ratio := 0.0
-		if !pending && hasObtained && maximum > 0 {
-			ratio = math.Min((obtained/maximum)*100, 100)
-		}
-		details = append(details, DetailResult{
-			Key:           cell.Key,
-			Label:         cell.Label,
-			Value:         cell.Value,
-			Max:           maximum,
-			DisplayScore:  detailDisplayScore(cell.Value, maximum, pending),
-			Ratio:         ratio,
-			Pending:       pending,
-			Tone:          scoreToneFromRatio(ratio, pending),
-			Comment:       cell.Comment,
-			CommentAuthor: cell.CommentAuthor,
-		})
+func scoreDetail(key string, label string, value string, maximum float64) DetailResult {
+	obtained, hasObtained := parseScore(value)
+	pending := strings.TrimSpace(value) == ""
+	ratio := 0.0
+	if !pending && hasObtained && maximum > 0 {
+		ratio = math.Min((obtained/maximum)*100, 100)
 	}
-	sort.SliceStable(details, func(i, j int) bool {
-		return compareDetailLabels(details[i].Label, details[j].Label) < 0
-	})
-	return details
+	return DetailResult{
+		Key:          key,
+		Label:        label,
+		Value:        value,
+		Max:          maximum,
+		DisplayScore: detailDisplayScore(value, maximum, pending),
+		Ratio:        ratio,
+		Pending:      pending,
+		Tone:         scoreToneFromRatio(ratio, pending),
+	}
+}
+
+func scaledScoreDetail(key string, label string, value string, maximum float64, divisor float64) DetailResult {
+	if divisor <= 1 {
+		return scoreDetail(key, label, value, maximum)
+	}
+	parsed, hasValue := parseScore(value)
+	if maximum <= 1 && (!hasValue || parsed <= 1) {
+		return scoreDetail(key, label, value, maximum)
+	}
+	if hasValue {
+		value = formatScore(parsed / divisor)
+	}
+	if maximum > 0 {
+		maximum = maximum / divisor
+	}
+	return scoreDetail(key, label, value, maximum)
 }
 
 func detailDisplayScore(value string, maximum float64, pending bool) string {
@@ -228,9 +197,7 @@ func cardLabel(header string) string {
 	switch {
 	case strings.HasPrefix(label, "semana"):
 		return humanizeLabel(header)
-	case strings.HasPrefix(label, "q."):
-		return questionLabel(label)
-	case strings.HasPrefix(label, "q"):
+	case isQuestionLabel(label):
 		return questionLabel(label)
 	case label == "sgbd":
 		return "SGBD"
@@ -258,7 +225,7 @@ func humanizeLabel(label string) string {
 		switch {
 		case normalized == "at" || normalized == "at.":
 			words[idx] = "AT."
-		case strings.HasPrefix(normalized, "q"):
+		case isQuestionLabel(normalized):
 			words[idx] = questionLabel(normalized)
 		case normalized == "sgbd":
 			words[idx] = "SGBD"
@@ -304,6 +271,7 @@ func activityLabel(label string) string {
 }
 
 func questionLabel(label string) string {
+	label = normalizeHeader(label)
 	switch {
 	case strings.HasPrefix(label, "q."):
 		return strings.ToUpper(label)
@@ -312,6 +280,18 @@ func questionLabel(label string) string {
 	default:
 		return strings.ToUpper(label)
 	}
+}
+
+func isQuestionLabel(label string) bool {
+	label = normalizeHeader(label)
+	if strings.HasPrefix(label, "q.") {
+		return true
+	}
+	if strings.HasPrefix(label, "q ") {
+		return true
+	}
+	runes := []rune(label)
+	return len(runes) > 1 && runes[0] == 'q' && unicode.IsDigit(runes[1])
 }
 
 func shouldShowColumn(header string) bool {
@@ -368,8 +348,7 @@ func isDetailOnlyColumn(header string) bool {
 		label == "crud" ||
 		strings.Contains(label, "apresentacao") ||
 		strings.Contains(label, "organizacao") ||
-		strings.Contains(label, "q.") ||
-		strings.HasPrefix(label, "q")
+		isQuestionLabel(label)
 }
 
 func isActivityColumn(header string) bool {
