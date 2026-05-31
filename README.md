@@ -42,11 +42,11 @@ A documentacao online das rotas esta disponivel em:
 GET /api/docs
 ```
 
-Essa rota usa Basic Auth para funcionar corretamente em producao/Vercel sem depender da sessao do aluno:
+Essa rota usa Basic Auth para funcionar corretamente em producao/Vercel sem depender da sessao do aluno. Configure usuario e senha fortes em `DOCS_USERNAME` e `DOCS_PASSWORD`; a aplicacao nao aceita credenciais padrao.
 
 ```text
-usuario: adão
-senha: primeiro
+usuario: valor de DOCS_USERNAME
+senha: valor de DOCS_PASSWORD
 ```
 
 Rotas expostas:
@@ -281,11 +281,11 @@ SHEET_AB1_LISTA=AT. 3
 SHEET_AB1_PROVA=Notas AB1
 SHEET_AB2_LISTA=AT. 4
 SHEET_AB2_PROJETO=Projeto AB2
-SESSION_SECRET=use-uma-chave-forte-com-mais-de-32-caracteres
+SESSION_SECRET=<chave-aleatoria-com-32-bytes-ou-mais>
 COOKIE_SECURE=true
-DOCS_USERNAME=adão
-DOCS_PASSWORD=primeiro
-GOOGLE_SERVICE_ACCOUNT_JSON_BASE64=...
+DOCS_USERNAME=<usuario-interno-das-docs>
+DOCS_PASSWORD=<senha-forte-das-docs>
+GOOGLE_SERVICE_ACCOUNT_JSON_BASE64=<credencial-json-em-base64>
 ```
 
 Credenciais aceitas:
@@ -345,8 +345,8 @@ GOOGLE_SHEET_ID=<id>
 LOGIN_SHEET_NAME=Base de dados
 SESSION_SECRET=<chave-forte>
 COOKIE_SECURE=true
-DOCS_USERNAME=adão
-DOCS_PASSWORD=primeiro
+DOCS_USERNAME=<usuario-interno-das-docs>
+DOCS_PASSWORD=<senha-forte-das-docs>
 ```
 
 Deixe `VITE_API_BASE` vazio quando frontend e `/api/*` estiverem no mesmo projeto.

@@ -442,6 +442,10 @@ func gradeResponseSchema() map[string]any {
 
 func docsAuthorized(w http.ResponseWriter, r *http.Request) bool {
 	cfg := app.LoadConfig()
+	if strings.TrimSpace(cfg.DocsUsername) == "" || strings.TrimSpace(cfg.DocsPassword) == "" {
+		app.Error(w, app.NewHTTPError(http.StatusInternalServerError, "DOCS_USERNAME e DOCS_PASSWORD nao configurados"))
+		return false
+	}
 	username, password, ok := r.BasicAuth()
 	if ok && secureCompare(username, cfg.DocsUsername) && secureCompare(password, cfg.DocsPassword) {
 		return true

@@ -9,11 +9,20 @@ import (
 	"testing"
 )
 
+func setDocsCredentials(t *testing.T) {
+	t.Helper()
+	t.Setenv("DOCS_USERNAME", "docs-test")
+	t.Setenv("DOCS_PASSWORD", "docs-password-test")
+}
+
+func setDocsBasicAuth(req *http.Request) {
+	req.SetBasicAuth("docs-test", "docs-password-test")
+}
+
 func TestDocsRoute(t *testing.T) {
-	t.Setenv("DOCS_USERNAME", "")
-	t.Setenv("DOCS_PASSWORD", "")
+	setDocsCredentials(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/docs", nil)
-	req.SetBasicAuth("adão", "primeiro")
+	setDocsBasicAuth(req)
 	rec := httptest.NewRecorder()
 
 	Handler(rec, req)
@@ -37,11 +46,10 @@ func TestDocsRoute(t *testing.T) {
 }
 
 func TestDocsRouteRendersHTMLForBrowser(t *testing.T) {
-	t.Setenv("DOCS_USERNAME", "")
-	t.Setenv("DOCS_PASSWORD", "")
+	setDocsCredentials(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/docs", nil)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml")
-	req.SetBasicAuth("adão", "primeiro")
+	setDocsBasicAuth(req)
 	rec := httptest.NewRecorder()
 
 	Handler(rec, req)
@@ -61,11 +69,10 @@ func TestDocsRouteRendersHTMLForBrowser(t *testing.T) {
 }
 
 func TestDocsRouteFormatJSONOverridesHTMLAccept(t *testing.T) {
-	t.Setenv("DOCS_USERNAME", "")
-	t.Setenv("DOCS_PASSWORD", "")
+	setDocsCredentials(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/docs?format=json", nil)
 	req.Header.Set("Accept", "text/html")
-	req.SetBasicAuth("adão", "primeiro")
+	setDocsBasicAuth(req)
 	rec := httptest.NewRecorder()
 
 	Handler(rec, req)
@@ -92,10 +99,9 @@ func TestDocsRouteFormatJSONOverridesHTMLAccept(t *testing.T) {
 }
 
 func TestDocsRouteSupportsVercelFunctionPath(t *testing.T) {
-	t.Setenv("DOCS_USERNAME", "")
-	t.Setenv("DOCS_PASSWORD", "")
+	setDocsCredentials(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/index.go/docs", nil)
-	req.SetBasicAuth("adão", "primeiro")
+	setDocsBasicAuth(req)
 	rec := httptest.NewRecorder()
 
 	Handler(rec, req)
@@ -106,10 +112,9 @@ func TestDocsRouteSupportsVercelFunctionPath(t *testing.T) {
 }
 
 func TestDocsRouteSupportsVercelFunctionPathWithoutExtension(t *testing.T) {
-	t.Setenv("DOCS_USERNAME", "")
-	t.Setenv("DOCS_PASSWORD", "")
+	setDocsCredentials(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/index/docs", nil)
-	req.SetBasicAuth("adão", "primeiro")
+	setDocsBasicAuth(req)
 	rec := httptest.NewRecorder()
 
 	Handler(rec, req)
@@ -120,10 +125,9 @@ func TestDocsRouteSupportsVercelFunctionPathWithoutExtension(t *testing.T) {
 }
 
 func TestDocsRouteSupportsDirectFunctionGet(t *testing.T) {
-	t.Setenv("DOCS_USERNAME", "")
-	t.Setenv("DOCS_PASSWORD", "")
+	setDocsCredentials(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/index.go", nil)
-	req.SetBasicAuth("adão", "primeiro")
+	setDocsBasicAuth(req)
 	rec := httptest.NewRecorder()
 
 	Handler(rec, req)
@@ -170,8 +174,7 @@ func TestGradeExamSupportsPathAliases(t *testing.T) {
 }
 
 func TestDocsRouteRequiresBasicAuth(t *testing.T) {
-	t.Setenv("DOCS_USERNAME", "")
-	t.Setenv("DOCS_PASSWORD", "")
+	setDocsCredentials(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/docs", nil)
 	rec := httptest.NewRecorder()
 
@@ -186,10 +189,9 @@ func TestDocsRouteRequiresBasicAuth(t *testing.T) {
 }
 
 func TestDocsRouteRejectsInvalidBasicAuth(t *testing.T) {
-	t.Setenv("DOCS_USERNAME", "")
-	t.Setenv("DOCS_PASSWORD", "")
+	setDocsCredentials(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/docs", nil)
-	req.SetBasicAuth("adão", "errada")
+	req.SetBasicAuth("docs-test", "errada")
 	rec := httptest.NewRecorder()
 
 	Handler(rec, req)
@@ -210,5 +212,19 @@ func TestDocsRouteUsesEnvCredentials(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+
+func TestDocsRouteRequiresConfiguredCredentials(t *testing.T) {
+	t.Setenv("DOCS_USERNAME", "")
+	t.Setenv("DOCS_PASSWORD", "")
+	req := httptest.NewRequest(http.MethodGet, "/api/docs", nil)
+	req.SetBasicAuth("docs-test", "docs-password-test")
+	rec := httptest.NewRecorder()
+
+	Handler(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
 }
