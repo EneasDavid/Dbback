@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -86,14 +87,7 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 			return nil, nil
 		}
 
-		driveComments := []driveCellComment{}
-		if requiresDriveComments(missing, c.cfg.LoginSheet) {
-			var commentsErr error
-			driveComments, commentsErr = c.driveCommentsForSpreadsheet(ctx)
-			if commentsErr != nil {
-				return nil, NewHTTPError(503, "não conseguiu ler comentários do Google Drive: "+commentsErr.Error())
-			}
-		}
+		driveComments := c.optionalDriveComments(ctx, missing)
 
 		ranges := make([]string, 0, len(missing))
 		for _, sheetName := range missing {
@@ -105,7 +99,7 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 			Context(ctx).
 			Do()
 		if err != nil {
-			return nil, err
+			return nil, sheetReadError(err)
 		}
 
 		found := map[string]bool{}
@@ -137,6 +131,17 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 		return err
 	}
 	return nil
+}
+
+func (c *SheetsClient) optionalDriveComments(ctx context.Context, sheetNames []string) []driveCellComment {
+	if !requiresDriveComments(sheetNames, c.cfg.LoginSheet) {
+		return nil
+	}
+	comments, err := c.driveCommentsForSpreadsheet(ctx)
+	if err != nil {
+		return nil
+	}
+	return comments
 }
 
 func (c *SheetsClient) cachedSheet(sheetName string) (cachedGrid, bool) {
@@ -177,6 +182,25 @@ func containsString(values []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func sheetReadError(err error) error {
+	var apiErr *googleapi.Error
+	if errors.As(err, &apiErr) {
+		switch apiErr.Code {
+		case http.StatusUnauthorized:
+			return NewHTTPError(http.StatusServiceUnavailable, "credencial Google invalida ou expirada")
+		case http.StatusForbidden:
+			return NewHTTPError(http.StatusServiceUnavailable, "service account sem acesso a planilha; compartilhe a planilha com o client_email da credencial")
+		case http.StatusNotFound:
+			return NewHTTPError(http.StatusNotFound, "planilha nao encontrada; confira GOOGLE_SHEET_ID")
+		case http.StatusBadRequest:
+			return NewHTTPError(http.StatusBadRequest, "nao conseguiu ler as abas configuradas; confira os nomes das abas no ambiente")
+		default:
+			return NewHTTPError(http.StatusServiceUnavailable, fmt.Sprintf("nao conseguiu ler dados da planilha: Google API HTTP %d", apiErr.Code))
+		}
+	}
+	return err
 }
 
 var sheetsGridFields = googleapi.Field(
