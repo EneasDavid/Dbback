@@ -90,7 +90,6 @@ func (c *SheetsClient) workbookCommentsForSpreadsheet(ctx context.Context, sprea
 		if err != nil {
 			return nil, err
 		}
-		comments = filterWorkbookComments(comments, configuredGradeSheetSet(c.cfg))
 		c.mu.Lock()
 		if c.workbookComments == nil {
 			c.workbookComments = map[string]cachedWorkbookComments{}

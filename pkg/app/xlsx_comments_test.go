@@ -100,6 +100,26 @@ func TestWorkbookCommentsAreFilteredToConfiguredGradeSheets(t *testing.T) {
 	}
 }
 
+func TestWorkbookCommentsFilterAllowsRuntimeRequestedV2Sheets(t *testing.T) {
+	input := map[string][]workbookCellComment{
+		"projeto": {
+			{SheetName: "projeto", Text: "feedback v2"},
+		},
+		"Projeto AB2": {
+			{SheetName: "Projeto AB2", Text: "feedback legado"},
+		},
+	}
+
+	filtered := filterWorkbookComments(input, sheetNameSet([]string{"projeto"}))
+
+	if len(filtered) != 1 || len(filtered["projeto"]) != 1 {
+		t.Fatalf("filtered = %#v, want dynamic v2 sheet comments", filtered)
+	}
+	if _, ok := filtered["Projeto AB2"]; ok {
+		t.Fatal("unrequested legacy sheet should not be returned")
+	}
+}
+
 func writeTestZipFile(t *testing.T, writer *zip.Writer, name string, body string) {
 	t.Helper()
 	file, err := writer.Create(name)
