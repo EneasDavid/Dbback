@@ -54,6 +54,7 @@ func TestValidateExplainsMissingServiceAccountFileOnVercel(t *testing.T) {
 
 func TestValidateExplainsMissingSpreadsheetID(t *testing.T) {
 	t.Setenv("GOOGLE_SHEET_ID", "")
+	t.Setenv("GOOGLE_SHEET_IDS", "")
 	t.Setenv("SESSION_SECRET", "test-secret")
 	t.Setenv("GOOGLE_SERVICE_ACCOUNT_JSON", testServiceAccountJSON)
 	t.Setenv("GOOGLE_SERVICE_ACCOUNT_JSON_BASE64", "")
@@ -70,6 +71,21 @@ func TestValidateExplainsMissingSpreadsheetID(t *testing.T) {
 	}
 	if !strings.Contains(httpErr.Message, "GOOGLE_SHEET_ID") {
 		t.Fatalf("Validate() message = %q, want GOOGLE_SHEET_ID guidance", httpErr.Message)
+	}
+}
+
+func TestLoadConfigAcceptsMultipleSpreadsheetIDs(t *testing.T) {
+	t.Setenv("GOOGLE_SHEET_ID", "legacy-id")
+	t.Setenv("GOOGLE_SHEET_IDS", " sheet-a, sheet-b ;sheet-a\nsheet-c ")
+
+	cfg := LoadConfig()
+
+	want := []string{"sheet-a", "sheet-b", "sheet-c"}
+	if strings.Join(cfg.SpreadsheetIDs, ",") != strings.Join(want, ",") {
+		t.Fatalf("SpreadsheetIDs = %#v, want %#v", cfg.SpreadsheetIDs, want)
+	}
+	if cfg.SpreadsheetID != "sheet-a" {
+		t.Fatalf("SpreadsheetID = %q, want first configured id", cfg.SpreadsheetID)
 	}
 }
 

@@ -8,7 +8,7 @@ import (
 func (c *SheetsClient) LoginIdentity(ctx context.Context, matricula string) (LoginIdentity, error) {
 	grid, err := c.loadSheet(ctx, c.cfg.LoginSheet)
 	if err != nil {
-		return LoginIdentity{}, NewHTTPError(503, "não conseguiu acessar a planilha de login; verifique GOOGLE_SHEET_ID, credencial da service account e compartilhamento da planilha")
+		return LoginIdentity{}, NewHTTPError(503, "não conseguiu acessar a planilha de login; verifique GOOGLE_SHEET_ID/GOOGLE_SHEET_IDS, credencial da service account e compartilhamento da planilha")
 	}
 	matriculaIdx := matriculaColumn(grid.headers)
 	nameIdx := nameColumn(grid.headers)

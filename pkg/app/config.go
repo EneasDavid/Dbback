@@ -9,17 +9,21 @@ import (
 )
 
 type Config struct {
-	SpreadsheetID string
-	LoginSheet    string
-	AB1Tables     []TableConfig
-	AB2Tables     []TableConfig
-	SessionSecret string
-	CookieSecure  bool
-	DocsUsername  string
-	DocsPassword  string
-	ServiceJSON   string
-	ServiceFile   string
-	CacheTTL      time.Duration
+	SpreadsheetID  string
+	SpreadsheetIDs []string
+	RuntimeVersion string
+	MetadataKey    string
+	MetadataValue  string
+	LoginSheet     string
+	AB1Tables      []TableConfig
+	AB2Tables      []TableConfig
+	SessionSecret  string
+	CookieSecure   bool
+	DocsUsername   string
+	DocsPassword   string
+	ServiceJSON    string
+	ServiceFile    string
+	CacheTTL       time.Duration
 }
 
 type TableConfig struct {
@@ -31,9 +35,14 @@ type TableConfig struct {
 }
 
 func LoadConfig() Config {
+	spreadsheetIDs := spreadsheetIDsFromEnv()
 	return Config{
-		SpreadsheetID: strings.TrimSpace(os.Getenv("GOOGLE_SHEET_ID")),
-		LoginSheet:    firstNonEmpty(os.Getenv("LOGIN_SHEET_NAME"), "Base de dados"),
+		SpreadsheetID:  firstString(spreadsheetIDs),
+		SpreadsheetIDs: spreadsheetIDs,
+		RuntimeVersion: strings.ToLower(firstNonEmpty(os.Getenv("SHEETS_RUNTIME_VERSION"), "v1")),
+		MetadataKey:    firstNonEmpty(os.Getenv("GOOGLE_SHEET_METADATA_KEY"), "dbback_schema"),
+		MetadataValue:  firstNonEmpty(os.Getenv("GOOGLE_SHEET_METADATA_VALUE"), "v2"),
+		LoginSheet:     firstNonEmpty(os.Getenv("LOGIN_SHEET_NAME"), "Base de dados"),
 		AB1Tables: []TableConfig{
 			tableFromEnv("at1", "Atividade 1", "SHEET_AB1_PESQUISA", "AT. 1", "activity", 10),
 			tableFromEnv("at2", "Atividade 2", "SHEET_AB1_ARTIGO", "AT. 2", "activity", 10),
@@ -58,8 +67,8 @@ func (c Config) Validate() error {
 	if c.SessionSecret == "" {
 		return NewHTTPError(500, "SESSION_SECRET nao configurado")
 	}
-	if c.SpreadsheetID == "" {
-		return NewHTTPError(500, "GOOGLE_SHEET_ID nao configurado")
+	if len(c.SpreadsheetIDs) == 0 {
+		return NewHTTPError(500, "GOOGLE_SHEET_ID ou GOOGLE_SHEET_IDS nao configurado")
 	}
 	if c.ServiceJSON == "" {
 		if strings.TrimSpace(c.ServiceFile) != "" {
@@ -71,6 +80,30 @@ func (c Config) Validate() error {
 		return NewHTTPError(500, "GOOGLE_SERVICE_ACCOUNT_JSON invalido")
 	}
 	return nil
+}
+
+func spreadsheetIDsFromEnv() []string {
+	raw := firstNonEmpty(os.Getenv("GOOGLE_SHEET_IDS"), os.Getenv("GOOGLE_SHEET_ID"))
+	seen := map[string]bool{}
+	var result []string
+	for _, item := range strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n' || r == '\r' || r == '\t'
+	}) {
+		item = strings.TrimSpace(item)
+		if item == "" || seen[item] {
+			continue
+		}
+		seen[item] = true
+		result = append(result, item)
+	}
+	return result
+}
+
+func firstString(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
 }
 
 func firstNonEmpty(values ...string) string {

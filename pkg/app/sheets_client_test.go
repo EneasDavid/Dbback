@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"google.golang.org/api/googleapi"
+	"google.golang.org/api/sheets/v4"
 )
 
 func TestOptionalDriveCommentsDoesNotBlockSheetsAccess(t *testing.T) {
@@ -18,7 +19,7 @@ func TestOptionalDriveCommentsDoesNotBlockSheetsAccess(t *testing.T) {
 		httpClient: &http.Client{Transport: failingRoundTripper{}},
 	}
 
-	if got := client.optionalDriveComments(t.Context(), []string{"AT. 1"}); got != nil {
+	if got := client.optionalDriveComments(t.Context(), "sheet-test-id", []string{"AT. 1"}); got != nil {
 		t.Fatalf("optionalDriveComments() = %#v, want nil fallback", got)
 	}
 }
@@ -50,6 +51,30 @@ func TestSheetReadErrorExplainsMissingSpreadsheetID(t *testing.T) {
 	}
 	if !strings.Contains(httpErr.Message, "GOOGLE_SHEET_ID") {
 		t.Fatalf("sheetReadError() message = %q, want spreadsheet ID guidance", httpErr.Message)
+	}
+}
+
+func TestSchemaStatusForSpreadsheetMarksLegacyWhenMetadataDiffers(t *testing.T) {
+	client := &SheetsClient{cfg: Config{RuntimeVersion: "v2", MetadataKey: "dbback_schema", MetadataValue: "v2"}}
+
+	got := client.schemaStatusForSpreadsheet([]*sheets.DeveloperMetadata{
+		{MetadataKey: "dbback_schema", MetadataValue: "v1"},
+	})
+
+	if got != "legacy" {
+		t.Fatalf("schemaStatusForSpreadsheet() = %q, want legacy", got)
+	}
+}
+
+func TestSchemaStatusForSpreadsheetAcceptsConfiguredV2Metadata(t *testing.T) {
+	client := &SheetsClient{cfg: Config{RuntimeVersion: "v2", MetadataKey: "dbback_schema", MetadataValue: "v2"}}
+
+	got := client.schemaStatusForSpreadsheet([]*sheets.DeveloperMetadata{
+		{MetadataKey: "dbback_schema", MetadataValue: "v2"},
+	})
+
+	if got != "v2" {
+		t.Fatalf("schemaStatusForSpreadsheet() = %q, want v2", got)
 	}
 }
 

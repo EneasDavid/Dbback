@@ -66,7 +66,16 @@ func Bootstrap(r *http.Request) (Config, SessionManager, *SheetsClient, error) {
 }
 
 func bootstrapKey(cfg Config) string {
-	parts := []string{cfg.SpreadsheetID, cfg.LoginSheet, cfg.SessionSecret, cfg.ServiceJSON, cfg.ServiceFile}
+	parts := []string{
+		strings.Join(cfg.SpreadsheetIDs, "\x01"),
+		cfg.RuntimeVersion,
+		cfg.MetadataKey,
+		cfg.MetadataValue,
+		cfg.LoginSheet,
+		cfg.SessionSecret,
+		cfg.ServiceJSON,
+		cfg.ServiceFile,
+	}
 	for _, table := range append(cfg.AB1Tables, cfg.AB2Tables...) {
 		parts = append(parts, table.Key, table.SheetName, table.Kind, strconv.FormatFloat(table.ScoreDivisor, 'f', -1, 64))
 	}

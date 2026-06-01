@@ -9,23 +9,25 @@ import (
 )
 
 func (c *SheetsClient) LoadDriveCommentDebug(ctx context.Context) ([]DriveCommentDebug, error) {
-	comments, err := c.driveCommentsForSpreadsheet(ctx)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]DriveCommentDebug, 0, len(comments))
-	for _, comment := range comments {
-		result = append(result, DriveCommentDebug{
-			Text:        comment.Text,
-			Author:      comment.Author,
-			QuotedText:  comment.QuotedText,
-			Anchor:      comment.Anchor,
-			SheetID:     comment.SheetID,
-			HasSheetID:  comment.HasSheetID,
-			RowIndex:    comment.RowIndex,
-			ColumnIndex: comment.ColumnIndex,
-			HasCell:     comment.HasCell,
-		})
+	var result []DriveCommentDebug
+	for _, spreadsheetID := range c.cfg.SpreadsheetIDs {
+		comments, err := c.driveCommentsForSpreadsheet(ctx, spreadsheetID)
+		if err != nil {
+			return nil, err
+		}
+		for _, comment := range comments {
+			result = append(result, DriveCommentDebug{
+				Text:        comment.Text,
+				Author:      comment.Author,
+				QuotedText:  comment.QuotedText,
+				Anchor:      comment.Anchor,
+				SheetID:     comment.SheetID,
+				HasSheetID:  comment.HasSheetID,
+				RowIndex:    comment.RowIndex,
+				ColumnIndex: comment.ColumnIndex,
+				HasCell:     comment.HasCell,
+			})
+		}
 	}
 	return result, nil
 }

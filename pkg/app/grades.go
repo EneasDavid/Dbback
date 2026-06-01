@@ -114,6 +114,8 @@ func (c *SheetsClient) gradeForTables(ctx context.Context, exam string, tables [
 	for _, response := range responses {
 		if response.found {
 			result.Tables = append(result.Tables, response.result)
+			result.SpreadsheetID = mergeSourceValue(result.SpreadsheetID, response.result.SpreadsheetID)
+			result.SchemaStatus = mergeSchemaStatus(result.SchemaStatus, response.result.SchemaStatus)
 		}
 	}
 	addScoreAverages(&result)
@@ -156,7 +158,13 @@ func (c *SheetsClient) gradeTableFor(ctx context.Context, table TableConfig, use
 	if !ok {
 		return TableResult{}, false, NewHTTPError(500, "tipo de tabela desconhecido: "+table.Kind)
 	}
-	return parser(grid, table, user)
+	result, found, err := parser(grid, table, user)
+	if err != nil || !found {
+		return result, found, err
+	}
+	result.SpreadsheetID = grid.spreadsheetID
+	result.SchemaStatus = grid.schemaStatus
+	return result, true, nil
 }
 
 func parseStudentTable(grid *sheetGrid, table TableConfig, user SessionUser) (TableResult, bool, error) {

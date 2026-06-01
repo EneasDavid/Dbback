@@ -26,8 +26,8 @@ type SheetsClient struct {
 	httpClient       *http.Client
 	mu               sync.Mutex
 	cache            map[string]cachedGrid
-	driveComments    cachedDriveComments
-	workbookComments cachedWorkbookComments
+	driveComments    map[string]cachedDriveComments
+	workbookComments map[string]cachedWorkbookComments
 	group            singleflight.Group
 }
 
@@ -51,15 +51,22 @@ func NewSheetsClient(ctx context.Context, cfg Config) (*SheetsClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &SheetsClient{cfg: cfg, service: svc, httpClient: httpClient, cache: map[string]cachedGrid{}}, nil
+	return &SheetsClient{
+		cfg:              cfg,
+		service:          svc,
+		httpClient:       httpClient,
+		cache:            map[string]cachedGrid{},
+		driveComments:    map[string]cachedDriveComments{},
+		workbookComments: map[string]cachedWorkbookComments{},
+	}, nil
 }
 
 func (c *SheetsClient) ClearCache() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cache = map[string]cachedGrid{}
-	c.driveComments = cachedDriveComments{}
-	c.workbookComments = cachedWorkbookComments{}
+	c.driveComments = map[string]cachedDriveComments{}
+	c.workbookComments = map[string]cachedWorkbookComments{}
 }
 
 func (c *SheetsClient) loadSheet(ctx context.Context, sheetName string) (*sheetGrid, error) {
@@ -82,54 +89,64 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 		return nil
 	}
 
-	key := "sheets:" + strings.Join(missing, "\x00")
+	key := "sheets:" + strings.Join(c.cfg.SpreadsheetIDs, "\x00") + "\x00" + strings.Join(missing, "\x00")
 	_, err, _ := c.group.Do(key, func() (interface{}, error) {
 		missing := c.missingSheets(missing)
 		if len(missing) == 0 {
 			return nil, nil
 		}
 
-		driveCommentsCh := c.optionalDriveCommentsAsync(ctx, missing)
-		workbookCommentsCh := c.optionalWorkbookCommentsAsync(ctx, missing)
-
 		ranges := make([]string, 0, len(missing))
 		for _, sheetName := range missing {
 			ranges = append(ranges, quoteSheetName(sheetName))
 		}
-		resp, err := c.service.Spreadsheets.Get(c.cfg.SpreadsheetID).
-			Ranges(ranges...).
-			Fields(sheetsGridFields).
-			Context(ctx).
-			Do()
-		if err != nil {
-			return nil, sheetReadError(err)
+		grids := map[string]*sheetGrid{}
+		now := time.Now()
+
+		for _, spreadsheetID := range c.cfg.SpreadsheetIDs {
+			spreadsheetID = strings.TrimSpace(spreadsheetID)
+			if spreadsheetID == "" {
+				continue
+			}
+			driveCommentsCh := c.optionalDriveCommentsAsync(ctx, spreadsheetID, missing)
+			workbookCommentsCh := c.optionalWorkbookCommentsAsync(ctx, spreadsheetID, missing)
+
+			responses, err := c.spreadsheetResponses(ctx, spreadsheetID, ranges)
+			if err != nil {
+				return nil, sheetReadError(err)
+			}
+
+			driveComments := <-driveCommentsCh
+			workbookComments := <-workbookCommentsCh
+			for _, resp := range responses {
+				schemaStatus := c.schemaStatusForSpreadsheet(resp.DeveloperMetadata)
+				for _, sheet := range resp.Sheets {
+					if sheet == nil || sheet.Properties == nil {
+						continue
+					}
+					name := sheet.Properties.Title
+					if !containsString(missing, name) || len(sheet.Data) == 0 {
+						continue
+					}
+					grid := parseGrid(sheet.Data[0].RowData, sheet.Merges)
+					grid.spreadsheetID = spreadsheetID
+					grid.schemaStatus = schemaStatus
+					grid.applyWorkbookComments(workbookComments[name], sheet.Merges)
+					grid.applyDriveComments(driveComments, sheet.Properties.SheetId, sheet.Merges)
+					grid.applyCommentMerges(sheet.Merges)
+					grids[name] = mergeSheetGrid(grids[name], grid)
+				}
+			}
 		}
 
-		driveComments := <-driveCommentsCh
-		workbookComments := <-workbookCommentsCh
-		found := map[string]bool{}
-		now := time.Now()
 		c.mu.Lock()
 		defer c.mu.Unlock()
-		for _, sheet := range resp.Sheets {
-			if sheet == nil || sheet.Properties == nil {
-				continue
-			}
-			name := sheet.Properties.Title
-			if !containsString(missing, name) || len(sheet.Data) == 0 {
-				continue
-			}
-			grid := parseGrid(sheet.Data[0].RowData, sheet.Merges)
-			grid.applyWorkbookComments(workbookComments[name], sheet.Merges)
-			grid.applyDriveComments(driveComments, sheet.Properties.SheetId, sheet.Merges)
-			grid.applyCommentMerges(sheet.Merges)
-			c.cache[name] = cachedGrid{expires: now.Add(c.cfg.CacheTTL), grid: grid}
-			found[name] = true
-		}
 		for _, sheetName := range missing {
-			if !found[sheetName] {
+			grid := grids[sheetName]
+			if grid == nil {
 				return nil, NewHTTPError(404, "aba nao encontrada: "+sheetName)
 			}
+			c.cache[sheetName] = cachedGrid{expires: now.Add(c.cfg.CacheTTL), grid: grid}
 		}
 		return nil, nil
 	})
@@ -139,40 +156,40 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 	return nil
 }
 
-func (c *SheetsClient) optionalDriveComments(ctx context.Context, sheetNames []string) []driveCellComment {
+func (c *SheetsClient) optionalDriveComments(ctx context.Context, spreadsheetID string, sheetNames []string) []driveCellComment {
 	if !requiresDriveComments(sheetNames, c.cfg.LoginSheet) {
 		return nil
 	}
-	comments, err := c.driveCommentsForSpreadsheet(ctx)
+	comments, err := c.driveCommentsForSpreadsheet(ctx, spreadsheetID)
 	if err != nil {
 		return nil
 	}
 	return comments
 }
 
-func (c *SheetsClient) optionalDriveCommentsAsync(ctx context.Context, sheetNames []string) <-chan []driveCellComment {
+func (c *SheetsClient) optionalDriveCommentsAsync(ctx context.Context, spreadsheetID string, sheetNames []string) <-chan []driveCellComment {
 	ch := make(chan []driveCellComment, 1)
 	go func() {
-		ch <- c.optionalDriveComments(ctx, sheetNames)
+		ch <- c.optionalDriveComments(ctx, spreadsheetID, sheetNames)
 	}()
 	return ch
 }
 
-func (c *SheetsClient) optionalWorkbookComments(ctx context.Context, sheetNames []string) map[string][]workbookCellComment {
+func (c *SheetsClient) optionalWorkbookComments(ctx context.Context, spreadsheetID string, sheetNames []string) map[string][]workbookCellComment {
 	if !requiresDriveComments(sheetNames, c.cfg.LoginSheet) {
 		return nil
 	}
-	comments, err := c.workbookCommentsForSpreadsheet(ctx)
+	comments, err := c.workbookCommentsForSpreadsheet(ctx, spreadsheetID)
 	if err != nil {
 		return nil
 	}
 	return filterWorkbookComments(comments, sheetNameSet(sheetNames))
 }
 
-func (c *SheetsClient) optionalWorkbookCommentsAsync(ctx context.Context, sheetNames []string) <-chan map[string][]workbookCellComment {
+func (c *SheetsClient) optionalWorkbookCommentsAsync(ctx context.Context, spreadsheetID string, sheetNames []string) <-chan map[string][]workbookCellComment {
 	ch := make(chan map[string][]workbookCellComment, 1)
 	go func() {
-		ch <- c.optionalWorkbookComments(ctx, sheetNames)
+		ch <- c.optionalWorkbookComments(ctx, spreadsheetID, sheetNames)
 	}()
 	return ch
 }
@@ -217,6 +234,106 @@ func containsString(values []string, target string) bool {
 	return false
 }
 
+func (c *SheetsClient) spreadsheetResponses(ctx context.Context, spreadsheetID string, ranges []string) ([]*sheets.Spreadsheet, error) {
+	resp, err := c.service.Spreadsheets.Get(spreadsheetID).
+		Ranges(ranges...).
+		Fields(sheetsGridFields).
+		Context(ctx).
+		Do()
+	if err == nil {
+		return []*sheets.Spreadsheet{resp}, nil
+	}
+	if !isGoogleBadRequest(err) {
+		return nil, err
+	}
+
+	var responses []*sheets.Spreadsheet
+	for _, rangeName := range ranges {
+		resp, err := c.service.Spreadsheets.Get(spreadsheetID).
+			Ranges(rangeName).
+			Fields(sheetsGridFields).
+			Context(ctx).
+			Do()
+		if err != nil {
+			if isGoogleBadRequest(err) {
+				continue
+			}
+			return nil, err
+		}
+		responses = append(responses, resp)
+	}
+	return responses, nil
+}
+
+func isGoogleBadRequest(err error) bool {
+	var apiErr *googleapi.Error
+	return errors.As(err, &apiErr) && apiErr.Code == http.StatusBadRequest
+}
+
+func (c *SheetsClient) schemaStatusForSpreadsheet(metadata []*sheets.DeveloperMetadata) string {
+	if c.cfg.RuntimeVersion != "v2" {
+		return ""
+	}
+	expectedKey := strings.TrimSpace(c.cfg.MetadataKey)
+	expectedValue := strings.TrimSpace(c.cfg.MetadataValue)
+	if expectedKey == "" || expectedValue == "" {
+		return "legacy"
+	}
+	for _, item := range metadata {
+		if item == nil {
+			continue
+		}
+		if strings.TrimSpace(item.MetadataKey) == expectedKey && strings.TrimSpace(item.MetadataValue) == expectedValue {
+			return "v2"
+		}
+	}
+	return "legacy"
+}
+
+func mergeSheetGrid(base *sheetGrid, next *sheetGrid) *sheetGrid {
+	if next == nil {
+		return base
+	}
+	if base == nil || len(base.headers) == 0 {
+		return next
+	}
+	if len(next.headers) == 0 {
+		return base
+	}
+
+	base.rows = append(base.rows, next.rows...)
+	base.rowNotes = append(base.rowNotes, next.rowNotes...)
+	base.rowNoteAuthors = append(base.rowNoteAuthors, next.rowNoteAuthors...)
+	base.rowIndices = append(base.rowIndices, next.rowIndices...)
+	base.spreadsheetID = mergeSourceValue(base.spreadsheetID, next.spreadsheetID)
+	base.schemaStatus = mergeSchemaStatus(base.schemaStatus, next.schemaStatus)
+	return base
+}
+
+func mergeSourceValue(left string, right string) string {
+	left = strings.TrimSpace(left)
+	right = strings.TrimSpace(right)
+	if left == "" {
+		return right
+	}
+	if right == "" || left == right || containsString(strings.Split(left, ","), right) {
+		return left
+	}
+	return left + "," + right
+}
+
+func mergeSchemaStatus(left string, right string) string {
+	left = strings.TrimSpace(left)
+	right = strings.TrimSpace(right)
+	if left == "legacy" || right == "legacy" {
+		return "legacy"
+	}
+	if left == "" {
+		return right
+	}
+	return left
+}
+
 func sheetReadError(err error) error {
 	var apiErr *googleapi.Error
 	if errors.As(err, &apiErr) {
@@ -226,7 +343,7 @@ func sheetReadError(err error) error {
 		case http.StatusForbidden:
 			return NewHTTPError(http.StatusServiceUnavailable, "service account sem acesso a planilha; compartilhe a planilha com o client_email da credencial")
 		case http.StatusNotFound:
-			return NewHTTPError(http.StatusNotFound, "planilha nao encontrada; confira GOOGLE_SHEET_ID")
+			return NewHTTPError(http.StatusNotFound, "planilha nao encontrada; confira GOOGLE_SHEET_ID ou GOOGLE_SHEET_IDS")
 		case http.StatusBadRequest:
 			return NewHTTPError(http.StatusBadRequest, "nao conseguiu ler as abas configuradas; confira os nomes das abas no ambiente")
 		default:
@@ -237,7 +354,7 @@ func sheetReadError(err error) error {
 }
 
 var sheetsGridFields = googleapi.Field(
-	"sheets(properties(title,sheetId),merges(startRowIndex,endRowIndex,startColumnIndex,endColumnIndex),data(startRow,startColumn,rowData(values(formattedValue,note,userEnteredValue))))",
+	"developerMetadata(metadataKey,metadataValue),sheets(properties(title,sheetId),merges(startRowIndex,endRowIndex,startColumnIndex,endColumnIndex),data(startRow,startColumn,rowData(values(formattedValue,note,userEnteredValue))))",
 )
 
 const driveReadonlyScope = "https://www.googleapis.com/auth/drive.readonly"
@@ -280,22 +397,29 @@ func requiresDriveComments(sheetNames []string, loginSheet string) bool {
 	return false
 }
 
-func (c *SheetsClient) driveCommentsForSpreadsheet(ctx context.Context) ([]driveCellComment, error) {
+func (c *SheetsClient) driveCommentsForSpreadsheet(ctx context.Context, spreadsheetID string) ([]driveCellComment, error) {
 	c.mu.Lock()
-	if c.driveComments.comments != nil && time.Now().Before(c.driveComments.expires) {
-		comments := append([]driveCellComment(nil), c.driveComments.comments...)
+	if c.driveComments == nil {
+		c.driveComments = map[string]cachedDriveComments{}
+	}
+	cached := c.driveComments[spreadsheetID]
+	if cached.comments != nil && time.Now().Before(cached.expires) {
+		comments := append([]driveCellComment(nil), cached.comments...)
 		c.mu.Unlock()
 		return comments, nil
 	}
 	c.mu.Unlock()
 
-	value, err, _ := c.group.Do("drive-comments:"+c.cfg.SpreadsheetID, func() (interface{}, error) {
-		comments, err := c.fetchDriveComments(ctx)
+	value, err, _ := c.group.Do("drive-comments:"+spreadsheetID, func() (interface{}, error) {
+		comments, err := c.fetchDriveComments(ctx, spreadsheetID)
 		if err != nil {
 			return nil, err
 		}
 		c.mu.Lock()
-		c.driveComments = cachedDriveComments{expires: time.Now().Add(c.cfg.CacheTTL), comments: comments}
+		if c.driveComments == nil {
+			c.driveComments = map[string]cachedDriveComments{}
+		}
+		c.driveComments[spreadsheetID] = cachedDriveComments{expires: time.Now().Add(c.cfg.CacheTTL), comments: comments}
 		c.mu.Unlock()
 		return comments, nil
 	})
@@ -305,22 +429,22 @@ func (c *SheetsClient) driveCommentsForSpreadsheet(ctx context.Context) ([]drive
 	return append([]driveCellComment(nil), value.([]driveCellComment)...), nil
 }
 
-func (c *SheetsClient) fetchDriveComments(ctx context.Context) ([]driveCellComment, error) {
-	comments, err := c.fetchDriveCommentPages(ctx, driveV3CommentEndpoint)
+func (c *SheetsClient) fetchDriveComments(ctx context.Context, spreadsheetID string) ([]driveCellComment, error) {
+	comments, err := c.fetchDriveCommentPages(ctx, spreadsheetID, driveV3CommentEndpoint)
 	if err != nil {
 		return nil, err
 	}
 	if len(comments) > 0 {
 		return comments, nil
 	}
-	return c.fetchDriveCommentPages(ctx, driveV2CommentEndpoint)
+	return c.fetchDriveCommentPages(ctx, spreadsheetID, driveV2CommentEndpoint)
 }
 
-func (c *SheetsClient) fetchDriveCommentPages(ctx context.Context, spec driveCommentEndpoint) ([]driveCellComment, error) {
+func (c *SheetsClient) fetchDriveCommentPages(ctx context.Context, spreadsheetID string, spec driveCommentEndpoint) ([]driveCellComment, error) {
 	var all []driveCellComment
 	pageToken := ""
 	for {
-		endpoint, err := url.Parse(fmt.Sprintf("https://www.googleapis.com/drive/%s/files/%s/comments", spec.version, url.PathEscape(c.cfg.SpreadsheetID)))
+		endpoint, err := url.Parse(fmt.Sprintf("https://www.googleapis.com/drive/%s/files/%s/comments", spec.version, url.PathEscape(spreadsheetID)))
 		if err != nil {
 			return nil, err
 		}

@@ -6,6 +6,8 @@ type GradeResult struct {
 	Exam          string         `json:"exam"`
 	Matricula     string         `json:"matricula"`
 	Name          string         `json:"name"`
+	SchemaStatus  string         `json:"schemaStatus,omitempty"`
+	SpreadsheetID string         `json:"spreadsheetId,omitempty"`
 	Tables        []TableResult  `json:"tables"`
 	StudentStatus *StudentStatus `json:"studentStatus,omitempty"`
 }
@@ -13,13 +15,15 @@ type GradeResult struct {
 type GradeResults map[string]GradeResult
 
 type TableResult struct {
-	Key       string       `json:"key"`
-	Label     string       `json:"label"`
-	SheetName string       `json:"sheetName"`
-	Kind      string       `json:"kind"`
-	Complete  bool         `json:"complete"`
-	Status    string       `json:"status,omitempty"`
-	Cards     []CardResult `json:"cards"`
+	Key           string       `json:"key"`
+	Label         string       `json:"label"`
+	SheetName     string       `json:"sheetName"`
+	Kind          string       `json:"kind"`
+	Complete      bool         `json:"complete"`
+	Status        string       `json:"status,omitempty"`
+	SchemaStatus  string       `json:"schemaStatus,omitempty"`
+	SpreadsheetID string       `json:"spreadsheetId,omitempty"`
+	Cards         []CardResult `json:"cards"`
 }
 
 type CardResult struct {
@@ -67,6 +71,8 @@ type sheetGrid struct {
 	rowNoteAuthors [][]string
 	headerRow      int
 	rowIndices     []int
+	spreadsheetID  string
+	schemaStatus   string
 }
 
 type driveCellComment struct {

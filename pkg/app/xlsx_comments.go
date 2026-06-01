@@ -72,23 +72,30 @@ type xlsxInnerXML struct {
 	CharData string `xml:",chardata"`
 }
 
-func (c *SheetsClient) workbookCommentsForSpreadsheet(ctx context.Context) (map[string][]workbookCellComment, error) {
+func (c *SheetsClient) workbookCommentsForSpreadsheet(ctx context.Context, spreadsheetID string) (map[string][]workbookCellComment, error) {
 	c.mu.Lock()
-	if c.workbookComments.comments != nil && time.Now().Before(c.workbookComments.expires) {
-		comments := cloneWorkbookComments(c.workbookComments.comments)
+	if c.workbookComments == nil {
+		c.workbookComments = map[string]cachedWorkbookComments{}
+	}
+	cached := c.workbookComments[spreadsheetID]
+	if cached.comments != nil && time.Now().Before(cached.expires) {
+		comments := cloneWorkbookComments(cached.comments)
 		c.mu.Unlock()
 		return comments, nil
 	}
 	c.mu.Unlock()
 
-	value, err, _ := c.group.Do("workbook-comments:"+c.cfg.SpreadsheetID, func() (interface{}, error) {
-		comments, err := c.fetchWorkbookComments(ctx)
+	value, err, _ := c.group.Do("workbook-comments:"+spreadsheetID, func() (interface{}, error) {
+		comments, err := c.fetchWorkbookComments(ctx, spreadsheetID)
 		if err != nil {
 			return nil, err
 		}
 		comments = filterWorkbookComments(comments, configuredGradeSheetSet(c.cfg))
 		c.mu.Lock()
-		c.workbookComments = cachedWorkbookComments{expires: time.Now().Add(c.cfg.CacheTTL), comments: comments}
+		if c.workbookComments == nil {
+			c.workbookComments = map[string]cachedWorkbookComments{}
+		}
+		c.workbookComments[spreadsheetID] = cachedWorkbookComments{expires: time.Now().Add(c.cfg.CacheTTL), comments: comments}
 		c.mu.Unlock()
 		return comments, nil
 	})
@@ -98,8 +105,8 @@ func (c *SheetsClient) workbookCommentsForSpreadsheet(ctx context.Context) (map[
 	return cloneWorkbookComments(value.(map[string][]workbookCellComment)), nil
 }
 
-func (c *SheetsClient) fetchWorkbookComments(ctx context.Context) (map[string][]workbookCellComment, error) {
-	endpoint, err := url.Parse(fmt.Sprintf("https://www.googleapis.com/drive/v3/files/%s/export", url.PathEscape(c.cfg.SpreadsheetID)))
+func (c *SheetsClient) fetchWorkbookComments(ctx context.Context, spreadsheetID string) (map[string][]workbookCellComment, error) {
+	endpoint, err := url.Parse(fmt.Sprintf("https://www.googleapis.com/drive/v3/files/%s/export", url.PathEscape(spreadsheetID)))
 	if err != nil {
 		return nil, err
 	}

@@ -47,6 +47,11 @@ Copie `env.example` para `.env` no desenvolvimento local e configure as variavei
 
 ```env
 GOOGLE_SHEET_ID=...
+# Para v2/multiplas planilhas, use GOOGLE_SHEET_IDS no lugar de GOOGLE_SHEET_ID:
+# GOOGLE_SHEET_IDS=id_da_turma_1,id_da_turma_2
+# SHEETS_RUNTIME_VERSION=v2
+# GOOGLE_SHEET_METADATA_KEY=dbback_schema
+# GOOGLE_SHEET_METADATA_VALUE=v2
 LOGIN_SHEET_NAME=Base de dados
 SHEET_AB1_PESQUISA=AT. 1
 SHEET_AB1_ARTIGO=AT. 2
@@ -70,6 +75,12 @@ Credenciais Google aceitas:
 Nao envie arquivos fisicos de service account para o GitHub. O `.gitignore` bloqueia JSONs locais de credencial, incluindo `service-account*.json` e `spheric-radio-*.json`; no deploy, prefira `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64`.
 
 Compartilhe a planilha com o `client_email` da service account. Para comentarios ricos, habilite a Drive API no projeto Google Cloud; sem ela, os valores da planilha ainda sao lidos. Se um comentario aparece no navegador mas nao no diagnostico, verifique se a service account consegue ver esse comentario e se ele esta na mesma linha/celula do aluno ou do criterio avaliado.
+
+### V1 legado e V2
+
+A tag git local `v1-stable` aponta para o codigo estavel anterior a v2. Em runtime, `GOOGLE_SHEET_ID` continua funcionando como configuracao v1/legado. Para deixar varias planilhas online ao mesmo tempo, configure `GOOGLE_SHEET_IDS` com os IDs separados por virgula, ponto e virgula ou quebra de linha.
+
+Quando `SHEETS_RUNTIME_VERSION=v2`, a API consulta os metadados do proprio Google Sheets. A planilha e marcada como `v2` quando houver developer metadata com a chave `GOOGLE_SHEET_METADATA_KEY` e o valor `GOOGLE_SHEET_METADATA_VALUE`; qualquer divergencia fica marcada como `legacy` no payload.
 
 ### Gerar o JSON da service account
 

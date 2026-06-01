@@ -50,7 +50,7 @@ func docsPayload() map[string]any {
 					"matricula": "string",
 					"name":      "string",
 				},
-				"result": "Cria sessão assinada depois de validar a matrícula na aba Base de dados.",
+				"result": "Cria sessão assinada depois de validar a matrícula na aba Base de dados de uma ou mais planilhas configuradas.",
 			},
 			{
 				"method": "POST",
@@ -81,7 +81,7 @@ func docsPayload() map[string]any {
 					"/api/grades/ab2",
 				},
 				"auth":   true,
-				"result": "Retorna tabelas render-ready da avaliação solicitada.",
+				"result": "Retorna tabelas render-ready da avaliação solicitada, com schemaStatus quando a v2 estiver ativa.",
 				"query": map[string]string{
 					"exam":    "ab1 ou ab2; aceita ab1|ab2 e usa o primeiro valor válido",
 					"refresh": "1 opcional; limpa cache em memória",
@@ -112,9 +112,10 @@ func docsPayload() map[string]any {
 		},
 		"gradeOrganization": map[string]any{
 			"identitySource": "Base de dados",
-			"rowSelection":   "A matrícula resolve um nome; cada aba de notas é lida pela linha cuja célula de identidade contém esse nome ou matrícula.",
+			"rowSelection":   "A matrícula resolve um nome; cada aba de notas é lida pela linha cuja célula de identidade contém esse nome ou matrícula. Com GOOGLE_SHEET_IDS, linhas de abas homônimas são agregadas entre as planilhas configuradas.",
 			"feedbackSource": "Comentários exibidos vêm primeiro da célula de nota/valor; atividades e projeto também aceitam comentários nas células de subtópico/cabeçalho. O comentário da identidade da linha é usado como fallback geral.",
 			"rendering":      "Os valores da linha são normalizados em cards e detalhes pelo backend; o frontend só renderiza o payload.",
+			"versioning":     "SHEETS_RUNTIME_VERSION=v2 compara developer metadata da planilha com GOOGLE_SHEET_METADATA_KEY/GOOGLE_SHEET_METADATA_VALUE; divergências são identificadas como legacy.",
 		},
 	}
 }
@@ -205,6 +206,7 @@ func docsHTMLFacts(value any) []docsHTMLFact {
 		{"rowSelection", "Seleção da linha"},
 		{"feedbackSource", "Feedback"},
 		{"rendering", "Renderização"},
+		{"versioning", "Versões"},
 	}
 	facts := make([]docsHTMLFact, 0, len(order))
 	for _, item := range order {
@@ -246,17 +248,21 @@ func stringSlice(value any) []string {
 
 func gradeResponseSchema() map[string]any {
 	return map[string]any{
-		"exam":      "string",
-		"matricula": "string",
-		"name":      "string",
+		"exam":          "string",
+		"matricula":     "string",
+		"name":          "string",
+		"schemaStatus":  "legacy|v2 optional",
+		"spreadsheetId": "string optional",
 		"tables": []map[string]any{
 			{
-				"key":       "string",
-				"label":     "string",
-				"sheetName": "string",
-				"kind":      "string",
-				"complete":  "boolean",
-				"status":    "string optional",
+				"key":           "string",
+				"label":         "string",
+				"sheetName":     "string",
+				"kind":          "string",
+				"complete":      "boolean",
+				"status":        "string optional",
+				"schemaStatus":  "legacy|v2 optional",
+				"spreadsheetId": "string optional",
 				"cards": []map[string]any{
 					{
 						"key":           "string",
