@@ -24,6 +24,7 @@ func (GradesController) Show(w http.ResponseWriter, r *http.Request, path string
 		app.Error(w, app.NewHTTPError(401, "sessao expirada"))
 		return
 	}
+	user = ensureUserSpreadsheet(w, r, sessions, sheetsClient, user)
 
 	exam := gradeExam(r, path)
 	if exam != "ab1" && exam != "ab2" {
@@ -56,6 +57,7 @@ func (GradesController) All(w http.ResponseWriter, r *http.Request) {
 		app.Error(w, app.NewHTTPError(401, "sessao expirada"))
 		return
 	}
+	user = ensureUserSpreadsheet(w, r, sessions, sheetsClient, user)
 
 	if r.URL.Query().Get("refresh") == "1" {
 		sheetsClient.ClearCache()
@@ -66,6 +68,22 @@ func (GradesController) All(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	app.JSON(w, http.StatusOK, result)
+}
+
+func ensureUserSpreadsheet(w http.ResponseWriter, r *http.Request, sessions app.SessionManager, sheetsClient *app.SheetsClient, user app.SessionUser) app.SessionUser {
+	if strings.TrimSpace(user.SpreadsheetID) != "" {
+		return user
+	}
+	identity, err := sheetsClient.LoginIdentity(r.Context(), user.Matricula)
+	if err != nil {
+		return user
+	}
+	user.SpreadsheetID = identity.SpreadsheetID
+	if strings.TrimSpace(identity.Name) != "" {
+		user.Name = identity.Name
+	}
+	sessions.Set(w, user)
+	return user
 }
 
 func gradeExam(r *http.Request, path string) string {

@@ -78,9 +78,15 @@ Compartilhe a planilha com o `client_email` da service account. Para comentarios
 
 ### V1 legado e V2
 
-A tag git local `v1-stable` aponta para o codigo estavel anterior a v2. Em runtime, `GOOGLE_SHEET_ID` continua funcionando como configuracao v1/legado. Para deixar varias planilhas online ao mesmo tempo, configure `GOOGLE_SHEET_IDS` com os IDs separados por virgula, ponto e virgula ou quebra de linha.
+A tag git local `v1-stable` aponta para o codigo estavel anterior a v2. Em runtime, `GOOGLE_SHEET_ID` continua funcionando como configuracao v1/legado. Para deixar varias planilhas online ao mesmo tempo, configure `GOOGLE_SHEET_IDS` com os IDs separados por virgula, ponto e virgula ou quebra de linha. Se `GOOGLE_SHEET_ID` e `GOOGLE_SHEET_IDS` estiverem definidos, o backend consulta todos eles.
 
 Quando `SHEETS_RUNTIME_VERSION=v2`, a API consulta os metadados do proprio Google Sheets. A planilha e marcada como `v2` quando houver developer metadata com a chave `GOOGLE_SHEET_METADATA_KEY` e o valor `GOOGLE_SHEET_METADATA_VALUE`; qualquer divergencia fica marcada como `legacy` no payload.
+
+Na v2, as atividades nao saem mais da lista fixa `SHEET_AB1_*`. O backend le a aba `abs` para descobrir quais ABs estao ativas, le a aba `atividades` para descobrir as atividades de cada AB e seu `peso maximo`, le `nota ab1`/`nota ab2` para a media e a nota do aluno em cada atividade, e entao abre a aba da atividade para montar os criterios, grupos/matriculas e comentarios por subtopico.
+
+Mesmo com `SHEETS_RUNTIME_VERSION=v2`, o parser legado continua disponivel como fallback. Se a estrutura v2 nao existir, se a AB estiver sem tabelas v2 renderizaveis ou se a planilha ainda estiver no formato antigo, a mesma requisicao tenta o fluxo legado configurado por `SHEET_AB1_*`/`SHEET_AB2_*`.
+
+No login, a API procura a matricula em todas as planilhas configuradas e salva o `spreadsheetId` de origem na sessao. As consultas de notas seguintes ficam presas a esse mesmo arquivo, evitando misturar dados da planilha antiga com os da nova.
 
 ### Gerar o JSON da service account
 

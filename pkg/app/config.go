@@ -83,18 +83,19 @@ func (c Config) Validate() error {
 }
 
 func spreadsheetIDsFromEnv() []string {
-	raw := firstNonEmpty(os.Getenv("GOOGLE_SHEET_IDS"), os.Getenv("GOOGLE_SHEET_ID"))
 	seen := map[string]bool{}
 	var result []string
-	for _, item := range strings.FieldsFunc(raw, func(r rune) bool {
-		return r == ',' || r == ';' || r == '\n' || r == '\r' || r == '\t'
-	}) {
-		item = strings.TrimSpace(item)
-		if item == "" || seen[item] {
-			continue
+	for _, raw := range []string{os.Getenv("GOOGLE_SHEET_ID"), os.Getenv("GOOGLE_SHEET_IDS")} {
+		for _, item := range strings.FieldsFunc(raw, func(r rune) bool {
+			return r == ',' || r == ';' || r == '\n' || r == '\r' || r == '\t'
+		}) {
+			item = strings.TrimSpace(item)
+			if item == "" || seen[item] {
+				continue
+			}
+			seen[item] = true
+			result = append(result, item)
 		}
-		seen[item] = true
-		result = append(result, item)
 	}
 	return result
 }

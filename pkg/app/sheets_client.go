@@ -131,6 +131,7 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 					grid := parseGrid(sheet.Data[0].RowData, sheet.Merges)
 					grid.spreadsheetID = spreadsheetID
 					grid.schemaStatus = schemaStatus
+					grid.setRowSource(spreadsheetID)
 					grid.applyWorkbookComments(workbookComments[name], sheet.Merges)
 					grid.applyDriveComments(driveComments, sheet.Properties.SheetId, sheet.Merges)
 					grid.applyCommentMerges(sheet.Merges)
@@ -305,9 +306,24 @@ func mergeSheetGrid(base *sheetGrid, next *sheetGrid) *sheetGrid {
 	base.rowNotes = append(base.rowNotes, next.rowNotes...)
 	base.rowNoteAuthors = append(base.rowNoteAuthors, next.rowNoteAuthors...)
 	base.rowIndices = append(base.rowIndices, next.rowIndices...)
+	base.rowSources = append(base.rowSources, next.rowSources...)
 	base.spreadsheetID = mergeSourceValue(base.spreadsheetID, next.spreadsheetID)
 	base.schemaStatus = mergeSchemaStatus(base.schemaStatus, next.schemaStatus)
 	return base
+}
+
+func (g *sheetGrid) setRowSource(spreadsheetID string) {
+	g.rowSources = make([]string, len(g.rows))
+	for idx := range g.rowSources {
+		g.rowSources[idx] = spreadsheetID
+	}
+}
+
+func (g *sheetGrid) rowSource(rowIdx int) string {
+	if g == nil || rowIdx < 0 || rowIdx >= len(g.rowSources) {
+		return ""
+	}
+	return g.rowSources[rowIdx]
 }
 
 func mergeSourceValue(left string, right string) string {

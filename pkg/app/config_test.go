@@ -80,11 +80,11 @@ func TestLoadConfigAcceptsMultipleSpreadsheetIDs(t *testing.T) {
 
 	cfg := LoadConfig()
 
-	want := []string{"sheet-a", "sheet-b", "sheet-c"}
+	want := []string{"legacy-id", "sheet-a", "sheet-b", "sheet-c"}
 	if strings.Join(cfg.SpreadsheetIDs, ",") != strings.Join(want, ",") {
 		t.Fatalf("SpreadsheetIDs = %#v, want %#v", cfg.SpreadsheetIDs, want)
 	}
-	if cfg.SpreadsheetID != "sheet-a" {
+	if cfg.SpreadsheetID != "legacy-id" {
 		t.Fatalf("SpreadsheetID = %q, want first configured id", cfg.SpreadsheetID)
 	}
 }

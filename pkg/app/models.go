@@ -58,8 +58,9 @@ type StudentStatus struct {
 }
 
 type LoginIdentity struct {
-	Matricula string `json:"matricula"`
-	Name      string `json:"name"`
+	Matricula     string `json:"matricula"`
+	Name          string `json:"name"`
+	SpreadsheetID string `json:"spreadsheetId,omitempty"`
 }
 
 type sheetGrid struct {
@@ -71,6 +72,7 @@ type sheetGrid struct {
 	rowNoteAuthors [][]string
 	headerRow      int
 	rowIndices     []int
+	rowSources     []string
 	spreadsheetID  string
 	schemaStatus   string
 }

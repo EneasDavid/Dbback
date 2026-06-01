@@ -20,6 +20,20 @@ var tableParsers = map[string]tableParser{
 }
 
 func (c *SheetsClient) GradeFor(ctx context.Context, exam string, user SessionUser) (GradeResult, error) {
+	c = c.scopedToUser(user)
+	if c.cfg.RuntimeVersion == "v2" {
+		result, err := c.gradeForV2(ctx, exam, user)
+		if err == nil && hasTables(result) {
+			return result, nil
+		}
+		if err != nil && !canFallbackToLegacy(err) {
+			return GradeResult{}, err
+		}
+	}
+	return c.gradeForLegacy(ctx, exam, user)
+}
+
+func (c *SheetsClient) gradeForLegacy(ctx context.Context, exam string, user SessionUser) (GradeResult, error) {
 	tables, err := c.tablesForExam(exam)
 	if err != nil {
 		return GradeResult{}, err
@@ -31,6 +45,39 @@ func (c *SheetsClient) GradeFor(ctx context.Context, exam string, user SessionUs
 }
 
 func (c *SheetsClient) GradesFor(ctx context.Context, exams []string, user SessionUser) (GradeResults, error) {
+	c = c.scopedToUser(user)
+	if c.cfg.RuntimeVersion == "v2" {
+		return c.gradesForRuntimeV2(ctx, exams, user)
+	}
+	return c.gradesForLegacy(ctx, exams, user)
+}
+
+func (c *SheetsClient) gradesForRuntimeV2(ctx context.Context, exams []string, user SessionUser) (GradeResults, error) {
+	exams = normalizedExams(exams)
+	results := make(GradeResults, len(exams))
+	for _, exam := range exams {
+		result, err := c.gradeForV2(ctx, exam, user)
+		if err == nil && hasTables(result) {
+			results[exam] = result
+			continue
+		}
+		if err != nil && !canFallbackToLegacy(err) {
+			return nil, err
+		}
+		result, err = c.gradeForLegacy(ctx, exam, user)
+		if isNotFound(err) {
+			results[exam] = emptyGradeResult(exam, user)
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		results[exam] = result
+	}
+	return results, nil
+}
+
+func (c *SheetsClient) gradesForLegacy(ctx context.Context, exams []string, user SessionUser) (GradeResults, error) {
 	exams = normalizedExams(exams)
 	tablesByExam := make(map[string][]TableConfig, len(exams))
 	var allSheetNames []string
@@ -59,6 +106,36 @@ func (c *SheetsClient) GradesFor(ctx context.Context, exams []string, user Sessi
 		results[exam] = result
 	}
 	return results, nil
+}
+
+func hasTables(result GradeResult) bool {
+	return len(result.Tables) > 0
+}
+
+func canFallbackToLegacy(err error) bool {
+	var httpErr HTTPError
+	if !errors.As(err, &httpErr) {
+		return false
+	}
+	return httpErr.Status == 404 || httpErr.Status == 400
+}
+
+func (c *SheetsClient) scopedToUser(user SessionUser) *SheetsClient {
+	spreadsheetID := strings.TrimSpace(user.SpreadsheetID)
+	if spreadsheetID == "" || !containsString(c.cfg.SpreadsheetIDs, spreadsheetID) {
+		return c
+	}
+	cfg := c.cfg
+	cfg.SpreadsheetID = spreadsheetID
+	cfg.SpreadsheetIDs = []string{spreadsheetID}
+	return &SheetsClient{
+		cfg:              cfg,
+		service:          c.service,
+		httpClient:       c.httpClient,
+		cache:            map[string]cachedGrid{},
+		driveComments:    map[string]cachedDriveComments{},
+		workbookComments: map[string]cachedWorkbookComments{},
+	}
 }
 
 func (c *SheetsClient) gradeForTables(ctx context.Context, exam string, tables []TableConfig, user SessionUser) (GradeResult, error) {

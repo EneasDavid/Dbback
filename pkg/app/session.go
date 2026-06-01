@@ -20,8 +20,9 @@ type SessionManager struct {
 }
 
 type SessionUser struct {
-	Matricula string `json:"matricula"`
-	Name      string `json:"name"`
+	Matricula     string `json:"matricula"`
+	Name          string `json:"name"`
+	SpreadsheetID string `json:"spreadsheetId,omitempty"`
 }
 
 func NewSessionManager(cfg Config) SessionManager {
@@ -30,7 +31,7 @@ func NewSessionManager(cfg Config) SessionManager {
 
 func (s SessionManager) Set(w http.ResponseWriter, user SessionUser) {
 	expires := time.Now().Add(7 * time.Hour)
-	payload := fmt.Sprintf("%s|%s|%d", url.QueryEscape(user.Matricula), url.QueryEscape(user.Name), expires.Unix())
+	payload := fmt.Sprintf("%s|%s|%s|%d", url.QueryEscape(user.Matricula), url.QueryEscape(user.Name), url.QueryEscape(user.SpreadsheetID), expires.Unix())
 	token := base64.RawURLEncoding.EncodeToString([]byte(payload)) + "." + sign(payload, s.secret)
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
@@ -94,7 +95,14 @@ func (s SessionManager) User(r *http.Request) (SessionUser, bool) {
 			return SessionUser{}, false
 		}
 	}
-	return SessionUser{Matricula: matricula, Name: name}, true
+	spreadsheetID := ""
+	if len(payloadParts) >= 4 {
+		spreadsheetID, err = url.QueryUnescape(payloadParts[2])
+		if err != nil {
+			return SessionUser{}, false
+		}
+	}
+	return SessionUser{Matricula: matricula, Name: name, SpreadsheetID: spreadsheetID}, true
 }
 
 func (s SessionManager) Matricula(r *http.Request) (string, bool) {

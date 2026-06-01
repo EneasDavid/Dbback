@@ -29,6 +29,8 @@ export type GradeTable = {
   kind: string;
   complete: boolean;
   status?: string;
+  schemaStatus?: string;
+  spreadsheetId?: string;
   cards?: GradeCard[];
 };
 
@@ -43,6 +45,8 @@ export type GradeResult = {
   exam: string;
   matricula: string;
   name: string;
+  schemaStatus?: string;
+  spreadsheetId?: string;
   tables: GradeTable[];
   studentStatus?: StudentStatus;
 };
@@ -50,6 +54,7 @@ export type GradeResult = {
 export type SessionUser = {
   matricula: string;
   name: string;
+  spreadsheetId?: string;
 };
 
 export type GradeCache = Partial<Record<'ab1' | 'ab2', GradeResult>>;
