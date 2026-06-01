@@ -299,3 +299,95 @@ func TestGradeForV2ReturnsEmptyWhenSummarySheetDoesNotExist(t *testing.T) {
 		t.Fatalf("gradeForV2() = %#v, want empty AB2 result", result)
 	}
 }
+
+func TestV2ActivityTableIncludesTopicsAndComments(t *testing.T) {
+	client := &SheetsClient{
+		cfg: Config{RuntimeVersion: "v2"},
+		cache: map[string]cachedGrid{
+			v2ABsSheet: {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers:       []string{"AB", "status"},
+					rows:          [][]string{{"AB1", "1"}},
+					schemaStatus:  "v2",
+					spreadsheetID: "sheet-v2",
+				},
+			},
+			v2ActivitiesSheet: {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"Atividade", "AB", "Peso", "Aba"},
+					rows:    [][]string{{"Critérios de Aceite", "AB1", "3", "AT. Aceite"}},
+				},
+			},
+			"nota ab1": {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"Matrícula", "Critérios de Aceite"},
+					rows:    [][]string{{"6342342", "3,0"}},
+				},
+			},
+			"AT. Aceite": {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"Matrícula", "Cobertura", "Manutenibilidade", "Design"},
+					rows: [][]string{
+						{"Nota máxima", "1", "1", "1"},
+						{"6342342", "1", "0,8", "0,9"},
+					},
+					rowNotes: [][]string{
+						{"", "", "", ""},
+						{"", "Ótima cobertura", "Código bem estruturado", "Bom design patterns"},
+					},
+					rowNoteAuthors: [][]string{
+						{"", "", "", ""},
+						{"", "Prof. Silva", "Prof. Silva", "Prof. Santos"},
+					},
+					schemaStatus:  "v2",
+					spreadsheetID: "sheet-v2",
+				},
+			},
+		},
+	}
+
+	result, err := client.gradeForV2(t.Context(), "ab1", SessionUser{Matricula: "6342342", Name: "Student"})
+	if err != nil {
+		t.Fatalf("gradeForV2() error = %v", err)
+	}
+
+	if len(result.Tables) != 1 {
+		t.Fatalf("gradeForV2() tables len = %d, want 1", len(result.Tables))
+	}
+
+	table := result.Tables[0]
+	if len(table.Cards) != 1 {
+		t.Fatalf("table.Cards len = %d, want 1", len(table.Cards))
+	}
+
+	card := table.Cards[0]
+	if len(card.Details) != 3 {
+		t.Fatalf("card.Details len = %d, want 3 (Cobertura, Manutenibilidade, Design)", len(card.Details))
+	}
+
+	// Verify topics and comments
+	if card.Details[0].Label != "Cobertura" || card.Details[0].Value != "1" {
+		t.Fatalf("Details[0] = %#v, want Cobertura with value 1", card.Details[0])
+	}
+	if card.Details[0].Comment != "Ótima cobertura" || card.Details[0].CommentAuthor != "Prof. Silva" {
+		t.Fatalf("Details[0] comment = %q/%q, want 'Ótima cobertura'/'Prof. Silva'", card.Details[0].Comment, card.Details[0].CommentAuthor)
+	}
+
+	if card.Details[1].Label != "Manutenibilidade" || card.Details[1].Value != "0,8" {
+		t.Fatalf("Details[1] = %#v, want Manutenibilidade with value 0,8", card.Details[1])
+	}
+	if card.Details[1].Comment != "Código bem estruturado" || card.Details[1].CommentAuthor != "Prof. Silva" {
+		t.Fatalf("Details[1] comment = %q/%q, want 'Código bem estruturado'/'Prof. Silva'", card.Details[1].Comment, card.Details[1].CommentAuthor)
+	}
+
+	if card.Details[2].Label != "Design" || card.Details[2].Value != "0,9" {
+		t.Fatalf("Details[2] = %#v, want Design with value 0,9", card.Details[2])
+	}
+	if card.Details[2].Comment != "Bom design patterns" || card.Details[2].CommentAuthor != "Prof. Santos" {
+		t.Fatalf("Details[2] comment = %q/%q, want 'Bom design patterns'/'Prof. Santos'", card.Details[2].Comment, card.Details[2].CommentAuthor)
+	}
+}

@@ -92,11 +92,22 @@ Compartilhe a planilha com o `client_email` da service account. Para comentarios
 
 ### V1 legado e V2
 
-A tag git local `v1-stable` aponta para o codigo estavel anterior a v2. Em runtime, `GOOGLE_SHEET_ID` e `GOOGLE_SHEET_IDS` continuam funcionando como configuracao antiga/mista. Para deixar varias planilhas online ao mesmo tempo e evitar tentativa desnecessaria do parser errado, prefira `GOOGLE_SHEET_LEGACY_IDS` para bases legadas e `GOOGLE_SHEET_V2_IDS` para bases v2, com IDs separados por virgula, ponto e virgula ou quebra de linha. Se mais de uma variavel estiver definida, o backend deduplica e consulta todas.
+A tag git local `v1-stable` aponta para o codigo estavel anterior a v2. Em runtime, `GOOGLE_SHEET_ID` e `GOOGLE_SHEET_IDS` continuam funcionando como configuracao antiga/mista. Para deixar varias planilhas online ao mesmo tempo e evitar tentativa desnecessaria do parser errado, prefira `GOOGLE_SHEET_LEGACY_IDS` para bases legadas e `GOOGLE_SHEET_V2_IDS` para bases v2, com IDs separados por virgula, ponto e virgula ou quebra de linha. Se mais de uma variavel estiver definida, o backend deduplica e consulta todas em ordem: legado primeiro, depois v2, depois mistas.
 
 Quando `SHEETS_RUNTIME_VERSION=v2`, a API consulta os metadados do proprio Google Sheets. A planilha e marcada como `v2` quando houver developer metadata com a chave `GOOGLE_SHEET_METADATA_KEY` e o valor `GOOGLE_SHEET_METADATA_VALUE`; qualquer divergencia fica marcada como `legacy` no payload.
 
 Na v2, as atividades nao saem mais da lista fixa `SHEET_AB1_*`. O backend le a aba `abs` para descobrir quais ABs estao ativas, le a aba `atividades` para descobrir as atividades de cada AB e seu `peso maximo`, le `nota ab1`/`nota ab2` para a media e a nota do aluno em cada atividade, e entao abre a aba da atividade para montar os criterios, grupos/matriculas e comentarios por subtopico.
+
+#### Tópicos (Critérios de Aceite) e Comentários na V2
+
+A v2 retorna cada critério de aceite como um tópico (Detail) dentro do card de atividade, com:
+- **Label**: nome do critério (do cabeçalho da coluna)
+- **Value**: nota alcançada pelo aluno
+- **Max**: nota máxima do critério
+- **Comment**: feedback do professor por critério
+- **CommentAuthor**: nome ou cargo de quem escreveu o feedback
+
+Os comentários são colhidos automaticamente das notas de células do Google Sheets (cell notes / workbook comments). Se um critério não tiver comentário, o campo fica vazio.
 
 Mesmo com `SHEETS_RUNTIME_VERSION=v2`, o parser legado continua disponivel como fallback. Se a estrutura v2 nao existir, se a AB estiver sem tabelas v2 renderizaveis ou se a planilha ainda estiver no formato antigo, a mesma requisicao tenta o fluxo legado configurado por `SHEET_AB1_*`/`SHEET_AB2_*`.
 
