@@ -11,6 +11,24 @@ A documentacao de rotas, schemas e organizacao do payload fica na propria API:
 
 A rota de docs usa Basic Auth. O usuario e a senha existem somente no ambiente da aplicacao; nao registre valores de login no README.
 
+### Endpoints HTTP
+
+Todos os endpoints respondem com `Cache-Control: no-store` e headers de seguranca basicos. Em Vercel, o roteador tambem aceita o prefixo serverless `/api/index.go/` para as mesmas rotas.
+
+| Metodo | Caminho | Auth | Descricao |
+| --- | --- | --- | --- |
+| `GET` | `/api`, `/api/index`, `/api/index.go` | Basic Auth docs | Alias para a documentacao HTML da API. |
+| `GET` | `/api/docs` | Basic Auth docs | Documentacao HTML quando `Accept` pede HTML. |
+| `GET` | `/api/docs?format=json` | Basic Auth docs | Documentacao JSON com rotas, schemas, organizacao de dados e rede/performance. |
+| `POST` | `/api/login` | Nao | Recebe `{ "matricula": "..." }`, valida a aba `Base de dados`, cria cookie de sessao e fixa `spreadsheetId/schemaStatus`. |
+| `POST` | `/api/logout` | Nao | Limpa o cookie de sessao. |
+| `GET` | `/api/me` | Cookie opcional | Retorna o usuario da sessao ou `null`. |
+| `GET` | `/api/grades?exam=<avaliacao>` | Cookie | Retorna uma avaliacao. No legado use `ab1`/`ab2`; na v2 use a chave ativa da aba `abs`. |
+| `GET` | `/api/grades/<avaliacao>` | Cookie | Alias path-based de `/api/grades?exam=<avaliacao>`. |
+| `GET` | `/api/grades/all` | Cookie | Retorna todas as avaliacoes disponiveis. Na v2 retorna somente ABs com `status`/ativo igual a `1` na aba `abs`. |
+
+Query comum de notas: `refresh=1` limpa o cache em memoria do processo antes de ler dados.
+
 ## Arquitetura
 
 O projeto segue uma organizacao MVC pragmatica para Go:
@@ -31,15 +49,17 @@ Os comentarios ricos do Google Drive sao usados apenas como enriquecimento. Se a
 
 ## Otimizacoes tecnicas
 
-- `GET /api/grades/all` carrega AB1 e AB2 em uma unica chamada HTTP do frontend.
+- `GET /api/grades/all` carrega todas as avaliacoes disponiveis em uma unica chamada HTTP do frontend.
+- Na v2, `GET /api/grades/all` carrega apenas ABs ativas da aba `abs`, evitando payload e UI para avaliacoes indisponiveis.
 - O backend agrega as abas configuradas e faz uma unica leitura em lote no Google Sheets sempre que possivel.
 - Valores, notas de celula e metadados de merges sao buscados juntos pelo Sheets API com `Fields` restrito.
-- Comentarios ricos do Drive sao buscados em paralelo com a leitura das abas e aplicados como enriquecimento.
+- Comentarios ricos do Drive e comentarios exportados do XLSX sao buscados em paralelo com a leitura das abas e aplicados como enriquecimento quando a celula pode ser mapeada.
 - Comentarios em celulas de criterio/nota entram no mesmo payload das notas, sem requisicao extra do frontend.
 - Cache em memoria por aba com TTL reduz chamadas repetidas ao Google durante a mesma janela de uso.
 - `singleflight` evita chamadas duplicadas quando varias requisicoes pedem as mesmas abas ao mesmo tempo.
-- O cliente Google usa timeout para impedir que uma chamada lenta a Sheets/Drive prenda a API indefinidamente.
-- O frontend guarda AB1 e AB2 em `sessionStorage`; alternar entre avaliacoes nao dispara nova chamada de rede.
+- O cliente Google usa timeout total, timeout de handshake/cabecalho, keep-alive e pool de conexoes para impedir que chamadas lentas prendam a API e para reduzir latencia em rajadas.
+- O export XLSX usado para comentarios e limitado a 25 MiB.
+- O frontend guarda o payload de notas em `sessionStorage`; alternar entre avaliacoes nao dispara nova chamada de rede.
 - A UI usa o payload normalizado do backend e nao recalcula regras sensiveis de nota no navegador.
 
 ## PAA, seguranca e integridade
@@ -96,7 +116,7 @@ A tag git local `v1-stable` aponta para o codigo estavel anterior a v2. Em runti
 
 Quando `SHEETS_RUNTIME_VERSION=v2`, a API consulta os metadados do proprio Google Sheets. A planilha e marcada como `v2` quando houver developer metadata com a chave `GOOGLE_SHEET_METADATA_KEY` e o valor `GOOGLE_SHEET_METADATA_VALUE`; qualquer divergencia fica marcada como `legacy` no payload.
 
-Na v2, as atividades nao saem mais da lista fixa `SHEET_AB1_*`. O backend le a aba `abs` para descobrir quais ABs estao ativas, le a aba `atividades` para descobrir as atividades de cada AB e seu `peso maximo`, le `nota ab1`/`nota ab2` para a media e a nota do aluno em cada atividade, e entao abre a aba da atividade para montar os criterios, grupos/matriculas e comentarios por subtopico.
+Na v2, as atividades nao saem mais da lista fixa `SHEET_AB1_*`. O backend le a aba `abs` para descobrir quais ABs estao ativas, le a aba `atividades` para descobrir as atividades de cada AB e seu `peso maximo`, le `nota <ab>` para a media e a nota final do aluno em cada atividade, e entao abre a aba da atividade para montar os criterios, grupos/matriculas e comentarios por subtopico. Somente linhas da aba `abs` com `status`/ativo igual a `1` entram em `/api/grades/all`.
 
 #### Tópicos (Critérios de Aceite) e Comentários na V2
 
@@ -108,6 +128,8 @@ A v2 retorna cada critério de aceite como um tópico (Detail) dentro do card de
 - **CommentAuthor**: nome ou cargo de quem escreveu o feedback
 
 Os comentários são colhidos automaticamente das notas de células do Google Sheets (cell notes / workbook comments). Se um critério não tiver comentário, o campo fica vazio.
+
+Na v2, a nota principal do card da atividade vem da aba `nota <ab>`; se a coluna da atividade nao casar pelo nome, a API tenta a coluna `nota final` nessa mesma aba de resumo. A coluna `nota final` da aba da atividade nao aparece como criterio e nao entra no calculo das notas maximas dos criterios. Medias sao limitadas a 10 pontos no payload.
 
 Mesmo com `SHEETS_RUNTIME_VERSION=v2`, o parser legado continua disponivel como fallback. Se a estrutura v2 nao existir, se a AB estiver sem tabelas v2 renderizaveis ou se a planilha ainda estiver no formato antigo, a mesma requisicao tenta o fluxo legado configurado por `SHEET_AB1_*`/`SHEET_AB2_*`.
 

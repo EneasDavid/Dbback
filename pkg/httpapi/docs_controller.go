@@ -47,8 +47,10 @@ func docsPayload() map[string]any {
 				"auth":   false,
 				"body":   map[string]string{"matricula": "string"},
 				"response": map[string]string{
-					"matricula": "string",
-					"name":      "string",
+					"matricula":     "string",
+					"name":          "string",
+					"spreadsheetId": "string optional",
+					"schemaStatus":  "legacy|v2 optional",
 				},
 				"result": "Cria sessão assinada depois de validar a matrícula na aba Base de dados de uma ou mais planilhas configuradas.",
 			},
@@ -77,13 +79,16 @@ func docsPayload() map[string]any {
 				"aliases": []string{
 					"/api/grades?exam=ab1",
 					"/api/grades?exam=ab2",
+					"/api/grades?exam=<ab-da-aba-abs>",
 					"/api/grades/ab1",
 					"/api/grades/ab2",
+					"/api/grades/<ab-da-aba-abs>",
+					"/api/index.go/grades?exam=<ab-da-aba-abs>",
 				},
 				"auth":   true,
-				"result": "Retorna tabelas render-ready da avaliação solicitada, com schemaStatus quando a v2 estiver ativa.",
+				"result": "Retorna tabelas render-ready da avaliação solicitada. Na v2, a avaliação deve existir na aba abs e só é renderizada quando status/ativo é 1.",
 				"query": map[string]string{
-					"exam":    "ab1 ou ab2; aceita ab1|ab2 e usa o primeiro valor válido",
+					"exam":    "ab1, ab2 ou qualquer chave ativa v2 vinda da aba abs; aceita ab1|ab2 e usa o primeiro valor válido",
 					"refresh": "1 opcional; limpa cache em memória",
 				},
 				"response": gradeResponseSchema(),
@@ -92,30 +97,47 @@ func docsPayload() map[string]any {
 				"method":   "GET",
 				"path":     "/api/grades/all",
 				"auth":     true,
-				"result":   "Retorna AB1 e AB2 no mesmo payload, compartilhando a mesma leitura de planilha.",
+				"aliases":  []string{"/api/index.go/grades/all"},
+				"result":   "Retorna todas as avaliações disponíveis. Na v2, usa somente ABs ativas da aba abs; no legado, retorna AB1/AB2.",
 				"query":    map[string]string{"refresh": "1 opcional; limpa cache em memória"},
-				"response": map[string]any{"ab1": gradeResponseSchema(), "ab2": gradeResponseSchema()},
+				"response": map[string]any{"<examKey>": gradeResponseSchema()},
 			},
 			{
 				"method": "GET",
 				"path":   "/api/docs",
-				"auth":   true,
+				"aliases": []string{
+					"/api",
+					"/api/index",
+					"/api/index.go",
+					"/api/docs?format=json",
+					"/api/index.go/docs?format=json",
+				},
+				"auth":  true,
+				"query": map[string]string{"format": "json opcional; força resposta JSON quando Accept pede HTML"},
 				"response": map[string]string{
 					"name":              "string",
 					"type":              "string",
 					"description":       "string",
 					"routes":            "array<object>",
 					"gradeOrganization": "object",
+					"network":           "object",
 				},
-				"result": "Documentação técnica resumida das rotas HTTP.",
+				"result": "Documentação técnica de todas as rotas HTTP públicas e aliases serverless.",
 			},
 		},
 		"gradeOrganization": map[string]any{
 			"identitySource": "Base de dados",
-			"rowSelection":   "A matrícula resolve um nome; cada aba de notas é lida pela linha cuja célula de identidade contém esse nome ou matrícula. Com GOOGLE_SHEET_IDS, linhas de abas homônimas são agregadas entre as planilhas configuradas.",
-			"feedbackSource": "Comentários exibidos vêm primeiro da célula de nota/valor; atividades e projeto também aceitam comentários nas células de subtópico/cabeçalho. O comentário da identidade da linha é usado como fallback geral.",
-			"rendering":      "Os valores da linha são normalizados em cards e detalhes pelo backend; o frontend só renderiza o payload.",
-			"versioning":     "SHEETS_RUNTIME_VERSION=v2 compara developer metadata da planilha com GOOGLE_SHEET_METADATA_KEY/GOOGLE_SHEET_METADATA_VALUE; divergências são identificadas como legacy.",
+			"rowSelection":   "A matrícula resolve uma identidade e fixa spreadsheetId/schemaStatus na sessão. Cada aba de notas é lida pela linha cuja célula de identidade contém nome, matrícula ou grupo equivalente.",
+			"feedbackSource": "Comentários vêm de cell notes, workbook/XLSX comments e Drive comments quando a service account consegue enxergar e mapear célula. Na v2, comentários de critério entram em Detail.comment; comentários da célula da nota final/atividade entram no card.",
+			"rendering":      "O backend monta cards/detalhes render-ready. Critérios v2 usam a escala da rubrica; a nota da atividade vem da aba nota <ab> e médias são limitadas a 10.",
+			"versioning":     "SHEETS_RUNTIME_VERSION=v2/auto usa a aba abs e developer metadata. Em /api/grades/all, só ABs com status ativo=1 são retornadas na v2.",
+		},
+		"network": map[string]any{
+			"httpClient":     "Cliente Google com timeout total de 15s, keep-alive, pool de conexões e timeout de cabeçalho/TLS para evitar conexões presas.",
+			"batching":       "Leituras do Google Sheets são agrupadas por range em uma chamada sempre que possível.",
+			"cache":          "Cache em memória por aba e por comentários com TTL configurado em CacheTTL; refresh=1 limpa o cache do processo.",
+			"deduplication":  "singleflight evita leituras duplicadas quando requisições simultâneas pedem as mesmas abas ou comentários.",
+			"payloadControl": "Fields restrito na Sheets API, export XLSX limitado a 25MiB e headers no-store/nosniff/referrer-policy nas respostas.",
 		},
 	}
 }
@@ -126,7 +148,14 @@ func renderDocsHTML(w http.ResponseWriter, payload map[string]any) {
 		Type:        stringValue(payload["type"]),
 		Description: stringValue(payload["description"]),
 		Routes:      docsHTMLRoutes(payload["routes"]),
-		GradeFacts:  docsHTMLFacts(payload["gradeOrganization"]),
+		GradeFacts:  docsHTMLFacts(payload["gradeOrganization"], gradeFactOrder()),
+		NetworkFacts: docsHTMLFacts(payload["network"], []docsHTMLFactKey{
+			{key: "httpClient", label: "Cliente HTTP"},
+			{key: "batching", label: "Batching"},
+			{key: "cache", label: "Cache"},
+			{key: "deduplication", label: "Deduplicação"},
+			{key: "payloadControl", label: "Controle de payload"},
+		}),
 	}
 	for idx := range data.Routes {
 		data.Routes[idx].Schema = prettyJSON(data.Routes[idx].Response)
@@ -135,10 +164,7 @@ func renderDocsHTML(w http.ResponseWriter, payload map[string]any) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Referrer-Policy", "no-referrer")
-	w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+	app.SecureHeaders(w)
 	w.WriteHeader(http.StatusOK)
 	if err := docsTemplate.Execute(w, data); err != nil {
 		app.Error(w, err)
@@ -146,11 +172,12 @@ func renderDocsHTML(w http.ResponseWriter, payload map[string]any) {
 }
 
 type docsHTMLData struct {
-	Name        string
-	Type        string
-	Description string
-	Routes      []docsHTMLRoute
-	GradeFacts  []docsHTMLFact
+	Name         string
+	Type         string
+	Description  string
+	Routes       []docsHTMLRoute
+	GradeFacts   []docsHTMLFact
+	NetworkFacts []docsHTMLFact
 }
 
 type docsHTMLRoute struct {
@@ -193,20 +220,25 @@ func docsHTMLRoutes(value any) []docsHTMLRoute {
 	return routes
 }
 
-func docsHTMLFacts(value any) []docsHTMLFact {
+type docsHTMLFactKey struct {
+	key   string
+	label string
+}
+
+func gradeFactOrder() []docsHTMLFactKey {
+	return []docsHTMLFactKey{
+		{key: "identitySource", label: "Identidade"},
+		{key: "rowSelection", label: "Seleção da linha"},
+		{key: "feedbackSource", label: "Feedback"},
+		{key: "rendering", label: "Renderização"},
+		{key: "versioning", label: "Versões"},
+	}
+}
+
+func docsHTMLFacts(value any, order []docsHTMLFactKey) []docsHTMLFact {
 	items, ok := value.(map[string]any)
 	if !ok {
 		return nil
-	}
-	order := []struct {
-		key   string
-		label string
-	}{
-		{"identitySource", "Identidade"},
-		{"rowSelection", "Seleção da linha"},
-		{"feedbackSource", "Feedback"},
-		{"rendering", "Renderização"},
-		{"versioning", "Versões"},
 	}
 	facts := make([]docsHTMLFact, 0, len(order))
 	for _, item := range order {
@@ -628,6 +660,21 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
       </div>
       <div class="facts">
         {{range .GradeFacts}}
+        <article class="fact">
+          <strong>{{.Label}}</strong>
+          <p>{{.Value}}</p>
+        </article>
+        {{end}}
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <h2>Rede e performance</h2>
+        <p>Controles usados para reduzir latência, evitar chamadas duplicadas e manter respostas previsíveis em serverless.</p>
+      </div>
+      <div class="facts">
+        {{range .NetworkFacts}}
         <article class="fact">
           <strong>{{.Label}}</strong>
           <p>{{.Value}}</p>

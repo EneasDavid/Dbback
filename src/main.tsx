@@ -547,7 +547,7 @@ function scoreTone(label: string, value: string, display = '') {
   if (displayScore && displayScore.max > 0) {
     return scoreToneFromRatio(Math.min((displayScore.value / displayScore.max) * 100, 100), false);
   }
-  let score = parseScore(value);
+  const score = parseScore(value);
   if (score === null) return isPendingValue(value) && isGradeLabel(label) ? 'score-pending' : '';
   if (!isGradeLabel(label)) return '';
   if (score <= 1) return scoreToneFromRatio(score * 100, false);

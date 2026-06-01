@@ -46,8 +46,7 @@ func NewSheetsClient(ctx context.Context, cfg Config) (*SheetsClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	httpClient := oauth2.NewClient(ctx, credentials.TokenSource)
-	httpClient.Timeout = 15 * time.Second
+	httpClient := googleHTTPClient(credentials.TokenSource)
 	svc, err := sheets.NewService(ctx, option.WithHTTPClient(httpClient))
 	if err != nil {
 		return nil, err
@@ -60,6 +59,23 @@ func NewSheetsClient(ctx context.Context, cfg Config) (*SheetsClient, error) {
 		driveComments:    map[string]cachedDriveComments{},
 		workbookComments: map[string]cachedWorkbookComments{},
 	}, nil
+}
+
+func googleHTTPClient(source oauth2.TokenSource) *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConns = 100
+	transport.MaxIdleConnsPerHost = 20
+	transport.IdleConnTimeout = 90 * time.Second
+	transport.TLSHandshakeTimeout = 10 * time.Second
+	transport.ResponseHeaderTimeout = 10 * time.Second
+	transport.ExpectContinueTimeout = time.Second
+	return &http.Client{
+		Transport: &oauth2.Transport{
+			Source: source,
+			Base:   transport,
+		},
+		Timeout: 15 * time.Second,
+	}
 }
 
 func (c *SheetsClient) ClearCache() {
