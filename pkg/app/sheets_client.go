@@ -102,6 +102,7 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 		}
 		grids := map[string]*sheetGrid{}
 		now := time.Now()
+		var lastReadErr error
 
 		for _, spreadsheetID := range c.cfg.SpreadsheetIDs {
 			spreadsheetID = strings.TrimSpace(spreadsheetID)
@@ -113,6 +114,10 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 
 			responses, err := c.spreadsheetResponses(ctx, spreadsheetID, ranges)
 			if err != nil {
+				lastReadErr = err
+				if len(c.cfg.SpreadsheetIDs) > 1 && skippableSpreadsheetReadError(err) {
+					continue
+				}
 				return nil, sheetReadError(err)
 			}
 
@@ -125,7 +130,8 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 						continue
 					}
 					name := sheet.Properties.Title
-					if !containsString(missing, name) || len(sheet.Data) == 0 {
+					cacheName, ok := matchingSheetName(missing, name)
+					if !ok || len(sheet.Data) == 0 {
 						continue
 					}
 					grid := parseGrid(sheet.Data[0].RowData, sheet.Merges)
@@ -135,7 +141,7 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 					grid.applyWorkbookComments(workbookComments[name], sheet.Merges)
 					grid.applyDriveComments(driveComments, sheet.Properties.SheetId, sheet.Merges)
 					grid.applyCommentMerges(sheet.Merges)
-					grids[name] = mergeSheetGrid(grids[name], grid)
+					grids[cacheName] = mergeSheetGrid(grids[cacheName], grid)
 				}
 			}
 		}
@@ -145,6 +151,9 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 		for _, sheetName := range missing {
 			grid := grids[sheetName]
 			if grid == nil {
+				if lastReadErr != nil && len(grids) == 0 {
+					return nil, sheetReadError(lastReadErr)
+				}
 				return nil, NewHTTPError(404, "aba nao encontrada: "+sheetName)
 			}
 			c.cache[sheetName] = cachedGrid{expires: now.Add(c.cfg.CacheTTL), grid: grid}
@@ -235,6 +244,21 @@ func containsString(values []string, target string) bool {
 	return false
 }
 
+func matchingSheetName(values []string, target string) (string, bool) {
+	for _, value := range values {
+		if value == target {
+			return value, true
+		}
+	}
+	normalizedTarget := normalizeHeader(target)
+	for _, value := range values {
+		if normalizeHeader(value) == normalizedTarget {
+			return value, true
+		}
+	}
+	return "", false
+}
+
 func (c *SheetsClient) spreadsheetResponses(ctx context.Context, spreadsheetID string, ranges []string) ([]*sheets.Spreadsheet, error) {
 	resp, err := c.service.Spreadsheets.Get(spreadsheetID).
 		Ranges(ranges...).
@@ -257,6 +281,10 @@ func (c *SheetsClient) spreadsheetResponses(ctx context.Context, spreadsheetID s
 			Do()
 		if err != nil {
 			if isGoogleBadRequest(err) {
+				resp, looseErr := c.spreadsheetByLooseRange(ctx, spreadsheetID, rangeName)
+				if looseErr == nil {
+					responses = append(responses, resp)
+				}
 				continue
 			}
 			return nil, err
@@ -266,9 +294,56 @@ func (c *SheetsClient) spreadsheetResponses(ctx context.Context, spreadsheetID s
 	return responses, nil
 }
 
+func (c *SheetsClient) spreadsheetByLooseRange(ctx context.Context, spreadsheetID string, rangeName string) (*sheets.Spreadsheet, error) {
+	target := normalizeHeader(unquoteSheetRange(rangeName))
+	if target == "" {
+		return nil, NewHTTPError(404, "aba nao encontrada")
+	}
+	meta, err := c.service.Spreadsheets.Get(spreadsheetID).
+		Fields("sheets(properties(title))").
+		Context(ctx).
+		Do()
+	if err != nil {
+		return nil, err
+	}
+	for _, sheet := range meta.Sheets {
+		if sheet == nil || sheet.Properties == nil {
+			continue
+		}
+		title := strings.TrimSpace(sheet.Properties.Title)
+		if normalizeHeader(title) != target {
+			continue
+		}
+		return c.service.Spreadsheets.Get(spreadsheetID).
+			Ranges(quoteSheetName(title)).
+			Fields(sheetsGridFields).
+			Context(ctx).
+			Do()
+	}
+	return nil, NewHTTPError(404, "aba nao encontrada")
+}
+
+func unquoteSheetRange(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) >= 2 && value[0] == '\'' && value[len(value)-1] == '\'' {
+		return strings.ReplaceAll(value[1:len(value)-1], "''", "'")
+	}
+	return value
+}
+
 func isGoogleBadRequest(err error) bool {
 	var apiErr *googleapi.Error
 	return errors.As(err, &apiErr) && apiErr.Code == http.StatusBadRequest
+}
+
+func skippableSpreadsheetReadError(err error) bool {
+	var apiErr *googleapi.Error
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	return apiErr.Code == http.StatusForbidden ||
+		apiErr.Code == http.StatusNotFound ||
+		apiErr.Code == http.StatusBadRequest
 }
 
 func (c *SheetsClient) schemaStatusForSpreadsheet(metadata []*sheets.DeveloperMetadata) string {

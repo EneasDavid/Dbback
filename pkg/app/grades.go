@@ -20,7 +20,35 @@ var tableParsers = map[string]tableParser{
 }
 
 func (c *SheetsClient) GradeFor(ctx context.Context, exam string, user SessionUser) (GradeResult, error) {
-	c = c.scopedToUser(user)
+	var lastErr error
+	for _, spreadsheetID := range c.candidateSpreadsheetIDs(user) {
+		scoped := c.scopedToSpreadsheet(spreadsheetID)
+		candidateUser, ok, err := scoped.userForSpreadsheet(ctx, user)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if !ok {
+			continue
+		}
+		result, err := scoped.gradeForConfiguredRuntime(ctx, exam, candidateUser)
+		if err == nil && hasTables(result) {
+			return result, nil
+		}
+		if err != nil {
+			lastErr = err
+			if !canFallbackToNextBase(err) {
+				return GradeResult{}, err
+			}
+		}
+	}
+	if lastErr != nil {
+		return GradeResult{}, lastErr
+	}
+	return GradeResult{}, NewHTTPError(404, "matricula nao encontrada")
+}
+
+func (c *SheetsClient) gradeForConfiguredRuntime(ctx context.Context, exam string, user SessionUser) (GradeResult, error) {
 	if c.cfg.RuntimeVersion == "v2" {
 		result, err := c.gradeForV2(ctx, exam, user)
 		if err == nil && hasTables(result) {
@@ -45,7 +73,35 @@ func (c *SheetsClient) gradeForLegacy(ctx context.Context, exam string, user Ses
 }
 
 func (c *SheetsClient) GradesFor(ctx context.Context, exams []string, user SessionUser) (GradeResults, error) {
-	c = c.scopedToUser(user)
+	var lastErr error
+	for _, spreadsheetID := range c.candidateSpreadsheetIDs(user) {
+		scoped := c.scopedToSpreadsheet(spreadsheetID)
+		candidateUser, ok, err := scoped.userForSpreadsheet(ctx, user)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if !ok {
+			continue
+		}
+		results, err := scoped.gradesForConfiguredRuntime(ctx, exams, candidateUser)
+		if err == nil && hasAnyGradeTables(results) {
+			return results, nil
+		}
+		if err != nil {
+			lastErr = err
+			if !canFallbackToNextBase(err) {
+				return nil, err
+			}
+		}
+	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, NewHTTPError(404, "matricula nao encontrada")
+}
+
+func (c *SheetsClient) gradesForConfiguredRuntime(ctx context.Context, exams []string, user SessionUser) (GradeResults, error) {
 	if c.cfg.RuntimeVersion == "v2" {
 		return c.gradesForRuntimeV2(ctx, exams, user)
 	}
@@ -112,6 +168,15 @@ func hasTables(result GradeResult) bool {
 	return len(result.Tables) > 0
 }
 
+func hasAnyGradeTables(results GradeResults) bool {
+	for _, result := range results {
+		if hasTables(result) {
+			return true
+		}
+	}
+	return false
+}
+
 func canFallbackToLegacy(err error) bool {
 	var httpErr HTTPError
 	if !errors.As(err, &httpErr) {
@@ -120,9 +185,46 @@ func canFallbackToLegacy(err error) bool {
 	return httpErr.Status == 404 || httpErr.Status == 400
 }
 
-func (c *SheetsClient) scopedToUser(user SessionUser) *SheetsClient {
-	spreadsheetID := strings.TrimSpace(user.SpreadsheetID)
-	if spreadsheetID == "" || !containsString(c.cfg.SpreadsheetIDs, spreadsheetID) {
+func canFallbackToNextBase(err error) bool {
+	var httpErr HTTPError
+	if !errors.As(err, &httpErr) {
+		return false
+	}
+	return httpErr.Status == 401 || httpErr.Status == 404 || httpErr.Status == 400
+}
+
+func (c *SheetsClient) candidateSpreadsheetIDs(user SessionUser) []string {
+	var ids []string
+	seen := map[string]bool{}
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			return
+		}
+		seen[value] = true
+		ids = append(ids, value)
+	}
+	add(user.SpreadsheetID)
+	for _, spreadsheetID := range c.cfg.SpreadsheetIDs {
+		add(spreadsheetID)
+	}
+	return ids
+}
+
+func (c *SheetsClient) userForSpreadsheet(ctx context.Context, user SessionUser) (SessionUser, bool, error) {
+	identity, err := c.LoginIdentity(ctx, user.Matricula)
+	if err != nil {
+		if canFallbackToNextBase(err) {
+			return SessionUser{}, false, nil
+		}
+		return SessionUser{}, false, err
+	}
+	return SessionUser{Matricula: identity.Matricula, Name: identity.Name, SpreadsheetID: identity.SpreadsheetID}, true, nil
+}
+
+func (c *SheetsClient) scopedToSpreadsheet(spreadsheetID string) *SheetsClient {
+	spreadsheetID = strings.TrimSpace(spreadsheetID)
+	if spreadsheetID == "" {
 		return c
 	}
 	cfg := c.cfg

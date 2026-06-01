@@ -97,7 +97,9 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 	}
 	if len(activitySheets) > 0 {
 		if err := c.loadSheets(ctx, activitySheets); err != nil {
-			return GradeResult{}, err
+			if !canFallbackToLegacy(err) {
+				return GradeResult{}, err
+			}
 		}
 	}
 
@@ -111,6 +113,9 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 		}
 		table, found, err := c.v2ActivityTable(ctx, activity, summaryRow, groupValue, user)
 		if err != nil {
+			if canFallbackToLegacy(err) {
+				continue
+			}
 			return GradeResult{}, err
 		}
 		if !found {
@@ -151,7 +156,7 @@ func v2ABState(grid *sheetGrid, exam string) (string, bool) {
 		abIdx = 0
 	}
 	for _, row := range grid.rows {
-		if normalizeHeader(valueAt(row, abIdx)) != normalizeHeader(exam) {
+		if normalizeABKey(valueAt(row, abIdx)) != normalizeABKey(exam) {
 			continue
 		}
 		label := valueAt(row, labelIdx)
@@ -174,10 +179,10 @@ func v2ActivitiesForAB(grid *sheetGrid, exam string) []v2ActivityConfig {
 	}
 	var activities []v2ActivityConfig
 	for rowIdx, row := range grid.rows {
-		if abIdx >= 0 && normalizeHeader(valueAt(row, abIdx)) != normalizeHeader(exam) {
+		if abIdx >= 0 && normalizeABKey(valueAt(row, abIdx)) != normalizeABKey(exam) {
 			continue
 		}
-		if activeIdx >= 0 && !truthySpreadsheetValue(valueAt(row, activeIdx)) {
+		if activeIdx >= 0 && !activeActivityValue(valueAt(row, activeIdx)) {
 			continue
 		}
 		label := valueAt(row, nameIdx)
@@ -226,17 +231,20 @@ func v2ActivityLaunched(summaryRow []string, activity v2ActivityConfig) bool {
 func (c *SheetsClient) v2ActivityTable(ctx context.Context, activity v2ActivityConfig, summaryRow []string, groupValue string, user SessionUser) (TableResult, bool, error) {
 	grid, err := c.loadSheet(ctx, activity.SheetName)
 	if err != nil {
+		if canFallbackToLegacy(err) {
+			return v2ActivitySummaryTable(activity, summaryRow), true, nil
+		}
 		return TableResult{}, false, err
 	}
 	rowIdx := v2ActivityRow(grid, groupValue, user)
 	if rowIdx < 0 {
-		return TableResult{}, false, nil
+		return v2ActivitySummaryTable(activity, summaryRow), true, nil
 	}
 
 	maxRowIdx := findMaxRow(grid.rows)
 	items := v2ActivityItems(grid, maxRowIdx, rowIdx, activity.Weight)
 	if len(items) == 0 {
-		return TableResult{}, false, nil
+		return v2ActivitySummaryTable(activity, summaryRow), true, nil
 	}
 	details := activityDetails(items, 1)
 	score := valueAt(summaryRow, activity.SummaryCol)
@@ -258,6 +266,23 @@ func (c *SheetsClient) v2ActivityTable(ctx context.Context, activity v2ActivityC
 	}, true, nil
 }
 
+func v2ActivitySummaryTable(activity v2ActivityConfig, summaryRow []string) TableResult {
+	score := valueAt(summaryRow, activity.SummaryCol)
+	card := makeCard("nota", "Nota", score, "", "", nil)
+	card.DisplayValue = formatScoreForWeight(score, activity.Weight)
+	return TableResult{
+		Key:           activity.Key,
+		Label:         activity.Label,
+		SheetName:     activity.SheetName,
+		Kind:          "activity",
+		Complete:      !isPendingValue(score),
+		Status:        v2ActivityStatusFromScore(score),
+		SchemaStatus:  activity.SchemaStatus,
+		SpreadsheetID: activity.SpreadsheetID,
+		Cards:         []CardResult{card},
+	}
+}
+
 func v2ActivityRow(grid *sheetGrid, groupValue string, user SessionUser) int {
 	groupIdx := groupColumn(grid.headers)
 	if groupIdx >= 0 && strings.TrimSpace(groupValue) != "" {
@@ -272,16 +297,11 @@ func v2ActivityRow(grid *sheetGrid, groupValue string, user SessionUser) int {
 
 func v2ActivityItems(grid *sheetGrid, maxRowIdx int, studentRowIdx int, weight float64) []activityItem {
 	items := make([]activityItem, 0, len(grid.headers))
-	totalMax := v2TotalMaximum(grid, maxRowIdx, studentRowIdx)
-	for colIdx := 0; colIdx < len(grid.headers); colIdx++ {
+	criterionColumns := v2CriterionColumns(grid, maxRowIdx, studentRowIdx)
+	totalMax := v2TotalMaximum(grid, maxRowIdx, criterionColumns)
+	for _, colIdx := range criterionColumns {
 		header := valueAt(grid.headers, colIdx)
-		if !shouldShowV2Criterion(header) {
-			continue
-		}
 		maximum := v2CriterionMaximum(grid, maxRowIdx, colIdx)
-		if maximum <= 0 {
-			continue
-		}
 		value := valueAt(grid.rows[studentRowIdx], colIdx)
 		if totalMax > 0 && weight > 0 {
 			if parsed, ok := parseNumber(value); ok {
@@ -302,12 +322,25 @@ func v2ActivityItems(grid *sheetGrid, maxRowIdx int, studentRowIdx int, weight f
 	return items
 }
 
-func v2TotalMaximum(grid *sheetGrid, maxRowIdx int, studentRowIdx int) float64 {
-	total := 0.0
+func v2CriterionColumns(grid *sheetGrid, maxRowIdx int, studentRowIdx int) []int {
+	var columns []int
 	for colIdx := 0; colIdx < len(grid.headers); colIdx++ {
 		if !shouldShowV2Criterion(valueAt(grid.headers, colIdx)) {
 			continue
 		}
+		value := valueAt(grid.rows[studentRowIdx], colIdx)
+		comment := noteAt(rowNotesAt(grid, studentRowIdx), colIdx)
+		if v2CriterionMaximum(grid, maxRowIdx, colIdx) <= 0 && value == "" && comment == "" {
+			continue
+		}
+		columns = append(columns, colIdx)
+	}
+	return columns
+}
+
+func v2TotalMaximum(grid *sheetGrid, maxRowIdx int, columns []int) float64 {
+	total := 0.0
+	for _, colIdx := range columns {
 		maximum := v2CriterionMaximum(grid, maxRowIdx, colIdx)
 		if maximum > 0 {
 			total += maximum
@@ -322,7 +355,10 @@ func v2CriterionMaximum(grid *sheetGrid, maxRowIdx int, colIdx int) float64 {
 			return maximum
 		}
 	}
-	return inferMaxForLabel(valueAt(grid.headers, colIdx))
+	if maximum := inferMaxForLabel(valueAt(grid.headers, colIdx)); maximum > 0 {
+		return maximum
+	}
+	return 1
 }
 
 func shouldShowV2Criterion(header string) bool {
@@ -402,6 +438,7 @@ func matchingHeaderIndex(headers []string, labels ...string) int {
 func truthySpreadsheetValue(value string) bool {
 	normalized := normalizeHeader(value)
 	return normalized == "" ||
+		normalized == "0" ||
 		normalized == "1" ||
 		normalized == "sim" ||
 		normalized == "s" ||
@@ -410,6 +447,39 @@ func truthySpreadsheetValue(value string) bool {
 		normalized == "ativa" ||
 		normalized == "lancada" ||
 		normalized == "lançada"
+}
+
+func activeActivityValue(value string) bool {
+	normalized := normalizeHeader(value)
+	if normalized == "" {
+		return true
+	}
+	return normalized == "1" ||
+		normalized == "sim" ||
+		normalized == "s" ||
+		normalized == "true" ||
+		normalized == "ativo" ||
+		normalized == "ativa" ||
+		normalized == "lancada" ||
+		normalized == "lançada"
+}
+
+func v2ActivityStatusFromScore(value string) string {
+	if isPendingValue(value) {
+		return "Não encerrado"
+	}
+	return "Encerrado"
+}
+
+func normalizeABKey(value string) string {
+	normalized := normalizeHeader(value)
+	var builder strings.Builder
+	for _, char := range normalized {
+		if (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') {
+			builder.WriteRune(char)
+		}
+	}
+	return builder.String()
 }
 
 func formatScoreForWeight(value string, weight float64) string {
