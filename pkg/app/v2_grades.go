@@ -596,6 +596,7 @@ func shouldShowV2Criterion(header string) bool {
 		normalized != "peso" &&
 		normalized != "peso maximo" &&
 		normalized != "nota" &&
+		normalized != "nota final" &&
 		normalized != "total" &&
 		normalized != "media" &&
 		normalized != "ativo" &&
@@ -612,7 +613,7 @@ func v2AverageCard(grid *sheetGrid, row []string) *CardResult {
 		return nil
 	}
 	comment, author := commentAt(rowNotesAt(grid, indexOfRow(grid.rows, row)), rowNoteAuthorsAt(grid, indexOfRow(grid.rows, row)), idx)
-	card := makeCard("media", "Média AB", valueAt(row, idx), comment, author, nil)
+	card := makeCard("media", "Nota", valueAt(row, idx), comment, author, nil)
 	return &card
 }
 

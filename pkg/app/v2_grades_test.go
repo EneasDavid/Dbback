@@ -213,6 +213,25 @@ func TestV2ActivityItemsCapsScoresAtWeight(t *testing.T) {
 	}
 }
 
+func TestV2ActivityItemsDoesNotExposeFinalGradeAsCriterion(t *testing.T) {
+	grid := &sheetGrid{
+		headers: []string{"Matrícula", "Critério A", "nota final"},
+		rows: [][]string{
+			{"Nota máxima", "1", "1"},
+			{"123", "0,8", "0,8"},
+		},
+	}
+
+	items := v2ActivityItems(grid, 0, 1, 1)
+
+	if len(items) != 1 {
+		t.Fatalf("items len = %d, want only real criteria: %#v", len(items), items)
+	}
+	if items[0].Subtopic != "Critério A" {
+		t.Fatalf("item = %#v, want Critério A only", items[0])
+	}
+}
+
 func TestV2ActivityItemsIncludesGenericCriteriaWithoutMaxRow(t *testing.T) {
 	grid := &sheetGrid{
 		headers: []string{"Matrícula", "Originalidade", "Entrega"},
@@ -565,6 +584,22 @@ func TestV2ActivityTableNormalizesSummaryScoreByRubricMaximum(t *testing.T) {
 	}
 	if card.Details[0].Value != "1" || card.Details[0].Max != 1 {
 		t.Fatalf("detail = %#v, want capped normalized value/max 1", card.Details[0])
+	}
+}
+
+func TestV2AverageCardUsesNotaLabel(t *testing.T) {
+	grid := &sheetGrid{
+		headers: []string{"Matrícula", "Média"},
+		rows:    [][]string{{"123", "0,5"}},
+	}
+
+	card := v2AverageCard(grid, grid.rows[0])
+
+	if card == nil {
+		t.Fatal("v2AverageCard() = nil, want card")
+	}
+	if card.Label != "Nota" || card.Value != "0,5" {
+		t.Fatalf("v2AverageCard() = %#v, want Nota 0,5", card)
 	}
 }
 
