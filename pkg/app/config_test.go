@@ -55,6 +55,8 @@ func TestValidateExplainsMissingServiceAccountFileOnVercel(t *testing.T) {
 func TestValidateExplainsMissingSpreadsheetID(t *testing.T) {
 	t.Setenv("GOOGLE_SHEET_ID", "")
 	t.Setenv("GOOGLE_SHEET_IDS", "")
+	t.Setenv("GOOGLE_SHEET_LEGACY_IDS", "")
+	t.Setenv("GOOGLE_SHEET_V2_IDS", "")
 	t.Setenv("SESSION_SECRET", "test-secret")
 	t.Setenv("GOOGLE_SERVICE_ACCOUNT_JSON", testServiceAccountJSON)
 	t.Setenv("GOOGLE_SERVICE_ACCOUNT_JSON_BASE64", "")
@@ -77,15 +79,23 @@ func TestValidateExplainsMissingSpreadsheetID(t *testing.T) {
 func TestLoadConfigAcceptsMultipleSpreadsheetIDs(t *testing.T) {
 	t.Setenv("GOOGLE_SHEET_ID", "legacy-id")
 	t.Setenv("GOOGLE_SHEET_IDS", " sheet-a, sheet-b ;sheet-a\nsheet-c ")
+	t.Setenv("GOOGLE_SHEET_LEGACY_IDS", "legacy-extra")
+	t.Setenv("GOOGLE_SHEET_V2_IDS", "v2-a; sheet-b")
 
 	cfg := LoadConfig()
 
-	want := []string{"legacy-id", "sheet-a", "sheet-b", "sheet-c"}
+	want := []string{"legacy-extra", "v2-a", "sheet-b", "legacy-id", "sheet-a", "sheet-c"}
 	if strings.Join(cfg.SpreadsheetIDs, ",") != strings.Join(want, ",") {
-		t.Fatalf("SpreadsheetIDs = %#v, want %#v", cfg.SpreadsheetIDs, want)
+		t.Fatalf("SpreadsheetIDs = %#v, want %#v (order: LEGACY_IDS, V2_IDS, GOOGLE_SHEET_ID, GOOGLE_SHEET_IDS)", cfg.SpreadsheetIDs, want)
 	}
-	if cfg.SpreadsheetID != "legacy-id" {
-		t.Fatalf("SpreadsheetID = %q, want first configured id", cfg.SpreadsheetID)
+	if cfg.SpreadsheetID != "legacy-extra" {
+		t.Fatalf("SpreadsheetID = %q, want first legacy id", cfg.SpreadsheetID)
+	}
+	if strings.Join(cfg.LegacySpreadsheetIDs, ",") != "legacy-extra" {
+		t.Fatalf("LegacySpreadsheetIDs = %#v", cfg.LegacySpreadsheetIDs)
+	}
+	if strings.Join(cfg.V2SpreadsheetIDs, ",") != "v2-a,sheet-b" {
+		t.Fatalf("V2SpreadsheetIDs = %#v", cfg.V2SpreadsheetIDs)
 	}
 }
 

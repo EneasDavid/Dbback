@@ -44,3 +44,33 @@ func TestLoginIdentityUsesFirstConfiguredBaseOccurrence(t *testing.T) {
 		t.Fatalf("LoginIdentity() = %#v, want first v2 occurrence", identity)
 	}
 }
+
+func TestLoginIdentitySearchesLegacyFirst(t *testing.T) {
+	client := &SheetsClient{
+		cfg: Config{
+			LoginSheet:           "Base de dados",
+			LegacySpreadsheetIDs: []string{"legacy-sheet"},
+			V2SpreadsheetIDs:     []string{"v2-sheet"},
+			SpreadsheetIDs:       []string{"legacy-sheet", "v2-sheet"},
+		},
+		cache: map[string]cachedGrid{
+			"Base de dados": {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers:    []string{"Matricula", "Nome"},
+					rows:       [][]string{{"23210542", "Legado User"}},
+					rowSources: []string{"legacy-sheet"},
+					rowSchemas: []string{"legacy"},
+				},
+			},
+		},
+	}
+
+	identity, err := client.LoginIdentity(t.Context(), "23210542")
+	if err != nil {
+		t.Fatalf("LoginIdentity() error = %v", err)
+	}
+	if identity.Name != "Legado User" || identity.SpreadsheetID != "legacy-sheet" || identity.SchemaStatus != "legacy" {
+		t.Fatalf("LoginIdentity() = %#v, want legacy base occurrence", identity)
+	}
+}

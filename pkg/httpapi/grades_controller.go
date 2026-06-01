@@ -67,7 +67,7 @@ func (GradesController) All(w http.ResponseWriter, r *http.Request) {
 }
 
 func ensureUserSpreadsheet(w http.ResponseWriter, r *http.Request, sessions app.SessionManager, sheetsClient *app.SheetsClient, user app.SessionUser) app.SessionUser {
-	if strings.TrimSpace(user.SpreadsheetID) != "" && strings.TrimSpace(user.SchemaStatus) != "" {
+	if strings.TrimSpace(user.SpreadsheetID) != "" {
 		return user
 	}
 	identity, err := sheetsClient.LoginIdentity(r.Context(), user.Matricula)

@@ -21,6 +21,7 @@ var tableParsers = map[string]tableParser{
 
 func (c *SheetsClient) GradeFor(ctx context.Context, exam string, user SessionUser) (GradeResult, error) {
 	var lastErr error
+	var emptyResult *GradeResult
 	for _, spreadsheetID := range c.candidateSpreadsheetIDs(user) {
 		scoped := c.scopedToSpreadsheet(spreadsheetID)
 		candidateUser, ok, err := scoped.userForSpreadsheet(ctx, user)
@@ -33,7 +34,12 @@ func (c *SheetsClient) GradeFor(ctx context.Context, exam string, user SessionUs
 		}
 		result, err := scoped.gradeForConfiguredRuntime(ctx, exam, candidateUser)
 		if err == nil {
-			return result, nil
+			if hasTables(result) {
+				return result, nil
+			}
+			emptyResult = &result
+			lastErr = nil
+			continue
 		}
 		if err != nil {
 			lastErr = err
@@ -45,13 +51,30 @@ func (c *SheetsClient) GradeFor(ctx context.Context, exam string, user SessionUs
 	if lastErr != nil {
 		return GradeResult{}, lastErr
 	}
+	if emptyResult != nil {
+		return *emptyResult, nil
+	}
 	return GradeResult{}, NewHTTPError(404, "matricula nao encontrada")
 }
 
 func (c *SheetsClient) gradeForConfiguredRuntime(ctx context.Context, exam string, user SessionUser) (GradeResult, error) {
 	switch runtimeForUser(c.cfg, user) {
 	case "v2":
-		return c.gradeForV2(ctx, exam, user)
+		result, err := c.gradeForV2(ctx, exam, user)
+		if err == nil && hasTables(result) {
+			return result, nil
+		}
+		if err != nil && !canFallbackToLegacy(err) {
+			return GradeResult{}, err
+		}
+		legacy, legacyErr := c.gradeForLegacy(ctx, exam, user)
+		if legacyErr == nil {
+			return legacy, nil
+		}
+		if err != nil {
+			return GradeResult{}, err
+		}
+		return result, nil
 	case "legacy":
 		if c.detectsSpreadsheetSchema() && c.hasV2Schema(ctx) {
 			return c.gradeForV2(ctx, exam, user)
@@ -92,6 +115,7 @@ func (c *SheetsClient) gradeForLegacy(ctx context.Context, exam string, user Ses
 
 func (c *SheetsClient) GradesFor(ctx context.Context, exams []string, user SessionUser) (GradeResults, error) {
 	var lastErr error
+	var emptyResults GradeResults
 	for _, spreadsheetID := range c.candidateSpreadsheetIDs(user) {
 		scoped := c.scopedToSpreadsheet(spreadsheetID)
 		candidateUser, ok, err := scoped.userForSpreadsheet(ctx, user)
@@ -104,7 +128,12 @@ func (c *SheetsClient) GradesFor(ctx context.Context, exams []string, user Sessi
 		}
 		results, err := scoped.gradesForConfiguredRuntime(ctx, exams, candidateUser)
 		if err == nil {
-			return results, nil
+			if hasAnyGradeTables(results) {
+				return results, nil
+			}
+			emptyResults = results
+			lastErr = nil
+			continue
 		}
 		if err != nil {
 			lastErr = err
@@ -116,13 +145,30 @@ func (c *SheetsClient) GradesFor(ctx context.Context, exams []string, user Sessi
 	if lastErr != nil {
 		return nil, lastErr
 	}
+	if emptyResults != nil {
+		return emptyResults, nil
+	}
 	return nil, NewHTTPError(404, "matricula nao encontrada")
 }
 
 func (c *SheetsClient) gradesForConfiguredRuntime(ctx context.Context, exams []string, user SessionUser) (GradeResults, error) {
 	switch runtimeForUser(c.cfg, user) {
 	case "v2":
-		return c.gradesForRuntimeV2(ctx, exams, user)
+		results, err := c.gradesForRuntimeV2(ctx, exams, user)
+		if err == nil && hasAnyGradeTables(results) {
+			return results, nil
+		}
+		if err != nil && !canFallbackToLegacy(err) {
+			return nil, err
+		}
+		legacy, legacyErr := c.gradesForLegacy(ctx, exams, user)
+		if legacyErr == nil {
+			return legacy, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		return results, nil
 	case "legacy":
 		if c.detectsSpreadsheetSchema() && c.hasV2Schema(ctx) {
 			return c.gradesForRuntimeV2(ctx, exams, user)
@@ -140,7 +186,7 @@ func (c *SheetsClient) gradesForRuntimeV2(ctx context.Context, exams []string, u
 	schemaV2 := strictV2 || c.hasV2Schema(ctx)
 	exams = normalizedExams(exams)
 	if len(exams) == 0 || defaultLegacyExams(exams) {
-		resolved, err := c.v2ActiveExamKeys(ctx)
+		resolved, err := c.v2ExamKeys(ctx)
 		if err != nil {
 			if schemaV2 || !canFallbackToLegacy(err) {
 				return nil, err
@@ -201,6 +247,9 @@ func runtimeForUser(cfg Config, user SessionUser) string {
 	}
 	if cfgRuntime == "v1" || cfgRuntime == "legacy" {
 		return "legacy"
+	}
+	if cfgRuntime == "v2" {
+		return "v2"
 	}
 	return ""
 }
@@ -276,10 +325,15 @@ func (c *SheetsClient) candidateSpreadsheetIDs(user SessionUser) []string {
 		seen[value] = true
 		ids = append(ids, value)
 	}
-	add(user.SpreadsheetID)
-	for _, spreadsheetID := range c.cfg.SpreadsheetIDs {
-		add(spreadsheetID)
+	addAll := func(values []string) {
+		for _, spreadsheetID := range values {
+			add(spreadsheetID)
+		}
 	}
+	add(user.SpreadsheetID)
+	addAll(c.cfg.LegacySpreadsheetIDs)
+	addAll(c.cfg.V2SpreadsheetIDs)
+	addAll(c.cfg.SpreadsheetIDs)
 	return ids
 }
 
@@ -302,6 +356,7 @@ func (c *SheetsClient) scopedToSpreadsheet(spreadsheetID string) *SheetsClient {
 	cfg := c.cfg
 	cfg.SpreadsheetID = spreadsheetID
 	cfg.SpreadsheetIDs = []string{spreadsheetID}
+	cfg.RuntimeVersion = c.runtimeForSpreadsheet(spreadsheetID)
 	return &SheetsClient{
 		cfg:              cfg,
 		service:          c.service,
@@ -310,6 +365,16 @@ func (c *SheetsClient) scopedToSpreadsheet(spreadsheetID string) *SheetsClient {
 		driveComments:    map[string]cachedDriveComments{},
 		workbookComments: map[string]cachedWorkbookComments{},
 	}
+}
+
+func (c *SheetsClient) runtimeForSpreadsheet(spreadsheetID string) string {
+	if containsString(c.cfg.V2SpreadsheetIDs, spreadsheetID) {
+		return "v2"
+	}
+	if containsString(c.cfg.LegacySpreadsheetIDs, spreadsheetID) {
+		return "legacy"
+	}
+	return c.cfg.RuntimeVersion
 }
 
 func (c *SheetsClient) gradeForTables(ctx context.Context, exam string, tables []TableConfig, user SessionUser) (GradeResult, error) {

@@ -209,7 +209,35 @@ func TestRuntimeForUserPreservesLegacySessionWithV2Config(t *testing.T) {
 	}
 }
 
-func TestGradesForRuntimeV2DoesNotFallbackToLegacyWhenAbsExists(t *testing.T) {
+func TestRuntimeForUserUsesForcedV2Config(t *testing.T) {
+	got := runtimeForUser(Config{RuntimeVersion: "v2"}, SessionUser{})
+
+	if got != "v2" {
+		t.Fatalf("runtimeForUser() = %q, want v2", got)
+	}
+}
+
+func TestCandidateSpreadsheetIDsPrioritizesLegacyBases(t *testing.T) {
+	client := &SheetsClient{cfg: Config{
+		SpreadsheetIDs:       []string{"mixed-a", "v2-a", "legacy-a"},
+		LegacySpreadsheetIDs: []string{"legacy-a"},
+		V2SpreadsheetIDs:     []string{"v2-a"},
+		RuntimeVersion:       "v2",
+	}}
+
+	got := client.candidateSpreadsheetIDs(SessionUser{})
+	want := []string{"legacy-a", "v2-a", "mixed-a"}
+	if len(got) != len(want) {
+		t.Fatalf("candidateSpreadsheetIDs() = %#v, want %#v", got, want)
+	}
+	for idx := range want {
+		if got[idx] != want[idx] {
+			t.Fatalf("candidateSpreadsheetIDs() = %#v, want %#v", got, want)
+		}
+	}
+}
+
+func TestGradesForRuntimeV2UsesAbsKeysWhenAbsExists(t *testing.T) {
 	client := &SheetsClient{
 		cfg: Config{RuntimeVersion: "auto"},
 		cache: map[string]cachedGrid{
@@ -217,7 +245,7 @@ func TestGradesForRuntimeV2DoesNotFallbackToLegacyWhenAbsExists(t *testing.T) {
 				expires: time.Now().Add(time.Hour),
 				grid: &sheetGrid{
 					headers: []string{"AB", "status"},
-					rows:    [][]string{{"AB2", "1"}},
+					rows:    [][]string{{"AB1", "0"}, {"AB2", "1"}},
 				},
 			},
 			v2ActivitiesSheet: {
@@ -236,10 +264,10 @@ func TestGradesForRuntimeV2DoesNotFallbackToLegacyWhenAbsExists(t *testing.T) {
 		t.Fatalf("gradesForRuntimeV2() error = %v", err)
 	}
 	if _, ok := results["ab2"]; !ok {
-		t.Fatalf("gradesForRuntimeV2() keys = %#v, want only active v2 exam", results)
+		t.Fatalf("gradesForRuntimeV2() keys = %#v, want v2 ab2 exam", results)
 	}
-	if _, ok := results["ab1"]; ok {
-		t.Fatalf("gradesForRuntimeV2() unexpectedly returned legacy ab1: %#v", results)
+	if got := results["ab1"]; got.Exam != "AB1" || len(got.Tables) != 0 {
+		t.Fatalf("gradesForRuntimeV2() ab1 = %#v, want inactive empty v2 result", got)
 	}
 }
 

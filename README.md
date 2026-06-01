@@ -38,8 +38,19 @@ Os comentarios ricos do Google Drive sao usados apenas como enriquecimento. Se a
 - Comentarios em celulas de criterio/nota entram no mesmo payload das notas, sem requisicao extra do frontend.
 - Cache em memoria por aba com TTL reduz chamadas repetidas ao Google durante a mesma janela de uso.
 - `singleflight` evita chamadas duplicadas quando varias requisicoes pedem as mesmas abas ao mesmo tempo.
+- O cliente Google usa timeout para impedir que uma chamada lenta a Sheets/Drive prenda a API indefinidamente.
 - O frontend guarda AB1 e AB2 em `sessionStorage`; alternar entre avaliacoes nao dispara nova chamada de rede.
 - A UI usa o payload normalizado do backend e nao recalcula regras sensiveis de nota no navegador.
+
+## PAA, seguranca e integridade
+
+PAA aqui significa Plano de Acesso e Auditoria: cada requisicao deve validar acesso, escolher a fonte correta e devolver um payload rastreavel sem expor segredos.
+
+- Plano: `GOOGLE_SHEET_IDS` define todas as bases ativas. A API consulta as bases em ordem, prende a sessao ao `spreadsheetId` encontrado e, se aquela base nao tiver notas renderizaveis, tenta a proxima antes de devolver vazio.
+- Acesso: login e notas usam apenas a service account configurada; a planilha precisa estar compartilhada com o `client_email`. Arquivos JSON locais ficam no `.gitignore`; em deploy use `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64`.
+- Auditoria: o payload retorna `spreadsheetId` e `schemaStatus` quando a origem e conhecida, permitindo conferir se a resposta veio de legado ou v2.
+- Integridade: a sessao usa HMAC-SHA256, uma tecnica de assinatura semelhante ao principio de hash encadeado usado em blockchains para detectar alteracao. O sistema nao grava dados em blockchain publica; aplica o conceito util aqui: token assinavel, verificavel e resistente a adulteracao.
+- Disponibilidade: erros de uma planilha inacessivel em configuracoes com multiplas bases nao derrubam todo o fluxo quando outra base valida pode responder.
 
 ## Configuracao
 
@@ -47,9 +58,12 @@ Copie `env.example` para `.env` no desenvolvimento local e configure as variavei
 
 ```env
 GOOGLE_SHEET_ID=...
-# Para v2/multiplas planilhas, use GOOGLE_SHEET_IDS no lugar de GOOGLE_SHEET_ID:
+# Compatibilidade antiga: lista mista opcional.
 # GOOGLE_SHEET_IDS=id_da_turma_1,id_da_turma_2
-# SHEETS_RUNTIME_VERSION=v2
+# Preferido para bases separadas por versao:
+# GOOGLE_SHEET_LEGACY_IDS=id_legado_1,id_legado_2
+# GOOGLE_SHEET_V2_IDS=id_v2_1,id_v2_2
+# SHEETS_RUNTIME_VERSION=auto # auto, legacy ou v2
 # GOOGLE_SHEET_METADATA_KEY=dbback_schema
 # GOOGLE_SHEET_METADATA_VALUE=v2
 LOGIN_SHEET_NAME=Base de dados
@@ -78,7 +92,7 @@ Compartilhe a planilha com o `client_email` da service account. Para comentarios
 
 ### V1 legado e V2
 
-A tag git local `v1-stable` aponta para o codigo estavel anterior a v2. Em runtime, `GOOGLE_SHEET_ID` continua funcionando como configuracao v1/legado. Para deixar varias planilhas online ao mesmo tempo, configure `GOOGLE_SHEET_IDS` com os IDs separados por virgula, ponto e virgula ou quebra de linha. Se `GOOGLE_SHEET_ID` e `GOOGLE_SHEET_IDS` estiverem definidos, o backend consulta todos eles.
+A tag git local `v1-stable` aponta para o codigo estavel anterior a v2. Em runtime, `GOOGLE_SHEET_ID` e `GOOGLE_SHEET_IDS` continuam funcionando como configuracao antiga/mista. Para deixar varias planilhas online ao mesmo tempo e evitar tentativa desnecessaria do parser errado, prefira `GOOGLE_SHEET_LEGACY_IDS` para bases legadas e `GOOGLE_SHEET_V2_IDS` para bases v2, com IDs separados por virgula, ponto e virgula ou quebra de linha. Se mais de uma variavel estiver definida, o backend deduplica e consulta todas.
 
 Quando `SHEETS_RUNTIME_VERSION=v2`, a API consulta os metadados do proprio Google Sheets. A planilha e marcada como `v2` quando houver developer metadata com a chave `GOOGLE_SHEET_METADATA_KEY` e o valor `GOOGLE_SHEET_METADATA_VALUE`; qualquer divergencia fica marcada como `legacy` no payload.
 

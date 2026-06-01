@@ -558,6 +558,20 @@ input:focus-visible {
   line-height: 1.42;
 }
 
+.summary-score p span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.summary-score p strong,
+.row-comment strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--muted-strong);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
 .grade-row {
   padding: 0;
   margin: 0;
@@ -623,11 +637,24 @@ input:focus-visible {
 }
 
 .row-comment {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 8px;
   margin: 0;
   padding: 12px 2px 14px;
   color: var(--muted);
   font-size: 0.95rem;
   line-height: 1.55;
+}
+
+.row-comment svg {
+  color: var(--brand);
+  margin-top: 2px;
+}
+
+.row-comment span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .grade-row.expanded {

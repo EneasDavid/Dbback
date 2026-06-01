@@ -173,6 +173,10 @@ function App() {
     return gradeKeys(grades);
   }, [examOrder, grades]);
   const examLabels = useMemo(() => gradeLabels(grades), [grades]);
+  const useExamCarousel = useMemo(
+    () => availableExams.length > 1 && availableExams.some((key) => grades[key]?.schemaStatus === 'v2'),
+    [availableExams, grades],
+  );
 
   const activityTables = useMemo(() => visibleTables.filter((table) => !isSummaryTable(table.kind) && cardsFor(table).length > 0), [visibleTables]);
   const summaryTables = useMemo(() => visibleTables.filter((table) => isSummaryTable(table.kind) && !isMediaTable(table) && cardsFor(table).length > 0), [visibleTables]);
@@ -255,7 +259,7 @@ function App() {
   return (
     <main className="shell">
       <Topbar session={session} theme={theme} setTheme={handleThemeChange} onLogout={handleLogout} />
-      <ExamSwitch exam={exam} exams={availableExams} labels={examLabels} setExam={setExam} />
+      <ExamSwitch exam={exam} exams={availableExams} labels={examLabels} carousel={useExamCarousel} setExam={setExam} />
 
       {error && <InlineError message={error} />}
       {loading && <div className="loading" role="status" aria-live="polite">Carregando notas...</div>}

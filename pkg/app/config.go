@@ -9,21 +9,23 @@ import (
 )
 
 type Config struct {
-	SpreadsheetID  string
-	SpreadsheetIDs []string
-	RuntimeVersion string
-	MetadataKey    string
-	MetadataValue  string
-	LoginSheet     string
-	AB1Tables      []TableConfig
-	AB2Tables      []TableConfig
-	SessionSecret  string
-	CookieSecure   bool
-	DocsUsername   string
-	DocsPassword   string
-	ServiceJSON    string
-	ServiceFile    string
-	CacheTTL       time.Duration
+	SpreadsheetID        string
+	SpreadsheetIDs       []string
+	LegacySpreadsheetIDs []string
+	V2SpreadsheetIDs     []string
+	RuntimeVersion       string
+	MetadataKey          string
+	MetadataValue        string
+	LoginSheet           string
+	AB1Tables            []TableConfig
+	AB2Tables            []TableConfig
+	SessionSecret        string
+	CookieSecure         bool
+	DocsUsername         string
+	DocsPassword         string
+	ServiceJSON          string
+	ServiceFile          string
+	CacheTTL             time.Duration
 }
 
 type TableConfig struct {
@@ -35,14 +37,18 @@ type TableConfig struct {
 }
 
 func LoadConfig() Config {
-	spreadsheetIDs := spreadsheetIDsFromEnv()
+	legacySpreadsheetIDs := splitSpreadsheetIDs(os.Getenv("GOOGLE_SHEET_LEGACY_IDS"))
+	v2SpreadsheetIDs := splitSpreadsheetIDs(os.Getenv("GOOGLE_SHEET_V2_IDS"))
+	spreadsheetIDs := spreadsheetIDsFromEnv(legacySpreadsheetIDs, v2SpreadsheetIDs)
 	return Config{
-		SpreadsheetID:  firstString(spreadsheetIDs),
-		SpreadsheetIDs: spreadsheetIDs,
-		RuntimeVersion: strings.ToLower(firstNonEmpty(os.Getenv("SHEETS_RUNTIME_VERSION"), "auto")),
-		MetadataKey:    firstNonEmpty(os.Getenv("GOOGLE_SHEET_METADATA_KEY"), "dbback_schema"),
-		MetadataValue:  firstNonEmpty(os.Getenv("GOOGLE_SHEET_METADATA_VALUE"), "v2"),
-		LoginSheet:     firstNonEmpty(os.Getenv("LOGIN_SHEET_NAME"), "Base de dados"),
+		SpreadsheetID:        firstString(spreadsheetIDs),
+		SpreadsheetIDs:       spreadsheetIDs,
+		LegacySpreadsheetIDs: legacySpreadsheetIDs,
+		V2SpreadsheetIDs:     v2SpreadsheetIDs,
+		RuntimeVersion:       strings.ToLower(firstNonEmpty(os.Getenv("SHEETS_RUNTIME_VERSION"), "auto")),
+		MetadataKey:          firstNonEmpty(os.Getenv("GOOGLE_SHEET_METADATA_KEY"), "dbback_schema"),
+		MetadataValue:        firstNonEmpty(os.Getenv("GOOGLE_SHEET_METADATA_VALUE"), "v2"),
+		LoginSheet:           firstNonEmpty(os.Getenv("LOGIN_SHEET_NAME"), "Base de dados"),
 		AB1Tables: []TableConfig{
 			tableFromEnv("at1", "Atividade 1", "SHEET_AB1_PESQUISA", "AT. 1", "activity", 10),
 			tableFromEnv("at2", "Atividade 2", "SHEET_AB1_ARTIGO", "AT. 2", "activity", 10),
@@ -68,7 +74,7 @@ func (c Config) Validate() error {
 		return NewHTTPError(500, "SESSION_SECRET nao configurado")
 	}
 	if len(c.SpreadsheetIDs) == 0 {
-		return NewHTTPError(500, "GOOGLE_SHEET_ID ou GOOGLE_SHEET_IDS nao configurado")
+		return NewHTTPError(500, "GOOGLE_SHEET_ID, GOOGLE_SHEET_IDS, GOOGLE_SHEET_LEGACY_IDS ou GOOGLE_SHEET_V2_IDS nao configurado")
 	}
 	if c.ServiceJSON == "" {
 		if strings.TrimSpace(c.ServiceFile) != "" {
@@ -82,18 +88,39 @@ func (c Config) Validate() error {
 	return nil
 }
 
-func spreadsheetIDsFromEnv() []string {
+func spreadsheetIDsFromEnv(groups ...[]string) []string {
 	seen := map[string]bool{}
 	var result []string
-	for _, raw := range []string{os.Getenv("GOOGLE_SHEET_ID"), os.Getenv("GOOGLE_SHEET_IDS")} {
-		for _, item := range strings.FieldsFunc(raw, func(r rune) bool {
-			return r == ',' || r == ';' || r == '\n' || r == '\r' || r == '\t'
-		}) {
-			item = strings.TrimSpace(item)
-			if item == "" || seen[item] {
-				continue
-			}
-			seen[item] = true
+	add := func(item string) {
+		item = strings.TrimSpace(item)
+		if item == "" || seen[item] {
+			return
+		}
+		seen[item] = true
+		result = append(result, item)
+	}
+	// Ordem de busca: 1) LEGACY_IDS, 2) V2_IDS, 3) GOOGLE_SHEET_ID, 4) GOOGLE_SHEET_IDS (mista)
+	for _, group := range groups {
+		for _, item := range group {
+			add(item)
+		}
+	}
+	for _, item := range splitSpreadsheetIDs(os.Getenv("GOOGLE_SHEET_ID")) {
+		add(item)
+	}
+	for _, item := range splitSpreadsheetIDs(os.Getenv("GOOGLE_SHEET_IDS")) {
+		add(item)
+	}
+	return result
+}
+
+func splitSpreadsheetIDs(raw string) []string {
+	var result []string
+	for _, item := range strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n' || r == '\r' || r == '\t'
+	}) {
+		item = strings.TrimSpace(item)
+		if item != "" {
 			result = append(result, item)
 		}
 	}

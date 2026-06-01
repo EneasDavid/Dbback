@@ -47,6 +47,7 @@ func NewSheetsClient(ctx context.Context, cfg Config) (*SheetsClient, error) {
 		return nil, err
 	}
 	httpClient := oauth2.NewClient(ctx, credentials.TokenSource)
+	httpClient.Timeout = 15 * time.Second
 	svc, err := sheets.NewService(ctx, option.WithHTTPClient(httpClient))
 	if err != nil {
 		return nil, err
@@ -347,6 +348,9 @@ func skippableSpreadsheetReadError(err error) bool {
 }
 
 func (c *SheetsClient) schemaStatusForSpreadsheet(metadata []*sheets.DeveloperMetadata) string {
+	if strings.EqualFold(strings.TrimSpace(c.cfg.RuntimeVersion), "legacy") || strings.EqualFold(strings.TrimSpace(c.cfg.RuntimeVersion), "v1") {
+		return "legacy"
+	}
 	if !c.detectsSpreadsheetSchema() {
 		return ""
 	}

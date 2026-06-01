@@ -89,15 +89,17 @@ export function ExamSwitch({
   exam,
   exams,
   labels,
+  carousel,
   setExam,
 }: {
   exam: string;
   exams: string[];
   labels: Record<string, string>;
+  carousel?: boolean;
   setExam: (exam: string) => void;
 }) {
   if (exams.length === 0) return null;
-  const mode = exams.length === 1 ? 'single' : exams.length === 2 ? 'pair' : 'carousel';
+  const mode = exams.length === 1 ? 'single' : carousel || exams.length > 2 ? 'carousel' : 'pair';
   return (
     <section className="exam-switch" data-mode={mode} aria-label="Selecionar avaliacao">
       {exams.map((option) => (
@@ -167,7 +169,10 @@ function SummaryScoreCard({ card, fallbackLabel }: { card: GradeCardData; fallba
       {card.comment && (
         <p>
           <MessageSquareText size={15} />
-          {card.comment}
+          <span>
+            {card.commentAuthor && <strong>{card.commentAuthor}</strong>}
+            {card.comment}
+          </span>
         </p>
       )}
     </section>
@@ -236,7 +241,10 @@ function GradeRow({ tableKey, card, expanded, onToggle }: { tableKey: string; ca
       {card.comment && (
         <p className="row-comment">
           <MessageSquareText size={15} />
-          {card.comment}
+          <span>
+            {card.commentAuthor && <strong>{card.commentAuthor}</strong>}
+            {card.comment}
+          </span>
         </p>
       )}
     </section>
@@ -262,7 +270,7 @@ function GradeDetailPanel({ tableKey, card }: { tableKey: string; card: GradeCar
           <div className="comment-avatar">P</div>
           <div>
             <p>{card.comment}</p>
-            <span>Comentário geral</span>
+            <span>{card.commentAuthor || 'Comentário geral'}</span>
           </div>
         </div>
       )}

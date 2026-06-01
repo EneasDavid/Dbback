@@ -28,7 +28,7 @@ type v2ActivityConfig struct {
 func (c *SheetsClient) gradesForV2(ctx context.Context, exams []string, user SessionUser) (GradeResults, error) {
 	exams = normalizedExams(exams)
 	if len(exams) == 0 {
-		resolved, err := c.v2ActiveExamKeys(ctx)
+		resolved, err := c.v2ExamKeys(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -49,7 +49,7 @@ func (c *SheetsClient) gradesForV2(ctx context.Context, exams []string, user Ses
 	return results, nil
 }
 
-func (c *SheetsClient) v2ActiveExamKeys(ctx context.Context) ([]string, error) {
+func (c *SheetsClient) v2ExamKeys(ctx context.Context) ([]string, error) {
 	if err := c.loadSheets(ctx, []string{v2ABsSheet}); err != nil {
 		return nil, err
 	}
@@ -60,9 +60,7 @@ func (c *SheetsClient) v2ActiveExamKeys(ctx context.Context) ([]string, error) {
 	abs := v2ABs(abGrid)
 	keys := make([]string, 0, len(abs))
 	for _, ab := range abs {
-		if ab.Active {
-			keys = append(keys, ab.Key)
-		}
+		keys = append(keys, ab.Key)
 	}
 	return keys, nil
 }
