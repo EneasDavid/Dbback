@@ -20,11 +20,11 @@ func TestV2ABStateUsesActiveColumn(t *testing.T) {
 
 func TestV2ActivitiesForABUsesABAndWeight(t *testing.T) {
 	grid := &sheetGrid{
-		headers: []string{"Atividade", "AB", "Peso Máximo", "Aba", "Ativa"},
+		headers: []string{"Atividade", "AB", "Peso Máximo", "Aba", "Status"},
 		rows: [][]string{
-			{"Modelo", "AB2", "3", "Projeto", "sim"},
-			{"Pesquisa", "AB1", "2", "", "sim"},
-			{"Lista", "AB1", "1,5", "AT. Lista", "não"},
+			{"Modelo", "AB2", "3", "Projeto", "1"},
+			{"Pesquisa", "AB1", "2", "", "1"},
+			{"Lista", "AB1", "1,5", "AT. Lista", "0"},
 		},
 		schemaStatus:  "v2",
 		spreadsheetID: "sheet-a",
@@ -37,6 +37,19 @@ func TestV2ActivitiesForABUsesABAndWeight(t *testing.T) {
 	}
 	if activities[0].Label != "Pesquisa" || activities[0].SheetName != "Pesquisa" || activities[0].Weight != 2 {
 		t.Fatalf("unexpected activity: %#v", activities[0])
+	}
+}
+
+func TestV2ActivitiesForABKeepsActivitiesWhenStatusColumnIsAbsent(t *testing.T) {
+	grid := &sheetGrid{
+		headers: []string{"atividade", "peso", "ab"},
+		rows:    [][]string{{"pesquisa", "1", "Ab. 1"}, {"artigo", "1", "Ab. 1"}},
+	}
+
+	activities := v2ActivitiesForAB(grid, "ab1")
+
+	if len(activities) != 2 {
+		t.Fatalf("activities len = %d, want 2: %#v", len(activities), activities)
 	}
 }
 
@@ -67,6 +80,22 @@ func TestV2ActivityItemsNormalizesCriteriaByWeightAndKeepsComments(t *testing.T)
 	}
 	if items[1].Comment != "comentário B" || items[1].CommentAuthor != "Prof" {
 		t.Fatalf("second item comment = %#v", items[1])
+	}
+}
+
+func TestV2ActivityItemsIncludesGenericCriteriaWithoutMaxRow(t *testing.T) {
+	grid := &sheetGrid{
+		headers: []string{"Matrícula", "Originalidade", "Entrega"},
+		rows:    [][]string{{"123", "0,8", "0,7"}},
+	}
+
+	items := v2ActivityItems(grid, -1, 0, 1)
+
+	if len(items) != 2 {
+		t.Fatalf("items len = %d, want 2: %#v", len(items), items)
+	}
+	if items[0].Subtopic != "Originalidade" || items[0].NotaMaxima != "0,5" {
+		t.Fatalf("unexpected generic criterion: %#v", items[0])
 	}
 }
 

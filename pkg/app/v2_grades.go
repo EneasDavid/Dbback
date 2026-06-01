@@ -300,7 +300,6 @@ func v2ActivityItems(grid *sheetGrid, maxRowIdx int, studentRowIdx int, weight f
 	criterionColumns := v2CriterionColumns(grid, maxRowIdx, studentRowIdx)
 	totalMax := v2TotalMaximum(grid, maxRowIdx, criterionColumns)
 	for _, colIdx := range criterionColumns {
-		header := valueAt(grid.headers, colIdx)
 		maximum := v2CriterionMaximum(grid, maxRowIdx, colIdx)
 		value := valueAt(grid.rows[studentRowIdx], colIdx)
 		if totalMax > 0 && weight > 0 {
