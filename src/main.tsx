@@ -6,13 +6,13 @@ import { EmptyState, ExamSwitch, GradeCard, InlineError, LoginView, SummaryTable
 import type { GradeCache, GradeCard as GradeCardPayload, GradeDetail, GradeResult, GradeTable, SessionUser } from './types';
 import './styles.scss';
 
-const CACHE_VERSION = 'v13';
+const CACHE_VERSION = 'v15';
 const EMPTY_STATE_MS = 5_000;
 const LAST_MATRICULA_KEY = 'dbback-last-matricula';
 const THEME_QUERY = '(prefers-color-scheme: dark)';
 
 type Theme = 'light' | 'dark';
-type Exam = 'ab1' | 'ab2';
+type Exam = string;
 
 type LegacyColumn = {
   key?: string;
@@ -48,6 +48,7 @@ function App() {
   const [matricula, setMatricula] = useState(() => window.localStorage.getItem(LAST_MATRICULA_KEY) || '');
   const [session, setSession] = useState<SessionUser | null>(null);
   const [exam, setExam] = useState<Exam>('ab1');
+  const [examOrder, setExamOrder] = useState<Exam[]>([]);
   const [theme, setTheme] = useState<Theme>(() => initialTheme());
   const [grades, setGrades] = useState<GradeCache>({});
   const gradesRef = useRef<GradeCache>({});
@@ -133,18 +134,13 @@ function App() {
       setLoading(!hasCachedVisibleGrade);
       setError('');
       try {
-        const result = normalizeGradeResult(await api<GradeResult>(`/api/grades?exam=${exam}&refresh=1`));
+        const allResults = normalizeGradeCache(await api<GradeCache>('/api/grades/all?refresh=1'));
         if (cancelled) return;
-        setGrades((current) => storeGradeCache(current, { [exam]: result }, cacheKey, gradesRef));
-        const otherExam: Exam = exam === 'ab1' ? 'ab2' : 'ab1';
-        if (!hasRenderableGrade(gradesRef.current[otherExam])) {
-          api<GradeResult>(`/api/grades?exam=${otherExam}`)
-            .then((otherResult) => {
-              if (!cancelled) {
-                setGrades((current) => storeGradeCache(current, { [otherExam]: normalizeGradeResult(otherResult) }, cacheKey, gradesRef));
-              }
-            })
-            .catch(() => null);
+        const keys = gradeKeys(allResults);
+        setExamOrder(keys);
+        setGrades((current) => storeGradeCache(current, allResults, cacheKey, gradesRef));
+        if (keys.length > 0 && !keys.includes(exam)) {
+          setExam(keys[0]);
         }
       } catch (err) {
         if (cancelled) return;
@@ -171,6 +167,12 @@ function App() {
   }, [session, exam]);
 
   const visibleTables = useMemo(() => grades[exam]?.tables ?? [], [grades, exam]);
+  const availableExams = useMemo(() => {
+    const keys = examOrder.filter((key) => grades[key]);
+    if (keys.length > 0) return keys;
+    return gradeKeys(grades);
+  }, [examOrder, grades]);
+  const examLabels = useMemo(() => gradeLabels(grades), [grades]);
 
   const activityTables = useMemo(() => visibleTables.filter((table) => !isSummaryTable(table.kind) && cardsFor(table).length > 0), [visibleTables]);
   const summaryTables = useMemo(() => visibleTables.filter((table) => isSummaryTable(table.kind) && !isMediaTable(table) && cardsFor(table).length > 0), [visibleTables]);
@@ -211,6 +213,7 @@ function App() {
       window.localStorage.setItem(LAST_MATRICULA_KEY, resolvedMatricula);
       gradesRef.current = {};
       setGrades({});
+      setExamOrder([]);
       setActiveDetail(null);
       setExam('ab1');
       setSession(result);
@@ -227,6 +230,7 @@ function App() {
     clearClientSession(session?.matricula);
     setSession(null);
     setGrades({});
+    setExamOrder([]);
     setError('');
   }
 
@@ -251,7 +255,7 @@ function App() {
   return (
     <main className="shell">
       <Topbar session={session} theme={theme} setTheme={handleThemeChange} onLogout={handleLogout} />
-      <ExamSwitch exam={exam} setExam={setExam} />
+      <ExamSwitch exam={exam} exams={availableExams} labels={examLabels} setExam={setExam} />
 
       {error && <InlineError message={error} />}
       {loading && <div className="loading" role="status" aria-live="polite">Carregando notas...</div>}
@@ -304,10 +308,34 @@ function readGradeCache(cacheKey: string): GradeCache {
 }
 
 function normalizeGradeCache(cache: GradeCache): GradeCache {
-  return {
-    ...(cache.ab1 ? { ab1: normalizeGradeResult(cache.ab1) } : {}),
-    ...(cache.ab2 ? { ab2: normalizeGradeResult(cache.ab2) } : {}),
-  };
+  if (!cache || typeof cache !== 'object') return {};
+  return Object.fromEntries(
+    Object.entries(cache)
+      .filter((entry): entry is [string, GradeResult] => Boolean(entry[0]) && Boolean(entry[1]))
+      .map(([key, grade]) => [key, normalizeGradeResult(grade)]),
+  );
+}
+
+function gradeKeys(cache: GradeCache): string[] {
+  return Object.entries(cache)
+    .filter(([, grade]) => Boolean(grade))
+    .sort(([, left], [, right]) => gradeOrderValue(left) - gradeOrderValue(right))
+    .map(([key]) => key);
+}
+
+function gradeLabels(cache: GradeCache): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(cache)
+      .filter((entry): entry is [string, GradeResult] => Boolean(entry[0]) && Boolean(entry[1]))
+      .map(([key, grade]) => [key, grade.exam || key.toUpperCase()]),
+  );
+}
+
+function gradeOrderValue(grade?: GradeResult) {
+  if (!grade) return Number.MAX_SAFE_INTEGER;
+  const label = asText(grade.exam).toLowerCase();
+  const match = label.match(/\d+/);
+  return match ? Number(match[0]) : Number.MAX_SAFE_INTEGER;
 }
 
 function normalizeGradeResult(grade: GradeResult): GradeResult {

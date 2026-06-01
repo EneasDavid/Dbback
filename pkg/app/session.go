@@ -23,6 +23,7 @@ type SessionUser struct {
 	Matricula     string `json:"matricula"`
 	Name          string `json:"name"`
 	SpreadsheetID string `json:"spreadsheetId,omitempty"`
+	SchemaStatus  string `json:"schemaStatus,omitempty"`
 }
 
 func NewSessionManager(cfg Config) SessionManager {
@@ -31,7 +32,7 @@ func NewSessionManager(cfg Config) SessionManager {
 
 func (s SessionManager) Set(w http.ResponseWriter, user SessionUser) {
 	expires := time.Now().Add(7 * time.Hour)
-	payload := fmt.Sprintf("%s|%s|%s|%d", url.QueryEscape(user.Matricula), url.QueryEscape(user.Name), url.QueryEscape(user.SpreadsheetID), expires.Unix())
+	payload := fmt.Sprintf("%s|%s|%s|%s|%d", url.QueryEscape(user.Matricula), url.QueryEscape(user.Name), url.QueryEscape(user.SpreadsheetID), url.QueryEscape(user.SchemaStatus), expires.Unix())
 	token := base64.RawURLEncoding.EncodeToString([]byte(payload)) + "." + sign(payload, s.secret)
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
@@ -102,7 +103,14 @@ func (s SessionManager) User(r *http.Request) (SessionUser, bool) {
 			return SessionUser{}, false
 		}
 	}
-	return SessionUser{Matricula: matricula, Name: name, SpreadsheetID: spreadsheetID}, true
+	schemaStatus := ""
+	if len(payloadParts) >= 5 {
+		schemaStatus, err = url.QueryUnescape(payloadParts[3])
+		if err != nil {
+			return SessionUser{}, false
+		}
+	}
+	return SessionUser{Matricula: matricula, Name: name, SpreadsheetID: spreadsheetID, SchemaStatus: schemaStatus}, true
 }
 
 func (s SessionManager) Matricula(r *http.Request) (string, bool) {

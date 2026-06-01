@@ -27,10 +27,6 @@ func (GradesController) Show(w http.ResponseWriter, r *http.Request, path string
 	user = ensureUserSpreadsheet(w, r, sessions, sheetsClient, user)
 
 	exam := gradeExam(r, path)
-	if exam != "ab1" && exam != "ab2" {
-		app.Error(w, app.NewHTTPError(400, "parametro exam invalido: deve ser 'ab1' ou 'ab2'"))
-		return
-	}
 
 	if r.URL.Query().Get("refresh") == "1" {
 		sheetsClient.ClearCache()
@@ -71,7 +67,7 @@ func (GradesController) All(w http.ResponseWriter, r *http.Request) {
 }
 
 func ensureUserSpreadsheet(w http.ResponseWriter, r *http.Request, sessions app.SessionManager, sheetsClient *app.SheetsClient, user app.SessionUser) app.SessionUser {
-	if strings.TrimSpace(user.SpreadsheetID) != "" {
+	if strings.TrimSpace(user.SpreadsheetID) != "" && strings.TrimSpace(user.SchemaStatus) != "" {
 		return user
 	}
 	identity, err := sheetsClient.LoginIdentity(r.Context(), user.Matricula)
@@ -79,6 +75,7 @@ func ensureUserSpreadsheet(w http.ResponseWriter, r *http.Request, sessions app.
 		return user
 	}
 	user.SpreadsheetID = identity.SpreadsheetID
+	user.SchemaStatus = identity.SchemaStatus
 	if strings.TrimSpace(identity.Name) != "" {
 		user.Name = identity.Name
 	}
@@ -108,23 +105,7 @@ func normalizeGradeExam(value string) string {
 	if value == "" {
 		return ""
 	}
-	if exam := firstGradeExamInText(value); exam != "" {
-		return exam
-	}
 	return value
-}
-
-func firstGradeExamInText(value string) string {
-	ab1Idx := strings.Index(value, "ab1")
-	ab2Idx := strings.Index(value, "ab2")
-	switch {
-	case ab1Idx >= 0 && (ab2Idx < 0 || ab1Idx < ab2Idx):
-		return "ab1"
-	case ab2Idx >= 0:
-		return "ab2"
-	default:
-		return ""
-	}
 }
 
 func requestQueryValue(r *http.Request, key string) string {

@@ -30,6 +30,7 @@ func TestLoginIdentityUsesFirstConfiguredBaseOccurrence(t *testing.T) {
 					headers:    []string{"Matricula", "Nome"},
 					rows:       [][]string{{"6,0", "Nova"}, {"6", "Antiga"}},
 					rowSources: []string{"v2-sheet", "v1-sheet"},
+					rowSchemas: []string{"v2", "legacy"},
 				},
 			},
 		},
@@ -39,7 +40,7 @@ func TestLoginIdentityUsesFirstConfiguredBaseOccurrence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoginIdentity() error = %v", err)
 	}
-	if identity.Name != "Nova" || identity.SpreadsheetID != "v2-sheet" {
+	if identity.Name != "Nova" || identity.SpreadsheetID != "v2-sheet" || identity.SchemaStatus != "v2" {
 		t.Fatalf("LoginIdentity() = %#v, want first v2 occurrence", identity)
 	}
 }

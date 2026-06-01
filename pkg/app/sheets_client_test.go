@@ -78,6 +78,14 @@ func TestSchemaStatusForSpreadsheetAcceptsConfiguredV2Metadata(t *testing.T) {
 	}
 }
 
+func TestSchemaStatusForSpreadsheetLeavesMissingMetadataUndecided(t *testing.T) {
+	client := &SheetsClient{cfg: Config{RuntimeVersion: "v2", MetadataKey: "dbback_schema", MetadataValue: "v2"}}
+
+	if got := client.schemaStatusForSpreadsheet(nil); got != "" {
+		t.Fatalf("schemaStatusForSpreadsheet() = %q, want undecided", got)
+	}
+}
+
 type failingRoundTripper struct{}
 
 func (failingRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {

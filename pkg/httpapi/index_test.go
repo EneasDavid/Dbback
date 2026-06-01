@@ -179,14 +179,14 @@ func TestGradeExamSupportsPathAliases(t *testing.T) {
 	}{
 		{name: "query", path: "/api/grades", raw: "exam=ab1", want: "ab1"},
 		{name: "exam path", path: "/api/grades/exam=ab2", want: "ab2"},
-		{name: "exam path encoded pipe", path: "/api/grades/exam=ab1%7Cab2", want: "ab1"},
+		{name: "exam path encoded pipe", path: "/api/grades/exam=ab1%7Cab2", want: "ab1|ab2"},
 		{name: "short path", path: "/api/grades/ab1", want: "ab1"},
-		{name: "pipe query uses first valid exam", path: "/api/grades", raw: "exam=ab1|ab2", want: "ab1"},
-		{name: "pipe query accepts second valid exam", path: "/api/grades", raw: "exam=invalid|ab2", want: "ab2"},
-		{name: "double encoded pipe query still finds first exam", path: "/api/grades", raw: "exam=ab1%257Cab2", want: "ab1"},
+		{name: "pipe query keeps route candidates", path: "/api/grades", raw: "exam=ab1|ab2", want: "ab1|ab2"},
+		{name: "pipe query keeps generic candidates", path: "/api/grades", raw: "exam=invalid|ab2", want: "invalid|ab2"},
+		{name: "double encoded pipe query keeps candidates", path: "/api/grades", raw: "exam=ab1%257Cab2", want: "ab1|ab2"},
 		{name: "query wins", path: "/api/grades/ab1", raw: "exam=ab2", want: "ab2"},
-		{name: "vercel original url encoded query", path: "/api/index.go", original: "/api/grades?exam=ab1%7Cab2", want: "ab1"},
-		{name: "vercel original url plain query", path: "/api/index.go", original: "/api/grades?exam=ab2|ab1", want: "ab2"},
+		{name: "vercel original url encoded query", path: "/api/index.go", original: "/api/grades?exam=ab1%7Cab2", want: "ab1|ab2"},
+		{name: "vercel original url plain query", path: "/api/index.go", original: "/api/grades?exam=ab2|ab1", want: "ab2|ab1"},
 	}
 
 	for _, tt := range tests {

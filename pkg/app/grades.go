@@ -32,7 +32,7 @@ func (c *SheetsClient) GradeFor(ctx context.Context, exam string, user SessionUs
 			continue
 		}
 		result, err := scoped.gradeForConfiguredRuntime(ctx, exam, candidateUser)
-		if err == nil && hasTables(result) {
+		if err == nil {
 			return result, nil
 		}
 		if err != nil {
@@ -49,10 +49,28 @@ func (c *SheetsClient) GradeFor(ctx context.Context, exam string, user SessionUs
 }
 
 func (c *SheetsClient) gradeForConfiguredRuntime(ctx context.Context, exam string, user SessionUser) (GradeResult, error) {
-	if c.cfg.RuntimeVersion == "v2" {
+	switch runtimeForUser(c.cfg, user) {
+	case "v2":
+		return c.gradeForV2(ctx, exam, user)
+	case "legacy":
+		if c.detectsSpreadsheetSchema() && c.hasV2Schema(ctx) {
+			return c.gradeForV2(ctx, exam, user)
+		}
+		return c.gradeForLegacy(ctx, exam, user)
+	}
+	if c.detectsSpreadsheetSchema() {
 		result, err := c.gradeForV2(ctx, exam, user)
 		if err == nil && hasTables(result) {
 			return result, nil
+		}
+		if err == nil && c.hasV2Schema(ctx) {
+			return result, nil
+		}
+		if err != nil && c.hasV2Schema(ctx) {
+			if isNotFound(err) {
+				return c.emptyGradeResultForV2(ctx, exam, user), nil
+			}
+			return GradeResult{}, err
 		}
 		if err != nil && !canFallbackToLegacy(err) {
 			return GradeResult{}, err
@@ -85,7 +103,7 @@ func (c *SheetsClient) GradesFor(ctx context.Context, exams []string, user Sessi
 			continue
 		}
 		results, err := scoped.gradesForConfiguredRuntime(ctx, exams, candidateUser)
-		if err == nil && hasAnyGradeTables(results) {
+		if err == nil {
 			return results, nil
 		}
 		if err != nil {
@@ -102,14 +120,36 @@ func (c *SheetsClient) GradesFor(ctx context.Context, exams []string, user Sessi
 }
 
 func (c *SheetsClient) gradesForConfiguredRuntime(ctx context.Context, exams []string, user SessionUser) (GradeResults, error) {
-	if c.cfg.RuntimeVersion == "v2" {
+	switch runtimeForUser(c.cfg, user) {
+	case "v2":
+		return c.gradesForRuntimeV2(ctx, exams, user)
+	case "legacy":
+		if c.detectsSpreadsheetSchema() && c.hasV2Schema(ctx) {
+			return c.gradesForRuntimeV2(ctx, exams, user)
+		}
+		return c.gradesForLegacy(ctx, exams, user)
+	}
+	if c.detectsSpreadsheetSchema() {
 		return c.gradesForRuntimeV2(ctx, exams, user)
 	}
 	return c.gradesForLegacy(ctx, exams, user)
 }
 
 func (c *SheetsClient) gradesForRuntimeV2(ctx context.Context, exams []string, user SessionUser) (GradeResults, error) {
+	strictV2 := runtimeForUser(c.cfg, user) == "v2"
+	schemaV2 := strictV2 || c.hasV2Schema(ctx)
 	exams = normalizedExams(exams)
+	if len(exams) == 0 || defaultLegacyExams(exams) {
+		resolved, err := c.v2ActiveExamKeys(ctx)
+		if err != nil {
+			if schemaV2 || !canFallbackToLegacy(err) {
+				return nil, err
+			}
+		} else if len(resolved) > 0 {
+			exams = resolved
+			schemaV2 = true
+		}
+	}
 	results := make(GradeResults, len(exams))
 	for _, exam := range exams {
 		result, err := c.gradeForV2(ctx, exam, user)
@@ -117,7 +157,18 @@ func (c *SheetsClient) gradesForRuntimeV2(ctx context.Context, exams []string, u
 			results[exam] = result
 			continue
 		}
+		if err == nil && schemaV2 {
+			results[exam] = result
+			continue
+		}
 		if err != nil && !canFallbackToLegacy(err) {
+			return nil, err
+		}
+		if err != nil && schemaV2 {
+			if isNotFound(err) {
+				results[exam] = c.emptyGradeResultForV2(ctx, exam, user)
+				continue
+			}
 			return nil, err
 		}
 		result, err = c.gradeForLegacy(ctx, exam, user)
@@ -131,6 +182,27 @@ func (c *SheetsClient) gradesForRuntimeV2(ctx context.Context, exams []string, u
 		results[exam] = result
 	}
 	return results, nil
+}
+
+func defaultLegacyExams(exams []string) bool {
+	return len(exams) == 2 && legacyExamKey(exams[0]) == "ab1" && legacyExamKey(exams[1]) == "ab2"
+}
+
+func runtimeForUser(cfg Config, user SessionUser) string {
+	cfgRuntime := strings.ToLower(strings.TrimSpace(cfg.RuntimeVersion))
+	switch strings.ToLower(strings.TrimSpace(user.SchemaStatus)) {
+	case "v2":
+		return "v2"
+	case "legacy":
+		if cfgRuntime == "auto" {
+			return ""
+		}
+		return "legacy"
+	}
+	if cfgRuntime == "v1" || cfgRuntime == "legacy" {
+		return "legacy"
+	}
+	return ""
 }
 
 func (c *SheetsClient) gradesForLegacy(ctx context.Context, exams []string, user SessionUser) (GradeResults, error) {
@@ -219,7 +291,7 @@ func (c *SheetsClient) userForSpreadsheet(ctx context.Context, user SessionUser)
 		}
 		return SessionUser{}, false, err
 	}
-	return SessionUser{Matricula: identity.Matricula, Name: identity.Name, SpreadsheetID: identity.SpreadsheetID}, true, nil
+	return SessionUser{Matricula: identity.Matricula, Name: identity.Name, SpreadsheetID: identity.SpreadsheetID, SchemaStatus: identity.SchemaStatus}, true, nil
 }
 
 func (c *SheetsClient) scopedToSpreadsheet(spreadsheetID string) *SheetsClient {
@@ -319,7 +391,7 @@ func normalizedExams(exams []string) []string {
 }
 
 func emptyGradeResult(exam string, user SessionUser) GradeResult {
-	return GradeResult{Exam: strings.ToUpper(strings.TrimSpace(exam)), Matricula: user.Matricula, Name: user.Name}
+	return GradeResult{Exam: strings.ToUpper(strings.TrimSpace(exam)), Matricula: user.Matricula, Name: user.Name, Tables: []TableResult{}}
 }
 
 func isNotFound(err error) bool {
@@ -712,12 +784,29 @@ func proofCard(card CardResult) bool {
 }
 
 func (c *SheetsClient) tablesForExam(exam string) ([]TableConfig, error) {
-	switch strings.ToLower(strings.TrimSpace(exam)) {
+	switch legacyExamKey(exam) {
 	case "ab1":
 		return c.cfg.AB1Tables, nil
 	case "ab2":
 		return c.cfg.AB2Tables, nil
 	default:
 		return nil, NewHTTPError(400, "avaliacao invalida")
+	}
+}
+
+func legacyExamKey(exam string) string {
+	exam = strings.ToLower(strings.TrimSpace(exam))
+	if exam == "ab1" || exam == "ab2" {
+		return exam
+	}
+	ab1Idx := strings.Index(exam, "ab1")
+	ab2Idx := strings.Index(exam, "ab2")
+	switch {
+	case ab1Idx >= 0 && (ab2Idx < 0 || ab1Idx < ab2Idx):
+		return "ab1"
+	case ab2Idx >= 0:
+		return "ab2"
+	default:
+		return exam
 	}
 }

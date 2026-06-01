@@ -21,7 +21,12 @@ func (c *SheetsClient) LoginIdentity(ctx context.Context, matricula string) (Log
 			if strings.TrimSpace(name) == "" {
 				return LoginIdentity{}, NewHTTPError(401, "não achou o usuário")
 			}
-			return LoginIdentity{Matricula: valueAt(row, matriculaIdx), Name: name, SpreadsheetID: grid.rowSource(rowIdx)}, nil
+			return LoginIdentity{
+				Matricula:     valueAt(row, matriculaIdx),
+				Name:          name,
+				SpreadsheetID: grid.rowSource(rowIdx),
+				SchemaStatus:  grid.rowSchema(rowIdx),
+			}, nil
 		}
 	}
 	return LoginIdentity{}, NewHTTPError(401, "não achou o usuário")

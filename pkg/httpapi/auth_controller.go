@@ -38,7 +38,7 @@ func (AuthController) Login(w http.ResponseWriter, r *http.Request) {
 		app.Error(w, err)
 		return
 	}
-	user := app.SessionUser{Matricula: identity.Matricula, Name: identity.Name, SpreadsheetID: identity.SpreadsheetID}
+	user := app.SessionUser{Matricula: identity.Matricula, Name: identity.Name, SpreadsheetID: identity.SpreadsheetID, SchemaStatus: identity.SchemaStatus}
 	sessions.Set(w, user)
 	app.JSON(w, http.StatusOK, user)
 }

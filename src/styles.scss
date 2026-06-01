@@ -377,7 +377,7 @@ input:focus-visible {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
-  height: 52px;
+  min-height: 52px;
   padding: 5px;
   border: 1px solid var(--border-soft);
   border-radius: 22px;
@@ -392,10 +392,16 @@ input:focus-visible {
 }
 
 .exam-switch button {
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 14px;
   border-radius: 17px;
   color: var(--muted);
   background: transparent;
   font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .exam-switch button.active {
@@ -407,6 +413,33 @@ input:focus-visible {
 :root[data-theme="dark"] .exam-switch button.active {
   background: color-mix(in srgb, var(--panel-solid) 88%, var(--accent-soft));
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22), var(--inner-highlight);
+}
+
+.exam-switch[data-mode="single"] {
+  grid-template-columns: minmax(132px, min(280px, 68%));
+  justify-content: center;
+}
+
+.exam-switch[data-mode="carousel"] {
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.exam-switch[data-mode="carousel"] button {
+  flex: 0 0 clamp(124px, 32%, 188px);
+  scroll-snap-align: center;
+}
+
+.exam-switch[data-mode="carousel"] button:first-child {
+  scroll-snap-align: start;
+}
+
+.exam-switch[data-mode="carousel"] button:last-child {
+  scroll-snap-align: end;
 }
 
 @media (prefers-reduced-motion: reduce) {

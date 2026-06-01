@@ -27,11 +27,18 @@ type v2ActivityConfig struct {
 
 func (c *SheetsClient) gradesForV2(ctx context.Context, exams []string, user SessionUser) (GradeResults, error) {
 	exams = normalizedExams(exams)
+	if len(exams) == 0 {
+		resolved, err := c.v2ActiveExamKeys(ctx)
+		if err != nil {
+			return nil, err
+		}
+		exams = resolved
+	}
 	results := make(GradeResults, len(exams))
 	for _, exam := range exams {
 		result, err := c.gradeForV2(ctx, exam, user)
 		if isNotFound(err) {
-			results[exam] = emptyGradeResult(exam, user)
+			results[exam] = c.emptyGradeResultForV2(ctx, exam, user)
 			continue
 		}
 		if err != nil {
@@ -42,13 +49,51 @@ func (c *SheetsClient) gradesForV2(ctx context.Context, exams []string, user Ses
 	return results, nil
 }
 
-func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user SessionUser) (GradeResult, error) {
-	exam = strings.ToLower(strings.TrimSpace(exam))
-	if exam != "ab1" && exam != "ab2" {
-		return GradeResult{}, NewHTTPError(400, "avaliacao invalida")
+func (c *SheetsClient) v2ActiveExamKeys(ctx context.Context) ([]string, error) {
+	if err := c.loadSheets(ctx, []string{v2ABsSheet}); err != nil {
+		return nil, err
 	}
+	abGrid, err := c.loadSheet(ctx, v2ABsSheet)
+	if err != nil {
+		return nil, err
+	}
+	abs := v2ABs(abGrid)
+	keys := make([]string, 0, len(abs))
+	for _, ab := range abs {
+		if ab.Active {
+			keys = append(keys, ab.Key)
+		}
+	}
+	return keys, nil
+}
 
-	if err := c.loadSheets(ctx, []string{v2ABsSheet, v2ActivitiesSheet, v2SummarySheetName(exam)}); err != nil {
+func (c *SheetsClient) hasV2Schema(ctx context.Context) bool {
+	if err := c.loadSheets(ctx, []string{v2ABsSheet}); err != nil {
+		return false
+	}
+	abGrid, err := c.loadSheet(ctx, v2ABsSheet)
+	return err == nil && len(v2ABs(abGrid)) > 0
+}
+
+func (c *SheetsClient) emptyGradeResultForV2(ctx context.Context, exam string, user SessionUser) GradeResult {
+	result := emptyGradeResult(exam, user)
+	if err := c.loadSheets(ctx, []string{v2ABsSheet}); err != nil {
+		return result
+	}
+	abGrid, err := c.loadSheet(ctx, v2ABsSheet)
+	if err != nil {
+		return result
+	}
+	if ab, found := v2ResolveAB(abGrid, exam); found {
+		result.Exam = ab.Label
+		result.SchemaStatus = abGrid.schemaStatus
+		result.SpreadsheetID = abGrid.spreadsheetID
+	}
+	return result
+}
+
+func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user SessionUser) (GradeResult, error) {
+	if err := c.loadSheets(ctx, []string{v2ABsSheet}); err != nil {
 		return GradeResult{}, err
 	}
 
@@ -56,15 +101,35 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 	if err != nil {
 		return GradeResult{}, err
 	}
-	abLabel, active := v2ABState(abGrid, exam)
+	ab, found := v2ResolveAB(abGrid, exam)
+	if !found {
+		return GradeResult{}, NewHTTPError(400, "avaliacao invalida")
+	}
+	exam = ab.Key
+	abLabel, active := ab.Label, ab.Active
 	if !active {
 		result := emptyGradeResult(exam, user)
+		result.Exam = abLabel
 		result.SchemaStatus = abGrid.schemaStatus
 		result.SpreadsheetID = abGrid.spreadsheetID
 		return result, nil
 	}
 	if abLabel == "" {
 		abLabel = strings.ToUpper(exam)
+	}
+	emptyActiveResult := func() GradeResult {
+		result := emptyGradeResult(exam, user)
+		result.Exam = abLabel
+		result.SchemaStatus = abGrid.schemaStatus
+		result.SpreadsheetID = abGrid.spreadsheetID
+		return result
+	}
+
+	if err := c.loadSheets(ctx, []string{v2ActivitiesSheet, v2SummarySheetName(exam)}); err != nil {
+		if isNotFound(err) || canFallbackToLegacy(err) {
+			return emptyActiveResult(), nil
+		}
+		return GradeResult{}, err
 	}
 
 	activitiesGrid, err := c.loadSheet(ctx, v2ActivitiesSheet)
@@ -78,7 +143,7 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 
 	summaryRowIdx := findStudentRow(summaryGrid, 0, user)
 	if summaryRowIdx < 0 {
-		return GradeResult{}, NewHTTPError(404, "matricula nao encontrada em "+strings.ToUpper(exam))
+		return emptyActiveResult(), nil
 	}
 	summaryRow := summaryGrid.rows[summaryRowIdx]
 	groupValue := valueAt(summaryRow, groupColumn(summaryGrid.headers))
@@ -86,7 +151,7 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 	activities := v2ActivitiesForAB(activitiesGrid, exam)
 	v2BindSummaryColumns(summaryGrid.headers, activities)
 	if len(activities) == 0 {
-		return GradeResult{}, NewHTTPError(404, "atividades nao encontradas para "+strings.ToUpper(exam))
+		return emptyActiveResult(), nil
 	}
 
 	var activitySheets []string
@@ -104,6 +169,7 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 	}
 
 	result := emptyGradeResult(exam, user)
+	result.Exam = abLabel
 	result.SchemaStatus = mergeSchemaStatus(mergeSchemaStatus(abGrid.schemaStatus, activitiesGrid.schemaStatus), summaryGrid.schemaStatus)
 	result.SpreadsheetID = mergeSourceValue(mergeSourceValue(abGrid.spreadsheetID, activitiesGrid.spreadsheetID), summaryGrid.spreadsheetID)
 
@@ -139,33 +205,154 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 		})
 	}
 	if len(result.Tables) == 0 {
-		return GradeResult{}, NewHTTPError(404, "matricula nao encontrada em "+strings.ToUpper(exam))
+		return result, nil
 	}
 	return result, nil
 }
 
 func v2SummarySheetName(exam string) string {
-	return "nota " + strings.ToLower(strings.TrimSpace(exam))
+	return "nota " + normalizeABKey(exam)
 }
 
 func v2ABState(grid *sheetGrid, exam string) (string, bool) {
+	ab, found := v2ResolveAB(grid, exam)
+	if !found {
+		return strings.ToUpper(strings.TrimSpace(exam)), false
+	}
+	return ab.Label, ab.Active
+}
+
+type v2ABConfig struct {
+	Key    string
+	Label  string
+	Active bool
+}
+
+func v2ResolveAB(grid *sheetGrid, exam string) (v2ABConfig, bool) {
+	abs := v2ABs(grid)
+	if len(abs) == 0 {
+		return v2ABConfig{}, false
+	}
+	candidates := v2ABRouteCandidates(exam)
+	if len(candidates) == 0 {
+		return abs[0], true
+	}
+	for _, candidate := range candidates {
+		for _, ab := range abs {
+			if ab.Key == candidate {
+				return ab, true
+			}
+		}
+	}
+	return v2ABConfig{}, false
+}
+
+func v2ABs(grid *sheetGrid) []v2ABConfig {
 	abIdx := firstHeaderIndex(grid.headers, "ab", "avaliacao", "avaliacao bimestral")
 	activeIdx := firstHeaderIndex(grid.headers, "ativo", "ativa", "status", "liberado")
 	labelIdx := firstHeaderIndex(grid.headers, "nome", "label", "rotulo", "titulo")
 	if abIdx < 0 {
 		abIdx = 0
 	}
+	if activeIdx < 0 {
+		activeIdx = inferABStatusColumn(grid, abIdx)
+	}
+	abs := make([]v2ABConfig, 0, len(grid.rows))
+	seen := map[string]bool{}
 	for _, row := range grid.rows {
-		if normalizeABKey(valueAt(row, abIdx)) != normalizeABKey(exam) {
+		ab := v2ABFromRow(row, abIdx, labelIdx, activeIdx)
+		if ab.Key == "" || seen[ab.Key] {
 			continue
 		}
-		label := valueAt(row, labelIdx)
-		if label == "" {
-			label = strings.ToUpper(exam)
-		}
-		return label, activeIdx < 0 || truthySpreadsheetValue(valueAt(row, activeIdx))
+		seen[ab.Key] = true
+		abs = append(abs, ab)
 	}
-	return strings.ToUpper(exam), false
+	return abs
+}
+
+func inferABStatusColumn(grid *sheetGrid, abIdx int) int {
+	limit := len(grid.headers)
+	for _, row := range grid.rows {
+		if len(row) > limit {
+			limit = len(row)
+		}
+	}
+	for colIdx := 0; colIdx < limit; colIdx++ {
+		if colIdx == abIdx {
+			continue
+		}
+		hasStatusValue := false
+		allStatusValues := true
+		for _, row := range grid.rows {
+			value := valueAt(row, colIdx)
+			if value == "" {
+				continue
+			}
+			if !abStatusLikeValue(value) {
+				allStatusValues = false
+				break
+			}
+			hasStatusValue = true
+		}
+		if hasStatusValue && allStatusValues {
+			return colIdx
+		}
+	}
+	return -1
+}
+
+func abStatusLikeValue(value string) bool {
+	normalized := normalizeHeader(value)
+	return normalized == "0" ||
+		normalized == "1" ||
+		normalized == "sim" ||
+		normalized == "s" ||
+		normalized == "nao" ||
+		normalized == "não" ||
+		normalized == "n" ||
+		normalized == "true" ||
+		normalized == "false" ||
+		normalized == "ativo" ||
+		normalized == "ativa" ||
+		normalized == "inativo" ||
+		normalized == "inativa" ||
+		normalized == "lancada" ||
+		normalized == "lançada"
+}
+
+func v2ABFromRow(row []string, abIdx int, labelIdx int, activeIdx int) v2ABConfig {
+	key := normalizeABKey(valueAt(row, abIdx))
+	if key == "" {
+		return v2ABConfig{}
+	}
+	label := valueAt(row, labelIdx)
+	if label == "" {
+		label = valueAt(row, abIdx)
+	}
+	if label == "" {
+		label = strings.ToUpper(key)
+	}
+	return v2ABConfig{Key: key, Label: label, Active: activeIdx < 0 || activeABValue(valueAt(row, activeIdx))}
+}
+
+func v2ABRouteCandidates(exam string) []string {
+	seen := map[string]bool{}
+	var candidates []string
+	add := func(value string) {
+		key := normalizeABKey(value)
+		if key == "" || seen[key] {
+			return
+		}
+		seen[key] = true
+		candidates = append(candidates, key)
+	}
+	add(exam)
+	for _, value := range strings.FieldsFunc(exam, func(r rune) bool {
+		return r == '|' || r == ',' || r == ';' || r == '/' || r == '\\'
+	}) {
+		add(value)
+	}
+	return candidates
 }
 
 func v2ActivitiesForAB(grid *sheetGrid, exam string) []v2ActivityConfig {
@@ -453,6 +640,18 @@ func activeActivityValue(value string) bool {
 	if normalized == "" {
 		return true
 	}
+	return normalized == "1" ||
+		normalized == "sim" ||
+		normalized == "s" ||
+		normalized == "true" ||
+		normalized == "ativo" ||
+		normalized == "ativa" ||
+		normalized == "lancada" ||
+		normalized == "lançada"
+}
+
+func activeABValue(value string) bool {
+	normalized := normalizeHeader(value)
 	return normalized == "1" ||
 		normalized == "sim" ||
 		normalized == "s" ||

@@ -347,23 +347,46 @@ func skippableSpreadsheetReadError(err error) bool {
 }
 
 func (c *SheetsClient) schemaStatusForSpreadsheet(metadata []*sheets.DeveloperMetadata) string {
-	if c.cfg.RuntimeVersion != "v2" {
+	if !c.detectsSpreadsheetSchema() {
 		return ""
 	}
+	runtimeVersion := strings.ToLower(strings.TrimSpace(c.cfg.RuntimeVersion))
 	expectedKey := strings.TrimSpace(c.cfg.MetadataKey)
 	expectedValue := strings.TrimSpace(c.cfg.MetadataValue)
 	if expectedKey == "" || expectedValue == "" {
+		if runtimeVersion == "auto" {
+			return ""
+		}
 		return "legacy"
 	}
+	foundMetadataKey := false
 	for _, item := range metadata {
 		if item == nil {
 			continue
 		}
-		if strings.TrimSpace(item.MetadataKey) == expectedKey && strings.TrimSpace(item.MetadataValue) == expectedValue {
-			return "v2"
+		if strings.TrimSpace(item.MetadataKey) == expectedKey {
+			foundMetadataKey = true
+			if strings.TrimSpace(item.MetadataValue) == expectedValue {
+				return "v2"
+			}
 		}
 	}
-	return "legacy"
+	if foundMetadataKey {
+		return "legacy"
+	}
+	if runtimeVersion == "auto" {
+		return ""
+	}
+	return ""
+}
+
+func (c *SheetsClient) detectsSpreadsheetSchema() bool {
+	switch strings.ToLower(strings.TrimSpace(c.cfg.RuntimeVersion)) {
+	case "v2", "auto":
+		return true
+	default:
+		return false
+	}
 }
 
 func mergeSheetGrid(base *sheetGrid, next *sheetGrid) *sheetGrid {
@@ -382,6 +405,7 @@ func mergeSheetGrid(base *sheetGrid, next *sheetGrid) *sheetGrid {
 	base.rowNoteAuthors = append(base.rowNoteAuthors, next.rowNoteAuthors...)
 	base.rowIndices = append(base.rowIndices, next.rowIndices...)
 	base.rowSources = append(base.rowSources, next.rowSources...)
+	base.rowSchemas = append(base.rowSchemas, next.rowSchemas...)
 	base.spreadsheetID = mergeSourceValue(base.spreadsheetID, next.spreadsheetID)
 	base.schemaStatus = mergeSchemaStatus(base.schemaStatus, next.schemaStatus)
 	return base
@@ -389,8 +413,10 @@ func mergeSheetGrid(base *sheetGrid, next *sheetGrid) *sheetGrid {
 
 func (g *sheetGrid) setRowSource(spreadsheetID string) {
 	g.rowSources = make([]string, len(g.rows))
+	g.rowSchemas = make([]string, len(g.rows))
 	for idx := range g.rowSources {
 		g.rowSources[idx] = spreadsheetID
+		g.rowSchemas[idx] = g.schemaStatus
 	}
 }
 
@@ -399,6 +425,13 @@ func (g *sheetGrid) rowSource(rowIdx int) string {
 		return ""
 	}
 	return g.rowSources[rowIdx]
+}
+
+func (g *sheetGrid) rowSchema(rowIdx int) string {
+	if g == nil || rowIdx < 0 || rowIdx >= len(g.rowSchemas) {
+		return ""
+	}
+	return g.rowSchemas[rowIdx]
 }
 
 func mergeSourceValue(left string, right string) string {

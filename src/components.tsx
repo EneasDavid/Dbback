@@ -85,15 +85,26 @@ export function Topbar({
   );
 }
 
-export function ExamSwitch({ exam, setExam }: { exam: 'ab1' | 'ab2'; setExam: (exam: 'ab1' | 'ab2') => void }) {
+export function ExamSwitch({
+  exam,
+  exams,
+  labels,
+  setExam,
+}: {
+  exam: string;
+  exams: string[];
+  labels: Record<string, string>;
+  setExam: (exam: string) => void;
+}) {
+  if (exams.length === 0) return null;
+  const mode = exams.length === 1 ? 'single' : exams.length === 2 ? 'pair' : 'carousel';
   return (
-    <section className="exam-switch" aria-label="Selecionar avaliacao">
-      <button className={exam === 'ab1' ? 'active' : ''} type="button" onClick={() => setExam('ab1')} aria-pressed={exam === 'ab1'}>
-        AB1
-      </button>
-      <button className={exam === 'ab2' ? 'active' : ''} type="button" onClick={() => setExam('ab2')} aria-pressed={exam === 'ab2'}>
-        AB2
-      </button>
+    <section className="exam-switch" data-mode={mode} aria-label="Selecionar avaliacao">
+      {exams.map((option) => (
+        <button className={exam === option ? 'active' : ''} type="button" onClick={() => setExam(option)} aria-pressed={exam === option} key={option}>
+          {labels[option] || option.toUpperCase()}
+        </button>
+      ))}
     </section>
   );
 }
@@ -190,7 +201,7 @@ export function InlineError({ message }: { message: string }) {
   );
 }
 
-export function EmptyState({ exam }: { exam: 'ab1' | 'ab2' }) {
+export function EmptyState({ exam }: { exam: string }) {
   return (
     <section className="empty-state" role="status">
       <BookOpenCheck size={24} />

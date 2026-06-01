@@ -39,7 +39,7 @@ func LoadConfig() Config {
 	return Config{
 		SpreadsheetID:  firstString(spreadsheetIDs),
 		SpreadsheetIDs: spreadsheetIDs,
-		RuntimeVersion: strings.ToLower(firstNonEmpty(os.Getenv("SHEETS_RUNTIME_VERSION"), "v1")),
+		RuntimeVersion: strings.ToLower(firstNonEmpty(os.Getenv("SHEETS_RUNTIME_VERSION"), "auto")),
 		MetadataKey:    firstNonEmpty(os.Getenv("GOOGLE_SHEET_METADATA_KEY"), "dbback_schema"),
 		MetadataValue:  firstNonEmpty(os.Getenv("GOOGLE_SHEET_METADATA_VALUE"), "v2"),
 		LoginSheet:     firstNonEmpty(os.Getenv("LOGIN_SHEET_NAME"), "Base de dados"),

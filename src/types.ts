@@ -55,7 +55,8 @@ export type SessionUser = {
   matricula: string;
   name: string;
   spreadsheetId?: string;
+  schemaStatus?: string;
 };
 
-export type GradeCache = Partial<Record<'ab1' | 'ab2', GradeResult>>;
-export type GradeResults = Record<'ab1' | 'ab2', GradeResult>;
+export type GradeCache = Record<string, GradeResult | undefined>;
+export type GradeResults = Record<string, GradeResult>;
