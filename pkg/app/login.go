@@ -16,7 +16,7 @@ func (c *SheetsClient) LoginIdentity(ctx context.Context, matricula string) (Log
 		return LoginIdentity{}, NewHTTPError(503, "a aba de login precisa ter colunas de matricula e nome")
 	}
 	for rowIdx, row := range grid.rows {
-		if matriculaIdx < len(row) && normalizeID(row[matriculaIdx]) == normalizeID(matricula) {
+		if matriculaIdx < len(row) && sameLookupValue(row[matriculaIdx], matricula, false) {
 			name := valueAt(row, nameIdx)
 			if strings.TrimSpace(name) == "" {
 				return LoginIdentity{}, NewHTTPError(401, "não achou o usuário")

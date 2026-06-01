@@ -34,7 +34,37 @@ func sameLookupValue(left string, right string, person bool) bool {
 	if person {
 		return normalizePerson(left) == normalizePerson(right)
 	}
+	if sameNumericID(left, right) {
+		return true
+	}
 	return normalizeID(left) == normalizeID(right)
+}
+
+func sameNumericID(left string, right string) bool {
+	leftValue, leftOK := parseNumericID(left)
+	rightValue, rightOK := parseNumericID(right)
+	return leftOK && rightOK && leftValue == rightValue
+}
+
+func parseNumericID(value string) (int64, bool) {
+	text := strings.TrimSpace(value)
+	if text == "" {
+		return 0, false
+	}
+	text = strings.ReplaceAll(text, " ", "")
+	text = strings.ReplaceAll(text, ",", ".")
+	if parsed, err := strconv.ParseInt(text, 10, 64); err == nil {
+		return parsed, true
+	}
+	floatValue, err := strconv.ParseFloat(text, 64)
+	if err != nil {
+		return 0, false
+	}
+	intValue := int64(floatValue)
+	if floatValue != float64(intValue) {
+		return 0, false
+	}
+	return intValue, true
 }
 
 func matchesUser(row []string, nameIdx int, matriculaIdx int, user SessionUser) bool {
