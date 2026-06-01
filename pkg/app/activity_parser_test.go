@@ -80,9 +80,37 @@ func TestActivityAB1DetailsUseConfiguredScoreDivisor(t *testing.T) {
 	if got := table.Cards[0].Value; got != "0,7" {
 		t.Fatalf("card value = %q, want 0,7", got)
 	}
+	if got := table.Cards[0].DisplayValue; got != "0,7/1,00" {
+		t.Fatalf("card display value = %q, want 0,7/1,00", got)
+	}
 	detail := table.Cards[0].Details[0]
 	if detail.Value != "0,7" || detail.Max != 1 || detail.DisplayScore != "0,7 / 1" || detail.Ratio != 70 {
 		t.Fatalf("unexpected scaled detail: %#v", detail)
+	}
+}
+
+func TestActivityDetailsKeepSpreadsheetSubtopicLabel(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Grupo", ""), cellData("organização e qualidade do texto", "")),
+		rowData(cellData("Nota maxima", ""), cellData("10", "")),
+		rowData(cellData("Alice", ""), cellData("7", "")),
+	}, nil)
+
+	table, found, err := parseActivityRubric(grid, TableConfig{
+		Key:          "at1",
+		Label:        "Atividade 1",
+		SheetName:    "AT. 1",
+		Kind:         "activity",
+		ScoreDivisor: 10,
+	}, SessionUser{Name: "Alice", Matricula: "123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("student row was not found")
+	}
+	if got := table.Cards[0].Details[0].Label; got != "organização e qualidade do texto" {
+		t.Fatalf("detail label = %q, want spreadsheet label", got)
 	}
 }
 
@@ -170,6 +198,21 @@ func TestHumanizeLabelDoesNotTreatQualidadeAsQuestion(t *testing.T) {
 	}
 	if got := humanizeLabel("q.1"); got != "Q.1" {
 		t.Fatalf("humanizeLabel q.1 = %q", got)
+	}
+}
+
+func TestQuestionLetterHeadersAreRecognized(t *testing.T) {
+	if !isQuestionLabel("Questão C") {
+		t.Fatal("Questão C should be recognized as a question detail")
+	}
+	if got := cardLabel("Questão C"); got != "Questão C" {
+		t.Fatalf("cardLabel Questão C = %q", got)
+	}
+	if got := inferMaxForLabel("Questão C"); got != 1.5 {
+		t.Fatalf("inferMaxForLabel Questão C = %v, want 1.5", got)
+	}
+	if got := compareDetailLabels("Questão C", "Questão B"); got <= 0 {
+		t.Fatalf("compareDetailLabels Questão C vs Questão B = %d, want positive", got)
 	}
 }
 

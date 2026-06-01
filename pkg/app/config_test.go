@@ -95,6 +95,26 @@ func TestLoadConfigScoreDivisors(t *testing.T) {
 	}
 }
 
+func TestLoadConfigActivityLabelsAreUserFacing(t *testing.T) {
+	cfg := LoadConfig()
+	want := map[string]string{
+		"at1": "Atividade 1",
+		"at2": "Atividade 2",
+		"at3": "Atividade 3",
+		"at4": "Atividade 4",
+	}
+
+	for _, table := range append(cfg.AB1Tables, cfg.AB2Tables...) {
+		expected, ok := want[table.Key]
+		if !ok {
+			continue
+		}
+		if table.Label != expected {
+			t.Fatalf("%s label = %q, want %q", table.Key, table.Label, expected)
+		}
+	}
+}
+
 func TestLoadConfigDocsCredentials(t *testing.T) {
 	t.Setenv("DOCS_USERNAME", "docs")
 	t.Setenv("DOCS_PASSWORD", "senha")

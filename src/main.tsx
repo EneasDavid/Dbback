@@ -3,16 +3,16 @@ import type { FormEvent, MutableRefObject } from 'react';
 import { createRoot } from 'react-dom/client';
 import { api } from './api';
 import { EmptyState, ExamSwitch, GradeCard, InlineError, LoginView, SummaryTable, Topbar } from './components';
-import type { GradeCache, GradeCard as GradeCardPayload, GradeDetail, GradeResult, GradeResults, GradeTable, SessionUser } from './types';
+import type { GradeCache, GradeCard as GradeCardPayload, GradeDetail, GradeResult, GradeTable, SessionUser } from './types';
 import './styles.scss';
 
-const CACHE_VERSION = 'v11';
+const CACHE_VERSION = 'v13';
 const EMPTY_STATE_MS = 5_000;
 const LAST_MATRICULA_KEY = 'dbback-last-matricula';
-const THEME_KEY = 'dbback-theme';
 const THEME_QUERY = '(prefers-color-scheme: dark)';
 
 type Theme = 'light' | 'dark';
+type Exam = 'ab1' | 'ab2';
 
 type LegacyColumn = {
   key?: string;
@@ -36,23 +36,18 @@ type LegacyGradeTable = GradeTable & {
   items?: LegacyItem[];
 };
 
-function storedThemeOverride(): Theme | null {
-  const stored = window.localStorage.getItem(THEME_KEY);
-  return stored === 'light' || stored === 'dark' ? stored : null;
-}
-
 function systemTheme(): Theme {
   return window.matchMedia?.(THEME_QUERY).matches ? 'dark' : 'light';
 }
 
 function initialTheme(): Theme {
-  return storedThemeOverride() ?? systemTheme();
+  return systemTheme();
 }
 
 function App() {
   const [matricula, setMatricula] = useState(() => window.localStorage.getItem(LAST_MATRICULA_KEY) || '');
   const [session, setSession] = useState<SessionUser | null>(null);
-  const [exam, setExam] = useState<'ab1' | 'ab2'>('ab1');
+  const [exam, setExam] = useState<Exam>('ab1');
   const [theme, setTheme] = useState<Theme>(() => initialTheme());
   const [grades, setGrades] = useState<GradeCache>({});
   const gradesRef = useRef<GradeCache>({});
@@ -80,16 +75,16 @@ function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#07111f' : '#eef2f8');
+    document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => {
+      meta.setAttribute('content', theme === 'dark' ? '#07111f' : '#eef2f8');
+    });
   }, [theme]);
 
   useEffect(() => {
     const media = window.matchMedia?.(THEME_QUERY);
     if (!media) return;
 
-    const syncWithSystem = () => {
-      if (!storedThemeOverride()) setTheme(media.matches ? 'dark' : 'light');
-    };
+    const syncWithSystem = () => setTheme(media.matches ? 'dark' : 'light');
     syncWithSystem();
 
     if (media.addEventListener) {
@@ -131,15 +126,26 @@ function App() {
     const currentSession = session;
     const cacheKey = gradeCacheKey(currentSession.matricula);
     const cached = readGradeCache(cacheKey);
-    const hasAnyCachedGrade = Object.values({ ...cached, ...gradesRef.current }).some(hasRenderableGrade);
+    const cachedGrades = { ...cached, ...gradesRef.current };
+    const hasCachedVisibleGrade = hasRenderableGrade(cachedGrades[exam]);
 
-    async function fetchAllGrades() {
-      setLoading(!hasAnyCachedGrade);
+    async function fetchVisibleGrade() {
+      setLoading(!hasCachedVisibleGrade);
       setError('');
       try {
-        const result = normalizeGradeCache(await api<GradeResults>('/api/grades/all'));
+        const result = normalizeGradeResult(await api<GradeResult>(`/api/grades?exam=${exam}&refresh=1`));
         if (cancelled) return;
-        setGrades((current) => storeGradeCache(current, result, cacheKey, gradesRef));
+        setGrades((current) => storeGradeCache(current, { [exam]: result }, cacheKey, gradesRef));
+        const otherExam: Exam = exam === 'ab1' ? 'ab2' : 'ab1';
+        if (!hasRenderableGrade(gradesRef.current[otherExam])) {
+          api<GradeResult>(`/api/grades?exam=${otherExam}`)
+            .then((otherResult) => {
+              if (!cancelled) {
+                setGrades((current) => storeGradeCache(current, { [otherExam]: normalizeGradeResult(otherResult) }, cacheKey, gradesRef));
+              }
+            })
+            .catch(() => null);
+        }
       } catch (err) {
         if (cancelled) return;
         if (isSessionExpired(err)) {
@@ -149,7 +155,7 @@ function App() {
           setSession(null);
           return;
         }
-        if (!hasAnyCachedGrade) {
+        if (!hasCachedVisibleGrade) {
           setError(err instanceof Error ? err.message : 'Erro ao carregar as notas.');
         }
       } finally {
@@ -157,12 +163,12 @@ function App() {
       }
     }
 
-    void fetchAllGrades();
+    void fetchVisibleGrade();
 
     return () => {
       cancelled = true;
     };
-  }, [session]);
+  }, [session, exam]);
 
   const visibleTables = useMemo(() => grades[exam]?.tables ?? [], [grades, exam]);
 
@@ -197,8 +203,12 @@ function App() {
         method: 'POST',
         body: JSON.stringify({ matricula: normalizedMatricula }),
       });
-      window.localStorage.setItem(LAST_MATRICULA_KEY, result.matricula || normalizedMatricula);
-      clearClientSession(result.matricula || normalizedMatricula);
+      const previousMatricula = window.localStorage.getItem(LAST_MATRICULA_KEY) || '';
+      const resolvedMatricula = result.matricula || normalizedMatricula;
+      if (matriculasDiffer(previousMatricula, resolvedMatricula)) {
+        clearClientSession();
+      }
+      window.localStorage.setItem(LAST_MATRICULA_KEY, resolvedMatricula);
       gradesRef.current = {};
       setGrades({});
       setActiveDetail(null);
@@ -221,7 +231,6 @@ function App() {
   }
 
   function handleThemeChange(nextTheme: Theme) {
-    window.localStorage.setItem(THEME_KEY, nextTheme);
     setTheme(nextTheme);
   }
 
@@ -376,12 +385,13 @@ function legacyCards(table: LegacyGradeTable): GradeCardPayload[] {
     if (!total) return [];
     const label = asText(total.label) || 'Nota';
     const value = asText(total.value);
+    const score = parseScore(value);
     return [
       {
         key: asText(total.key) || 'nota',
         label,
         value,
-        displayValue: displayValue(label, value),
+        displayValue: score !== null ? `${formatScore(score)}/${formatScoreFixed(1, 2)}` : displayValue(label, value),
         tone: scoreTone(label, value),
         comment: total.comment,
         commentAuthor: total.commentAuthor,
@@ -417,7 +427,7 @@ function legacyDetails(items: LegacyItem[]): GradeDetail[] {
       const ratio = !pending && obtained !== null && max > 0 ? Math.min((obtained / max) * 100, 100) : 0;
       return {
         key: asText(item.key) || `item-${index}`,
-        label: humanizeLabel(asText(item.subtopic)),
+        label: asText(item.subtopic).trim(),
         value,
         max,
         displayScore: detailDisplayScore(value, max, pending),
@@ -542,22 +552,12 @@ function normalized(value: string) {
     .trim();
 }
 
-function humanizeLabel(label: string) {
-  return label
-    .replace(/\b(at\.?\s*\d+)\b/i, (match) => match.toUpperCase().replace('AT', 'AT.'))
-    .replace(/\bq\.?\s*(\d+)\b/i, (match) => match.toUpperCase().replace('Q', 'Q.'))
-    .replace(/\bsgbd\b/i, 'SGBD')
-    .replace(/\bcrud\b/i, 'CRUD')
-    .replace(/\bdataset\b/i, 'Dataset')
-    .replace(/\bnota\b/i, 'Nota')
-    .replace(/\bm[ée]dia\b/i, 'Média')
-    .replace(/\btotal\b/i, 'Total')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 function asText(value: unknown) {
   return typeof value === 'string' ? value : '';
+}
+
+function formatScoreFixed(value: number, fractionDigits: number) {
+  return value.toLocaleString('pt-BR', { maximumFractionDigits: fractionDigits, minimumFractionDigits: fractionDigits });
 }
 
 function gradesStorageSet(cacheKey: string, grades: GradeCache) {
@@ -579,6 +579,10 @@ function clearClientSession(matricula?: string) {
       window.sessionStorage.removeItem(key);
     }
   }
+}
+
+function matriculasDiffer(left: string, right: string) {
+  return left.trim() !== '' && right.trim() !== '' && left.trim() !== right.trim();
 }
 
 function isSessionExpired(error: unknown) {

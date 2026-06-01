@@ -171,3 +171,7 @@ func formatNumber(value float64) string {
 	text = strings.TrimRight(strings.TrimRight(text, "0"), ".")
 	return strings.ReplaceAll(text, ".", ",")
 }
+
+func formatNumberFixed(value float64, precision int) string {
+	return strings.ReplaceAll(fmt.Sprintf("%.*f", precision, value), ".", ",")
+}

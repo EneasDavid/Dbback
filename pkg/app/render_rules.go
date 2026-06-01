@@ -45,7 +45,7 @@ func activityDetails(items []activityItem, divisor float64) []DetailResult {
 			continue
 		}
 		maximum, _ := parseScore(item.NotaMaxima)
-		detail := scaledScoreDetail(item.Key, humanizeLabel(item.Subtopic), item.NotaAlcancada, maximum, divisor)
+		detail := scaledScoreDetail(item.Key, strings.TrimSpace(item.Subtopic), item.NotaAlcancada, maximum, divisor)
 		detail.Comment = item.Comment
 		detail.CommentAuthor = item.CommentAuthor
 		details = append(details, detail)
@@ -268,13 +268,13 @@ func activityLabel(label string) string {
 	normalized := normalizeHeader(label)
 	switch {
 	case strings.HasPrefix(normalized, "at."):
-		return "AT. " + strings.TrimSpace(strings.TrimPrefix(normalized, "at."))
+		return "Atividade " + strings.TrimSpace(strings.TrimPrefix(normalized, "at."))
 	case strings.HasPrefix(normalized, "at "):
-		return "AT. " + strings.TrimSpace(strings.TrimPrefix(normalized, "at "))
+		return "Atividade " + strings.TrimSpace(strings.TrimPrefix(normalized, "at "))
 	case strings.Contains(normalized, "atividade"):
 		suffix := strings.TrimSpace(strings.TrimPrefix(normalized, "atividade"))
 		if suffix != "" {
-			return "AT. " + suffix
+			return "Atividade " + suffix
 		}
 	}
 	return strings.ToUpper(strings.TrimSpace(label))
@@ -283,6 +283,8 @@ func activityLabel(label string) string {
 func questionLabel(label string) string {
 	label = normalizeHeader(label)
 	switch {
+	case strings.HasPrefix(label, "questao "):
+		return "Questão " + strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(label, "questao ")))
 	case strings.HasPrefix(label, "q."):
 		return strings.ToUpper(label)
 	case strings.HasPrefix(label, "q"):
@@ -294,6 +296,9 @@ func questionLabel(label string) string {
 
 func isQuestionLabel(label string) bool {
 	label = normalizeHeader(label)
+	if strings.HasPrefix(label, "questao ") {
+		return true
+	}
 	if strings.HasPrefix(label, "q.") {
 		return true
 	}
@@ -426,6 +431,11 @@ func inferMaxForLabel(label string) float64 {
 		"crud":         1,
 		"apresentacao": 2,
 	}
+	if key := questionScoreKey(normalized); key != "" {
+		if value, ok := values[key]; ok {
+			return value
+		}
+	}
 	for key, value := range values {
 		if strings.Contains(normalized, key) {
 			return value
@@ -438,6 +448,12 @@ func compareDetailLabels(left string, right string) int {
 	order := []string{"organizacao", "q.1", "q.2", "q.3", "q.4", "q.5", "q.6", "semana 1", "semana 2", "semana 3", "semana 4", "sgbd", "dataset", "crud", "apresentacao", "referencias", "discussao"}
 	leftLabel := normalizeHeader(left)
 	rightLabel := normalizeHeader(right)
+	if key := questionScoreKey(leftLabel); key != "" {
+		leftLabel = key
+	}
+	if key := questionScoreKey(rightLabel); key != "" {
+		rightLabel = key
+	}
 	leftIdx := orderIndex(order, leftLabel)
 	rightIdx := orderIndex(order, rightLabel)
 	if leftIdx != rightIdx {
@@ -450,6 +466,37 @@ func compareDetailLabels(left string, right string) int {
 		return leftIdx - rightIdx
 	}
 	return strings.Compare(leftLabel, rightLabel)
+}
+
+func questionScoreKey(label string) string {
+	label = normalizeHeader(label)
+	label = strings.TrimSpace(strings.TrimPrefix(label, "questao"))
+	label = strings.TrimSpace(strings.TrimPrefix(label, "q."))
+	label = strings.TrimSpace(strings.TrimPrefix(label, "q"))
+	label = strings.Trim(label, ". ")
+	if label == "" {
+		return ""
+	}
+	if len([]rune(label)) == 1 {
+		switch label {
+		case "a":
+			return "q.1"
+		case "b":
+			return "q.2"
+		case "c":
+			return "q.3"
+		case "d":
+			return "q.4"
+		case "e":
+			return "q.5"
+		case "f":
+			return "q.6"
+		}
+	}
+	if _, ok := parseNumber(label); ok {
+		return "q." + label
+	}
+	return ""
 }
 
 func orderIndex(order []string, label string) int {

@@ -146,7 +146,7 @@ func rubricLabel(grid *sheetGrid, maxRowIdx int, colIdx int) string {
 func activityTotalCard(items []activityItem, details []DetailResult) CardResult {
 	for _, item := range items {
 		if normalizeHeader(item.Subtopic) == "total" {
-			return makeCard("nota", "Nota", activityScore(item.NotaAlcancada, item.NotaMaxima), item.Comment, item.CommentAuthor, details)
+			return makeActivityScoreCard(activityScore(item.NotaAlcancada, item.NotaMaxima), item.Comment, item.CommentAuthor, details)
 		}
 	}
 	total := 0.0
@@ -165,9 +165,17 @@ func activityTotalCard(items []activityItem, details []DetailResult) CardResult 
 		return makeCard("nota", "Nota", "", "", "", details)
 	}
 	if maximum > 0 {
-		return makeCard("nota", "Nota", formatNumber(total/maximum), "", "", details)
+		return makeActivityScoreCard(formatNumber(total/maximum), "", "", details)
 	}
-	return makeCard("nota", "Nota", formatNumber(total), "", "", details)
+	return makeActivityScoreCard(formatNumber(total), "", "", details)
+}
+
+func makeActivityScoreCard(value string, comment string, commentAuthor string, details []DetailResult) CardResult {
+	card := makeCard("nota", "Nota", value, comment, commentAuthor, details)
+	if score, ok := parseScore(value); ok {
+		card.DisplayValue = formatNumber(score) + "/" + formatNumberFixed(1, 2)
+	}
+	return card
 }
 
 func activityScore(value string, maximum string) string {

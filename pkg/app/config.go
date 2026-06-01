@@ -35,13 +35,13 @@ func LoadConfig() Config {
 		SpreadsheetID: strings.TrimSpace(os.Getenv("GOOGLE_SHEET_ID")),
 		LoginSheet:    firstNonEmpty(os.Getenv("LOGIN_SHEET_NAME"), "Base de dados"),
 		AB1Tables: []TableConfig{
-			tableFromEnv("at1", "AT. 1", "SHEET_AB1_PESQUISA", "AT. 1", "activity", 10),
-			tableFromEnv("at2", "AT. 2", "SHEET_AB1_ARTIGO", "AT. 2", "activity", 10),
-			tableFromEnv("at3", "AT. 3", "SHEET_AB1_LISTA", "AT. 3", "activity", 10),
+			tableFromEnv("at1", "Atividade 1", "SHEET_AB1_PESQUISA", "AT. 1", "activity", 10),
+			tableFromEnv("at2", "Atividade 2", "SHEET_AB1_ARTIGO", "AT. 2", "activity", 10),
+			tableFromEnv("at3", "Atividade 3", "SHEET_AB1_LISTA", "AT. 3", "activity", 10),
 			tableFromEnv("prova", "Prova AB1", "SHEET_AB1_PROVA", firstNonEmpty(os.Getenv("SHEET_AB1_NAME"), "Notas AB1"), "summary", 1),
 		},
 		AB2Tables: []TableConfig{
-			tableFromEnv("at4", "AT. 4", "SHEET_AB2_LISTA", "AT. 4", "activity", 10),
+			tableFromEnv("at4", "Atividade 4", "SHEET_AB2_LISTA", "AT. 4", "activity", 10),
 			tableFromEnv("projeto", "Projeto AB2", "SHEET_AB2_PROJETO", firstNonEmpty(os.Getenv("SHEET_AB2_NAME"), "Projeto AB2"), "project", 1),
 		},
 		SessionSecret: os.Getenv("SESSION_SECRET"),
