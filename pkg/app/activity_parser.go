@@ -165,7 +165,7 @@ func activityTotalCard(items []activityItem, details []DetailResult) CardResult 
 		return makeCard("nota", "Nota", "", "", "", details)
 	}
 	if maximum > 0 {
-		return makeActivityScoreCard(formatNumber(total/maximum), "", "", details)
+		return makeActivityScoreCard(normalizedScore(formatNumber(total), maximum, 1), "", "", details)
 	}
 	return makeActivityScoreCard(formatNumber(total), "", "", details)
 }
@@ -187,8 +187,5 @@ func activityScore(value string, maximum string) string {
 	if !ok || maxScore == 0 {
 		return value
 	}
-	if maxScore == 10 {
-		return formatNumber(score / 10)
-	}
-	return formatNumber(score / maxScore)
+	return normalizedScore(formatNumber(score), maxScore, 1)
 }

@@ -6,7 +6,7 @@ import { EmptyState, ExamSwitch, GradeCard, InlineError, LoginView, SummaryTable
 import type { GradeCache, GradeCard as GradeCardPayload, GradeDetail, GradeResult, GradeTable, SessionUser } from './types';
 import './styles.scss';
 
-const CACHE_VERSION = 'v15';
+const CACHE_VERSION = 'v16';
 const EMPTY_STATE_MS = 5_000;
 const LAST_MATRICULA_KEY = 'dbback-last-matricula';
 const THEME_QUERY = '(prefers-color-scheme: dark)';
@@ -54,6 +54,7 @@ function App() {
   const gradesRef = useRef<GradeCache>({});
   const [activeDetail, setActiveDetail] = useState<{ tableKey: string; cardKey: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [gradesRefreshing, setGradesRefreshing] = useState(false);
   const [showEmptyState, setShowEmptyState] = useState(false);
   const [error, setError] = useState('');
 
@@ -131,6 +132,7 @@ function App() {
     const hasCachedVisibleGrade = hasRenderableGrade(cachedGrades[exam]);
 
     async function fetchVisibleGrade() {
+      setGradesRefreshing(true);
       setLoading(!hasCachedVisibleGrade);
       setError('');
       try {
@@ -138,7 +140,7 @@ function App() {
         if (cancelled) return;
         const keys = gradeKeys(allResults);
         setExamOrder(keys);
-        setGrades((current) => storeGradeCache(current, allResults, cacheKey, gradesRef));
+        setGrades((current) => replaceGradeCache(current, allResults, cacheKey, gradesRef));
         if (keys.length > 0 && !keys.includes(exam)) {
           setExam(keys[0]);
         }
@@ -155,7 +157,10 @@ function App() {
           setError(err instanceof Error ? err.message : 'Erro ao carregar as notas.');
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setGradesRefreshing(false);
+        }
       }
     }
 
@@ -259,7 +264,7 @@ function App() {
   return (
     <main className="shell">
       <Topbar session={session} theme={theme} setTheme={handleThemeChange} onLogout={handleLogout} />
-      <ExamSwitch exam={exam} exams={availableExams} labels={examLabels} carousel={useExamCarousel} setExam={setExam} />
+      {!gradesRefreshing && <ExamSwitch exam={exam} exams={availableExams} labels={examLabels} carousel={useExamCarousel} setExam={setExam} />}
 
       {error && <InlineError message={error} />}
       {loading && <div className="loading" role="status" aria-live="polite">Carregando notas...</div>}
@@ -291,6 +296,18 @@ function storeGradeCache(
 ) {
   const normalizedIncoming = normalizeGradeCache(incoming);
   const next = { ...current, ...normalizedIncoming };
+  gradesStorageSet(cacheKey, next);
+  gradesRef.current = next;
+  return JSON.stringify(current) === JSON.stringify(next) ? current : next;
+}
+
+function replaceGradeCache(
+  current: GradeCache,
+  incoming: GradeCache,
+  cacheKey: string,
+  gradesRef: MutableRefObject<GradeCache>,
+) {
+  const next = normalizeGradeCache(incoming);
   gradesStorageSet(cacheKey, next);
   gradesRef.current = next;
   return JSON.stringify(current) === JSON.stringify(next) ? current : next;

@@ -60,6 +60,9 @@ func (c *SheetsClient) v2ExamKeys(ctx context.Context) ([]string, error) {
 	abs := v2ABs(abGrid)
 	keys := make([]string, 0, len(abs))
 	for _, ab := range abs {
+		if !ab.Active {
+			continue
+		}
 		keys = append(keys, ab.Key)
 	}
 	return keys, nil
@@ -175,7 +178,7 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 		if !v2ActivityLaunched(summaryRow, activity) {
 			continue
 		}
-		table, found, err := c.v2ActivityTable(ctx, activity, summaryRow, groupValue, user)
+		table, found, err := c.v2ActivityTable(ctx, activity, summaryGrid, summaryRowIdx, groupValue, user)
 		if err != nil {
 			if canFallbackToLegacy(err) {
 				continue
@@ -413,30 +416,34 @@ func v2ActivityLaunched(summaryRow []string, activity v2ActivityConfig) bool {
 	return normalizeHeader(value) != "" && !strings.Contains(normalizeHeader(value), v2NotLaunchedText)
 }
 
-func (c *SheetsClient) v2ActivityTable(ctx context.Context, activity v2ActivityConfig, summaryRow []string, groupValue string, user SessionUser) (TableResult, bool, error) {
+func (c *SheetsClient) v2ActivityTable(ctx context.Context, activity v2ActivityConfig, summaryGrid *sheetGrid, summaryRowIdx int, groupValue string, user SessionUser) (TableResult, bool, error) {
+	summaryRow := summaryGrid.rows[summaryRowIdx]
 	grid, err := c.loadSheet(ctx, activity.SheetName)
 	if err != nil {
 		if canFallbackToLegacy(err) {
-			return v2ActivitySummaryTable(activity, summaryRow), true, nil
+			return v2ActivitySummaryTable(activity, summaryGrid, summaryRowIdx), true, nil
 		}
 		return TableResult{}, false, err
 	}
 	rowIdx := v2ActivityRow(grid, groupValue, user)
-	if rowIdx < 0 {
-		return v2ActivitySummaryTable(activity, summaryRow), true, nil
-	}
 
 	maxRowIdx := findMaxRow(grid.rows)
+	criterionColumns := v2CriterionColumns(grid, maxRowIdx, rowIdx)
+	totalMax := v2TotalMaximum(grid, maxRowIdx, criterionColumns)
 	items := v2ActivityItems(grid, maxRowIdx, rowIdx, activity.Weight)
 	if len(items) == 0 {
-		return v2ActivitySummaryTable(activity, summaryRow), true, nil
+		return v2ActivitySummaryTable(activity, summaryGrid, summaryRowIdx), true, nil
 	}
 	details := activityDetails(items, 1)
 	score := valueAt(summaryRow, activity.SummaryCol)
-	if parsed, ok := parseNumber(score); ok && parsed > activity.Weight && activity.Weight > 0 {
-		score = formatNumber(parsed / activity.Weight)
+	if totalMax > 0 && !isPendingValue(score) {
+		score = normalizedScore(score, totalMax, activity.Weight)
 	}
-	card := makeCard("nota", "Nota", score, "", "", details)
+	if isPendingValue(score) {
+		score = v2ActivityScoreFromItems(items)
+	}
+	comment, author := v2SummaryActivityComment(summaryGrid, summaryRowIdx, activity)
+	card := makeCard("nota", "Nota", score, comment, author, details)
 	card.DisplayValue = formatScoreForWeight(score, activity.Weight)
 	return TableResult{
 		Key:           activity.Key,
@@ -451,9 +458,38 @@ func (c *SheetsClient) v2ActivityTable(ctx context.Context, activity v2ActivityC
 	}, true, nil
 }
 
-func v2ActivitySummaryTable(activity v2ActivityConfig, summaryRow []string) TableResult {
+func v2ActivityScoreFromItems(items []activityItem) string {
+	total := 0.0
+	hasAny := false
+	for _, item := range items {
+		if normalizeHeader(item.Subtopic) == "total" {
+			if score, ok := parseScore(item.NotaAlcancada); ok {
+				return formatScore(score)
+			}
+			continue
+		}
+		score, ok := parseScore(item.NotaAlcancada)
+		if !ok {
+			continue
+		}
+		total += score
+		hasAny = true
+	}
+	if !hasAny {
+		return ""
+	}
+	return formatScore(total)
+}
+
+func v2SummaryActivityComment(summaryGrid *sheetGrid, summaryRowIdx int, activity v2ActivityConfig) (string, string) {
+	return commentAt(rowNotesAt(summaryGrid, summaryRowIdx), rowNoteAuthorsAt(summaryGrid, summaryRowIdx), activity.SummaryCol)
+}
+
+func v2ActivitySummaryTable(activity v2ActivityConfig, summaryGrid *sheetGrid, summaryRowIdx int) TableResult {
+	summaryRow := summaryGrid.rows[summaryRowIdx]
 	score := valueAt(summaryRow, activity.SummaryCol)
-	card := makeCard("nota", "Nota", score, "", "", nil)
+	comment, author := v2SummaryActivityComment(summaryGrid, summaryRowIdx, activity)
+	card := makeCard("nota", "Nota", score, comment, author, nil)
 	card.DisplayValue = formatScoreForWeight(score, activity.Weight)
 	return TableResult{
 		Key:           activity.Key,
@@ -486,12 +522,14 @@ func v2ActivityItems(grid *sheetGrid, maxRowIdx int, studentRowIdx int, weight f
 	totalMax := v2TotalMaximum(grid, maxRowIdx, criterionColumns)
 	for _, colIdx := range criterionColumns {
 		maximum := v2CriterionMaximum(grid, maxRowIdx, colIdx)
-		value := valueAt(grid.rows[studentRowIdx], colIdx)
+		value := ""
+		if studentRowIdx >= 0 && studentRowIdx < len(grid.rows) {
+			value = valueAt(grid.rows[studentRowIdx], colIdx)
+		}
 		if totalMax > 0 && weight > 0 {
-			if parsed, ok := parseNumber(value); ok {
-				value = formatNumber((parsed / totalMax) * weight)
-			}
-			maximum = (maximum / totalMax) * weight
+			normalizedMax := normalizedMaximum(maximum, totalMax, weight)
+			value = normalizedScore(value, maximum, normalizedMax)
+			maximum = normalizedMax
 		}
 		comment, author := activityItemComment(grid, maxRowIdx, studentRowIdx, colIdx)
 		items = append(items, activityItem{
@@ -512,8 +550,11 @@ func v2CriterionColumns(grid *sheetGrid, maxRowIdx int, studentRowIdx int) []int
 		if !shouldShowV2Criterion(valueAt(grid.headers, colIdx)) {
 			continue
 		}
-		value := valueAt(grid.rows[studentRowIdx], colIdx)
-		comment := noteAt(rowNotesAt(grid, studentRowIdx), colIdx)
+		value := ""
+		if studentRowIdx >= 0 && studentRowIdx < len(grid.rows) {
+			value = valueAt(grid.rows[studentRowIdx], colIdx)
+		}
+		comment, _ := activityItemComment(grid, maxRowIdx, studentRowIdx, colIdx)
 		if v2CriterionMaximum(grid, maxRowIdx, colIdx) <= 0 && value == "" && comment == "" {
 			continue
 		}

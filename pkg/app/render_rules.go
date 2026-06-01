@@ -101,6 +101,24 @@ func scoreDetail(key string, label string, value string, maximum float64) Detail
 	}
 }
 
+func normalizedScore(value string, sourceMaximum float64, targetMaximum float64) string {
+	score, ok := parseScore(value)
+	if !ok || sourceMaximum <= 0 || targetMaximum <= 0 {
+		return strings.TrimSpace(value)
+	}
+	if score > sourceMaximum {
+		score = sourceMaximum
+	}
+	return formatScore((score / sourceMaximum) * targetMaximum)
+}
+
+func normalizedMaximum(sourceMaximum float64, totalMaximum float64, targetMaximum float64) float64 {
+	if sourceMaximum <= 0 || totalMaximum <= 0 || targetMaximum <= 0 {
+		return sourceMaximum
+	}
+	return (sourceMaximum / totalMaximum) * targetMaximum
+}
+
 func scaledScoreDetail(key string, label string, value string, maximum float64, divisor float64) DetailResult {
 	if divisor <= 1 {
 		return scoreDetail(key, label, value, maximum)
@@ -109,8 +127,8 @@ func scaledScoreDetail(key string, label string, value string, maximum float64, 
 	if maximum <= 1 && (!hasValue || parsed <= 1) {
 		return scoreDetail(key, label, value, maximum)
 	}
-	if hasValue {
-		value = formatScore(parsed / divisor)
+	if hasValue && maximum > 0 {
+		value = normalizedScore(value, maximum, maximum/divisor)
 	}
 	if maximum > 0 {
 		maximum = maximum / divisor

@@ -89,6 +89,35 @@ func TestActivityAB1DetailsUseConfiguredScoreDivisor(t *testing.T) {
 	}
 }
 
+func TestActivityAB1CapsNormalizedScoresAtConfiguredWeight(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Grupo", ""), cellData("Critério", "")),
+		rowData(cellData("Nota maxima", ""), cellData("10", "")),
+		rowData(cellData("Alice", ""), cellData("12", "")),
+	}, nil)
+
+	table, found, err := parseActivityRubric(grid, TableConfig{
+		Key:          "at1",
+		Label:        "AT. 1",
+		SheetName:    "AT. 1",
+		Kind:         "activity",
+		ScoreDivisor: 10,
+	}, SessionUser{Name: "Alice", Matricula: "123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("student row was not found")
+	}
+	if got := table.Cards[0].Value; got != "1" {
+		t.Fatalf("card value = %q, want capped 1", got)
+	}
+	detail := table.Cards[0].Details[0]
+	if detail.Value != "1" || detail.Max != 1 || detail.Ratio != 100 {
+		t.Fatalf("unexpected capped detail: %#v", detail)
+	}
+}
+
 func TestActivityDetailsKeepSpreadsheetSubtopicLabel(t *testing.T) {
 	grid := parseGrid([]*sheets.RowData{
 		rowData(cellData("Grupo", ""), cellData("organização e qualidade do texto", "")),
