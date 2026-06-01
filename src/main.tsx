@@ -393,7 +393,7 @@ function normalizeGradeCard(card: GradeCardPayload, index: number): GradeCardPay
     label,
     value,
     displayValue: display,
-    tone: card.tone || scoreTone(label, value),
+    tone: card.tone || scoreTone(label, value, display),
     details: details.length > 0 ? details : undefined,
   };
 }
@@ -441,7 +441,7 @@ function legacyCards(table: LegacyGradeTable): GradeCardPayload[] {
         label,
         value,
         displayValue: score !== null ? `${formatScore(score)}/${formatScoreFixed(1, 2)}` : displayValue(label, value),
-        tone: scoreTone(label, value),
+        tone: scoreTone(label, value, displayValue(label, value)),
         comment: total.comment,
         commentAuthor: total.commentAuthor,
         details,
@@ -458,7 +458,7 @@ function legacyCards(table: LegacyGradeTable): GradeCardPayload[] {
         label,
         value,
         displayValue: displayValue(label, value),
-        tone: scoreTone(label, value),
+        tone: scoreTone(label, value, displayValue(label, value)),
         comment: column.comment,
         commentAuthor: column.commentAuthor,
       };
@@ -542,21 +542,29 @@ function detailDisplayScore(value: string, max: number, pending: boolean) {
   return value.trim();
 }
 
-function scoreTone(label: string, value: string) {
+function scoreTone(label: string, value: string, display = '') {
+  const displayScore = parseDisplayScore(display);
+  if (displayScore && displayScore.max > 0) {
+    return scoreToneFromRatio(Math.min((displayScore.value / displayScore.max) * 100, 100), false);
+  }
   let score = parseScore(value);
   if (score === null) return isPendingValue(value) && isGradeLabel(label) ? 'score-pending' : '';
   if (!isGradeLabel(label)) return '';
-  if (score <= 1) score *= 10;
-  if (score < 5) return 'score-danger';
-  if (score < 7) return 'score-warning';
-  return 'score-success';
+  if (score <= 1) return scoreToneFromRatio(score * 100, false);
+  return scoreToneFromRatio((score / 10) * 100, false);
 }
 
 function scoreToneFromRatio(ratio: number, pending: boolean) {
   if (pending) return 'score-pending';
-  if (ratio < 50) return 'score-danger';
+  if (ratio <= 30) return 'score-danger';
   if (ratio < 70) return 'score-warning';
   return 'score-success';
+}
+
+function parseDisplayScore(value: string) {
+  const [left, right] = value.split('/').map((part) => parseScore(part));
+  if (left === null || right === null) return null;
+  return { value: left, max: right };
 }
 
 function activityScore(value: string, maximum: string) {

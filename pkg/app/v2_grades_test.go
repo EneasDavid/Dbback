@@ -161,7 +161,7 @@ func TestV2ActivitiesForABKeepsActivitiesWhenStatusColumnIsAbsent(t *testing.T) 
 	}
 }
 
-func TestV2ActivityItemsNormalizesCriteriaByWeightAndKeepsComments(t *testing.T) {
+func TestV2ActivityItemsKeepsRubricScaleAndComments(t *testing.T) {
 	grid := &sheetGrid{
 		headers: []string{"Matrícula", "Critério A", "Critério B"},
 		rows: [][]string{
@@ -183,15 +183,15 @@ func TestV2ActivityItemsNormalizesCriteriaByWeightAndKeepsComments(t *testing.T)
 	if len(items) != 2 {
 		t.Fatalf("items len = %d, want 2: %#v", len(items), items)
 	}
-	if items[0].NotaMaxima != "0,8" || items[0].NotaAlcancada != "0,4" {
-		t.Fatalf("first normalized item = %#v, want max 0,8 and value 0,4", items[0])
+	if items[0].NotaMaxima != "2" || items[0].NotaAlcancada != "1" {
+		t.Fatalf("first rubric item = %#v, want max 2 and value 1", items[0])
 	}
 	if items[1].Comment != "comentário B" || items[1].CommentAuthor != "Prof" {
 		t.Fatalf("second item comment = %#v", items[1])
 	}
 }
 
-func TestV2ActivityItemsCapsScoresAtWeight(t *testing.T) {
+func TestV2ActivityItemsCapsScoresAtCriterionMaximum(t *testing.T) {
 	grid := &sheetGrid{
 		headers: []string{"Matrícula", "Critério A", "Critério B"},
 		rows: [][]string{
@@ -205,11 +205,11 @@ func TestV2ActivityItemsCapsScoresAtWeight(t *testing.T) {
 	if len(items) != 2 {
 		t.Fatalf("items len = %d, want 2: %#v", len(items), items)
 	}
-	if items[0].NotaMaxima != "0,33" || items[0].NotaAlcancada != "0,33" {
-		t.Fatalf("first capped item = %#v, want max/value 0,33", items[0])
+	if items[0].NotaMaxima != "1" || items[0].NotaAlcancada != "1" {
+		t.Fatalf("first capped item = %#v, want max/value 1", items[0])
 	}
-	if items[1].NotaMaxima != "0,67" || items[1].NotaAlcancada != "0,67" {
-		t.Fatalf("second capped item = %#v, want max/value 0,67", items[1])
+	if items[1].NotaMaxima != "2" || items[1].NotaAlcancada != "2" {
+		t.Fatalf("second capped item = %#v, want max/value 2", items[1])
 	}
 }
 
@@ -243,7 +243,7 @@ func TestV2ActivityItemsIncludesGenericCriteriaWithoutMaxRow(t *testing.T) {
 	if len(items) != 2 {
 		t.Fatalf("items len = %d, want 2: %#v", len(items), items)
 	}
-	if items[0].Subtopic != "Originalidade" || items[0].NotaMaxima != "0,5" {
+	if items[0].Subtopic != "Originalidade" || items[0].NotaMaxima != "1" {
 		t.Fatalf("unexpected generic criterion: %#v", items[0])
 	}
 }
@@ -536,7 +536,7 @@ func TestV2ActivityTableKeepsCriteriaAndCommentsWhenNoSimilarGroup(t *testing.T)
 	}
 }
 
-func TestV2ActivityTableNormalizesSummaryScoreByRubricMaximum(t *testing.T) {
+func TestV2ActivityTableUsesSummaryScoreWithoutRubricNormalization(t *testing.T) {
 	client := &SheetsClient{
 		cfg: Config{RuntimeVersion: "v2"},
 		cache: map[string]cachedGrid{
@@ -579,11 +579,11 @@ func TestV2ActivityTableNormalizesSummaryScoreByRubricMaximum(t *testing.T) {
 		t.Fatalf("gradeForV2() error = %v", err)
 	}
 	card := result.Tables[0].Cards[0]
-	if card.Value != "1" || card.DisplayValue != "1/1" {
-		t.Fatalf("card score = %q/%q, want capped score 1/1", card.Value, card.DisplayValue)
+	if card.Value != "12" || card.DisplayValue != "12/1" {
+		t.Fatalf("card score = %q/%q, want raw summary score 12/1", card.Value, card.DisplayValue)
 	}
-	if card.Details[0].Value != "1" || card.Details[0].Max != 1 {
-		t.Fatalf("detail = %#v, want capped normalized value/max 1", card.Details[0])
+	if card.Details[0].Value != "10" || card.Details[0].Max != 10 {
+		t.Fatalf("detail = %#v, want rubric value/max 10", card.Details[0])
 	}
 }
 
@@ -600,6 +600,22 @@ func TestV2AverageCardUsesNotaLabel(t *testing.T) {
 	}
 	if card.Label != "Nota" || card.Value != "0,5" {
 		t.Fatalf("v2AverageCard() = %#v, want Nota 0,5", card)
+	}
+}
+
+func TestV2AverageCardCapsAtTen(t *testing.T) {
+	grid := &sheetGrid{
+		headers: []string{"Matrícula", "Média"},
+		rows:    [][]string{{"123", "12"}},
+	}
+
+	card := v2AverageCard(grid, grid.rows[0])
+
+	if card == nil {
+		t.Fatal("v2AverageCard() = nil, want card")
+	}
+	if card.Value != "10" || card.DisplayValue != "10" {
+		t.Fatalf("v2AverageCard() = %#v, want capped 10", card)
 	}
 }
 
@@ -660,8 +676,8 @@ func TestV2ActivityTableUsesCriteriaScoreWhenSummaryIsPending(t *testing.T) {
 		t.Fatalf("gradeForV2() error = %v", err)
 	}
 	card := result.Tables[0].Cards[0]
-	if card.Value != "2" || card.DisplayValue != "2/3" {
-		t.Fatalf("card score = %q/%q, want criteria sum 2/3", card.Value, card.DisplayValue)
+	if card.Value != "Não corrigida ainda" || card.DisplayValue != "Não corrigida ainda" {
+		t.Fatalf("card score = %q/%q, want pending summary score", card.Value, card.DisplayValue)
 	}
 	if card.Comment != "Comentário geral do projeto" || card.CommentAuthor != "Prof. Geral" {
 		t.Fatalf("card comment = %q/%q", card.Comment, card.CommentAuthor)
@@ -671,5 +687,71 @@ func TestV2ActivityTableUsesCriteriaScoreWhenSummaryIsPending(t *testing.T) {
 	}
 	if card.Details[1].Comment != "Comentário 2" || card.Details[1].CommentAuthor != "Prof. 2" {
 		t.Fatalf("detail comment = %q/%q", card.Details[1].Comment, card.Details[1].CommentAuthor)
+	}
+}
+
+func TestV2ActivityTableFallsBackToSummaryFinalGradeColumn(t *testing.T) {
+	client := &SheetsClient{
+		cfg: Config{RuntimeVersion: "v2"},
+		cache: map[string]cachedGrid{
+			v2ABsSheet: {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"AB", "status"},
+					rows:    [][]string{{"AB2", "1"}},
+				},
+			},
+			v2ActivitiesSheet: {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"Atividade", "AB", "Peso", "Aba"},
+					rows:    [][]string{{"Projeto", "AB2", "9", "Projeto"}},
+				},
+			},
+			"nota ab2": {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"Matrícula", "nota final"},
+					rows:    [][]string{{"2025026109", "4,5"}},
+					rowNotes: [][]string{
+						{"", "Comentário na nota final"},
+					},
+					rowNoteAuthors: [][]string{
+						{"", "Prof. Final"},
+					},
+				},
+			},
+			"Projeto": {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"grupo", "criterio 1", "criterio 2", "nota final"},
+					rows: [][]string{
+						{"maximo possivel", "1", "1", "10"},
+						{"2025026109", "0", "1", "5"},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := client.gradeForV2(t.Context(), "ab2", SessionUser{Matricula: "2025026109", Name: "Student"})
+	if err != nil {
+		t.Fatalf("gradeForV2() error = %v", err)
+	}
+	card := result.Tables[0].Cards[0]
+	if card.Value != "4,5" || card.DisplayValue != "4,5/9" {
+		t.Fatalf("card score = %q/%q, want summary final grade 4,5/9", card.Value, card.DisplayValue)
+	}
+	if card.Tone != "score-warning" {
+		t.Fatalf("card tone = %q, want warning for 50%% score", card.Tone)
+	}
+	if card.Comment != "Comentário na nota final" || card.CommentAuthor != "Prof. Final" {
+		t.Fatalf("card comment = %q/%q", card.Comment, card.CommentAuthor)
+	}
+	if len(card.Details) != 2 {
+		t.Fatalf("details len = %d, want nota final excluded from criteria: %#v", len(card.Details), card.Details)
+	}
+	if card.Details[0].DisplayScore != "0 / 1" || card.Details[1].DisplayScore != "1 / 1" {
+		t.Fatalf("details = %#v, want rubric maxima /1", card.Details)
 	}
 }

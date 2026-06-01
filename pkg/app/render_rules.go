@@ -178,22 +178,16 @@ func scoreTone(label string, value string) string {
 		return ""
 	}
 	if score <= 1 {
-		score *= 10
+		return scoreToneFromRatio(score*100, false)
 	}
-	if score < 5 {
-		return "score-danger"
-	}
-	if score < 7 {
-		return "score-warning"
-	}
-	return "score-success"
+	return scoreToneFromRatio((score/10)*100, false)
 }
 
 func scoreToneFromRatio(ratio float64, pending bool) string {
 	if pending {
 		return "score-pending"
 	}
-	if ratio < 50 {
+	if ratio <= 30 {
 		return "score-danger"
 	}
 	if ratio < 70 {

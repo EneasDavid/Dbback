@@ -23,3 +23,21 @@ func TestAuthorDisplayNamePrefersNickname(t *testing.T) {
 		})
 	}
 }
+
+func TestScoreToneFromRatioUsesRequestedBands(t *testing.T) {
+	tests := []struct {
+		ratio float64
+		want  string
+	}{
+		{ratio: 30, want: "score-danger"},
+		{ratio: 30.1, want: "score-warning"},
+		{ratio: 69.9, want: "score-warning"},
+		{ratio: 70, want: "score-success"},
+	}
+
+	for _, tt := range tests {
+		if got := scoreToneFromRatio(tt.ratio, false); got != tt.want {
+			t.Fatalf("scoreToneFromRatio(%v) = %q, want %q", tt.ratio, got, tt.want)
+		}
+	}
+}
