@@ -196,7 +196,7 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 	if average := v2AverageCard(summaryGrid, summaryRow); average != nil {
 		result.Tables = append(result.Tables, TableResult{
 			Key:           "media-" + exam,
-			Label:         "Média " + abLabel,
+			Label:         "Média",
 			SheetName:     v2SummarySheetName(exam),
 			Kind:          exam + "summary",
 			Complete:      true,
@@ -304,21 +304,7 @@ func inferABStatusColumn(grid *sheetGrid, abIdx int) int {
 
 func abStatusLikeValue(value string) bool {
 	normalized := normalizeHeader(value)
-	return normalized == "0" ||
-		normalized == "1" ||
-		normalized == "sim" ||
-		normalized == "s" ||
-		normalized == "nao" ||
-		normalized == "não" ||
-		normalized == "n" ||
-		normalized == "true" ||
-		normalized == "false" ||
-		normalized == "ativo" ||
-		normalized == "ativa" ||
-		normalized == "inativo" ||
-		normalized == "inativa" ||
-		normalized == "lancada" ||
-		normalized == "lançada"
+	return normalized == "0" || normalized == "1"
 }
 
 func v2ABFromRow(row []string, abIdx int, labelIdx int, activeIdx int) v2ABConfig {
@@ -333,7 +319,11 @@ func v2ABFromRow(row []string, abIdx int, labelIdx int, activeIdx int) v2ABConfi
 	if label == "" {
 		label = strings.ToUpper(key)
 	}
-	return v2ABConfig{Key: key, Label: label, Active: activeIdx < 0 || activeSpreadsheetValue(valueAt(row, activeIdx), false)}
+	return v2ABConfig{Key: key, Label: label, Active: activeIdx >= 0 && activeABStatusValue(valueAt(row, activeIdx))}
+}
+
+func activeABStatusValue(value string) bool {
+	return normalizeHeader(value) == "1"
 }
 
 func v2ABRouteCandidates(exam string) []string {
@@ -370,7 +360,7 @@ func v2ActivitiesForAB(grid *sheetGrid, exam string) []v2ActivityConfig {
 		if abIdx >= 0 && normalizeABKey(valueAt(row, abIdx)) != normalizeABKey(exam) {
 			continue
 		}
-		if activeIdx >= 0 && !activeSpreadsheetValue(valueAt(row, activeIdx), true) {
+		if activeIdx >= 0 && !activeSpreadsheetValue(valueAt(row, activeIdx), false) {
 			continue
 		}
 		label := valueAt(row, nameIdx)
@@ -403,9 +393,10 @@ func v2ActivitiesForAB(grid *sheetGrid, exam string) []v2ActivityConfig {
 }
 
 func v2BindSummaryColumns(headers []string, activities []v2ActivityConfig) {
+	allowFinalGradeFallback := len(activities) == 1
 	for idx := range activities {
 		activities[idx].SummaryCol = matchingHeaderIndex(headers, activities[idx].Label, activities[idx].SheetName)
-		if activities[idx].SummaryCol < 0 {
+		if activities[idx].SummaryCol < 0 && allowFinalGradeFallback {
 			activities[idx].SummaryCol = v2FinalGradeColumn(headers)
 		}
 	}
@@ -502,7 +493,7 @@ func v2ActivityItems(grid *sheetGrid, maxRowIdx int, studentRowIdx int, weight f
 		if maximum > 0 {
 			value = normalizedScore(value, maximum, maximum)
 		}
-		comment, author := activityItemComment(grid, maxRowIdx, studentRowIdx, colIdx)
+		comment, author := v2ActivityItemComment(grid, maxRowIdx, studentRowIdx, colIdx)
 		items = append(items, activityItem{
 			Key:           fmt.Sprintf("i%d", colIdx),
 			Subtopic:      rubricLabel(grid, maxRowIdx, colIdx),
@@ -525,7 +516,7 @@ func v2CriterionColumns(grid *sheetGrid, maxRowIdx int, studentRowIdx int) []int
 		if studentRowIdx >= 0 && studentRowIdx < len(grid.rows) {
 			value = valueAt(grid.rows[studentRowIdx], colIdx)
 		}
-		comment, _ := activityItemComment(grid, maxRowIdx, studentRowIdx, colIdx)
+		comment, _ := v2ActivityItemComment(grid, maxRowIdx, studentRowIdx, colIdx)
 		if v2CriterionMaximum(grid, maxRowIdx, colIdx) <= 0 && value == "" && comment == "" {
 			continue
 		}
@@ -592,7 +583,7 @@ func v2AverageCard(grid *sheetGrid, row []string) *CardResult {
 	if score, ok := parseScore(value); ok && score > 10 {
 		value = formatScore(10)
 	}
-	card := makeCard("media", "Nota", value, comment, author, nil)
+	card := makeCard("media", "Média", value, comment, author, nil)
 	card.Tone = scoreToneForMaximum(value, 10)
 	return &card
 }
@@ -634,14 +625,11 @@ func activeSpreadsheetValue(value string, blankAllowed bool) bool {
 	if normalized == "" {
 		return blankAllowed
 	}
-	return normalized == "1" ||
-		normalized == "sim" ||
-		normalized == "s" ||
-		normalized == "true" ||
-		normalized == "ativo" ||
-		normalized == "ativa" ||
-		normalized == "lancada" ||
-		normalized == "lançada"
+	return normalized == "1"
+}
+
+func v2ActivityItemComment(grid *sheetGrid, maxRowIdx int, studentRowIdx int, colIdx int) (string, string) {
+	return commentAt(rowNotesAt(grid, studentRowIdx), rowNoteAuthorsAt(grid, studentRowIdx), colIdx)
 }
 
 func v2ActivityStatusFromScore(value string) string {

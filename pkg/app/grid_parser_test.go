@@ -61,7 +61,7 @@ func TestDriveCommentOnMergedCellPropagatesToMergedColumns(t *testing.T) {
 	}
 }
 
-func TestDriveCommentWithZeroSheetIDUsesNonNumericQuotedText(t *testing.T) {
+func TestDriveCommentWithZeroSheetIDSkipsNonNumericQuotedText(t *testing.T) {
 	grid := parseGrid([]*sheets.RowData{
 		rowData(cellData("Nome", ""), cellData("Critério", "")),
 		rowData(cellData("Alice", ""), cellData("0,3", "")),
@@ -71,12 +71,12 @@ func TestDriveCommentWithZeroSheetIDUsesNonNumericQuotedText(t *testing.T) {
 		{Text: "feedback do Drive", Author: "Professor", QuotedText: "Critério", SheetID: 0, HasSheetID: true},
 	}, 987654321, nil)
 
-	if got := noteAt(grid.notes, 1); got != "feedback do Drive" {
-		t.Fatalf("drive note = %q, want feedback do Drive", got)
+	if got := noteAt(grid.notes, 1); got != "" {
+		t.Fatalf("drive note = %q, want empty without reliable sheet id", got)
 	}
 }
 
-func TestDriveCommentWithZeroSheetIDUsesUniqueNumericQuotedText(t *testing.T) {
+func TestDriveCommentWithZeroSheetIDSkipsUniqueNumericQuotedText(t *testing.T) {
 	grid := parseGrid([]*sheets.RowData{
 		rowData(cellData("Nome", ""), cellData("Critério", "")),
 		rowData(cellData("Alice", ""), cellData("0,3", "")),
@@ -86,8 +86,8 @@ func TestDriveCommentWithZeroSheetIDUsesUniqueNumericQuotedText(t *testing.T) {
 		{Text: "feedback do Drive", Author: "Professor", QuotedText: "0,3", SheetID: 0, HasSheetID: true},
 	}, 987654321, nil)
 
-	if got := noteAt(grid.rowNotes[0], 1); got != "feedback do Drive" {
-		t.Fatalf("drive note = %q, want feedback do Drive", got)
+	if got := noteAt(grid.rowNotes[0], 1); got != "" {
+		t.Fatalf("drive note = %q, want empty without reliable sheet id", got)
 	}
 }
 
@@ -110,7 +110,7 @@ func TestDriveCommentWithZeroSheetIDSkipsAmbiguousNumericQuotedText(t *testing.T
 	}
 }
 
-func TestDriveCommentWithCellAnchorUsesExactRepeatedValue(t *testing.T) {
+func TestDriveCommentWithZeroSheetIDAndCellAnchorIsSkipped(t *testing.T) {
 	grid := parseGrid([]*sheets.RowData{
 		rowData(cellData("Nome", ""), cellData("Critério", "")),
 		rowData(cellData("Alice", ""), cellData("0,3", "")),
@@ -123,6 +123,34 @@ func TestDriveCommentWithCellAnchorUsesExactRepeatedValue(t *testing.T) {
 			Author:      "Professor",
 			QuotedText:  "0,3",
 			SheetID:     0,
+			HasSheetID:  true,
+			RowIndex:    2,
+			ColumnIndex: 1,
+			HasCell:     true,
+		},
+	}, 987654321, nil)
+
+	if got := noteAt(grid.rowNotes[0], 1); got != "" {
+		t.Fatalf("first drive note = %q, want empty", got)
+	}
+	if got := noteAt(grid.rowNotes[1], 1); got != "" {
+		t.Fatalf("second drive note = %q, want empty without reliable sheet id", got)
+	}
+}
+
+func TestDriveCommentWithSheetIDAndCellAnchorUsesExactCell(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Nome", ""), cellData("Critério", "")),
+		rowData(cellData("Alice", ""), cellData("0,3", "")),
+		rowData(cellData("Bob", ""), cellData("0,3", "")),
+	}, nil)
+
+	grid.applyDriveComments([]driveCellComment{
+		{
+			Text:        "feedback do Bob",
+			Author:      "Professor",
+			QuotedText:  "0,3",
+			SheetID:     987654321,
 			HasSheetID:  true,
 			RowIndex:    2,
 			ColumnIndex: 1,

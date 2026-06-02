@@ -9,15 +9,15 @@ func TestV2ABStateUsesActiveColumn(t *testing.T) {
 	grid := &sheetGrid{
 		headers: []string{"AB", "Nome", "Ativa"},
 		rows: [][]string{
-			{"AB1", "AB1", "sim"},
-			{"AB2", "AB2", "não"},
+			{"AB1", "AB1", "0"},
+			{"AB2", "AB2", "1"},
 		},
 	}
 
 	label, active := v2ABState(grid, "ab2")
 
-	if label != "AB2" || active {
-		t.Fatalf("v2ABState() = %q/%v, want AB2/false", label, active)
+	if label != "AB2" || !active {
+		t.Fatalf("v2ABState() = %q/%v, want AB2/true", label, active)
 	}
 }
 
@@ -47,6 +47,23 @@ func TestV2ABStateTreatsBlankStatusAsInactiveWhenStatusColumnExists(t *testing.T
 
 	if active {
 		t.Fatal("v2ABState() active = true, want false for blank status")
+	}
+}
+
+func TestV2ABStateTreatsTextualProgressStatusAsInactive(t *testing.T) {
+	grid := &sheetGrid{
+		headers: []string{"AB", "Status"},
+		rows: [][]string{
+			{"AB1", "Em correção"},
+			{"AB2", "Não encerrado"},
+		},
+	}
+
+	_, ab1Active := v2ABState(grid, "ab1")
+	_, ab2Active := v2ABState(grid, "ab2")
+
+	if ab1Active || ab2Active {
+		t.Fatalf("v2ABState() active states = %v/%v, want both inactive for non-1 statuses", ab1Active, ab2Active)
 	}
 }
 
@@ -158,6 +175,23 @@ func TestV2ActivitiesForABKeepsActivitiesWhenStatusColumnIsAbsent(t *testing.T) 
 
 	if len(activities) != 2 {
 		t.Fatalf("activities len = %d, want 2: %#v", len(activities), activities)
+	}
+}
+
+func TestV2ActivitiesForABOnlyKeepsStatusOneWhenStatusColumnExists(t *testing.T) {
+	grid := &sheetGrid{
+		headers: []string{"Atividade", "AB", "Status"},
+		rows: [][]string{
+			{"Atividade 1", "AB1", "0"},
+			{"Atividade 2", "AB1", "Em correção"},
+			{"Atividade 3", "AB1", "1"},
+		},
+	}
+
+	activities := v2ActivitiesForAB(grid, "ab1")
+
+	if len(activities) != 1 || activities[0].Label != "Atividade 3" {
+		t.Fatalf("activities = %#v, want only status 1 activity", activities)
 	}
 }
 
@@ -283,6 +317,29 @@ func TestV2ActivityLaunchedSkipsNotLaunchedText(t *testing.T) {
 	}
 }
 
+func TestV2BindSummaryColumnsDoesNotUseFinalGradeForMultipleActivities(t *testing.T) {
+	activities := []v2ActivityConfig{
+		{Label: "Atividade 1", SheetName: "AT. 1"},
+		{Label: "Atividade 2", SheetName: "AT. 2"},
+	}
+
+	v2BindSummaryColumns([]string{"Matrícula", "nota final"}, activities)
+
+	if activities[0].SummaryCol >= 0 || activities[1].SummaryCol >= 0 {
+		t.Fatalf("activities = %#v, want no ambiguous nota final fallback for multiple activities", activities)
+	}
+}
+
+func TestV2BindSummaryColumnsAllowsFinalGradeForSingleActivity(t *testing.T) {
+	activities := []v2ActivityConfig{{Label: "Projeto", SheetName: "Projeto"}}
+
+	v2BindSummaryColumns([]string{"Matrícula", "nota final"}, activities)
+
+	if activities[0].SummaryCol != 1 {
+		t.Fatalf("activity = %#v, want nota final fallback for single activity", activities[0])
+	}
+}
+
 func TestV2SummarySheetNameUsesNormalizedABKey(t *testing.T) {
 	if got := v2SummarySheetName("AV 1"); got != "nota av1" {
 		t.Fatalf("v2SummarySheetName() = %q, want nota av1", got)
@@ -362,6 +419,29 @@ func TestGradesForRuntimeV2UsesAbsKeysWhenAbsExists(t *testing.T) {
 	}
 	if _, ok := results["ab1"]; ok {
 		t.Fatalf("gradesForRuntimeV2() returned inactive ab1: %#v", results)
+	}
+}
+
+func TestGradesForRuntimeV2ReturnsNoExamsWhenNoABStatusIsOne(t *testing.T) {
+	client := &SheetsClient{
+		cfg: Config{RuntimeVersion: "auto"},
+		cache: map[string]cachedGrid{
+			v2ABsSheet: {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"AB", "status"},
+					rows:    [][]string{{"AB1", "0"}, {"AB2", "0"}, {"reav", "0"}, {"final", "0"}},
+				},
+			},
+		},
+	}
+
+	results, err := client.gradesForRuntimeV2(t.Context(), []string{"ab1", "ab2"}, SessionUser{Matricula: "123", Name: "Alice"})
+	if err != nil {
+		t.Fatalf("gradesForRuntimeV2() error = %v", err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("gradesForRuntimeV2() = %#v, want no exams when all abs statuses are 0", results)
 	}
 }
 
@@ -486,7 +566,7 @@ func TestV2ActivityTableIncludesTopicsAndComments(t *testing.T) {
 	}
 }
 
-func TestV2ActivityTableKeepsCriteriaAndCommentsWhenNoSimilarGroup(t *testing.T) {
+func TestV2ActivityTableKeepsCriteriaWithoutHeaderCommentsWhenNoSimilarGroup(t *testing.T) {
 	client := &SheetsClient{
 		cfg: Config{RuntimeVersion: "v2"},
 		cache: map[string]cachedGrid{
@@ -554,11 +634,11 @@ func TestV2ActivityTableKeepsCriteriaAndCommentsWhenNoSimilarGroup(t *testing.T)
 	if card.Details[0].Value != "" || !card.Details[0].Pending {
 		t.Fatalf("first detail = %#v, want pending blank score", card.Details[0])
 	}
-	if card.Details[0].Comment != "Comentário do critério cobertura" || card.Details[0].CommentAuthor != "Prof. Silva" {
-		t.Fatalf("first detail comment = %q/%q", card.Details[0].Comment, card.Details[0].CommentAuthor)
+	if card.Details[0].Comment != "" || card.Details[0].CommentAuthor != "" {
+		t.Fatalf("first detail comment = %q/%q, want empty header comment ignored", card.Details[0].Comment, card.Details[0].CommentAuthor)
 	}
-	if card.Details[1].Comment != "Comentário do critério manutenção" || card.Details[1].CommentAuthor != "Prof. Santos" {
-		t.Fatalf("second detail comment = %q/%q", card.Details[1].Comment, card.Details[1].CommentAuthor)
+	if card.Details[1].Comment != "" || card.Details[1].CommentAuthor != "" {
+		t.Fatalf("second detail comment = %q/%q, want empty header comment ignored", card.Details[1].Comment, card.Details[1].CommentAuthor)
 	}
 }
 
@@ -624,8 +704,8 @@ func TestV2AverageCardUsesNotaLabel(t *testing.T) {
 	if card == nil {
 		t.Fatal("v2AverageCard() = nil, want card")
 	}
-	if card.Label != "Nota" || card.Value != "0,5" {
-		t.Fatalf("v2AverageCard() = %#v, want Nota 0,5", card)
+	if card.Label != "Média" || card.Value != "0,5" {
+		t.Fatalf("v2AverageCard() = %#v, want Média 0,5", card)
 	}
 }
 

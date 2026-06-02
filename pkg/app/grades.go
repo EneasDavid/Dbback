@@ -191,7 +191,7 @@ func (c *SheetsClient) gradesForRuntimeV2(ctx context.Context, exams []string, u
 			if schemaV2 || !canFallbackToLegacy(err) {
 				return nil, err
 			}
-		} else if len(resolved) > 0 {
+		} else {
 			exams = resolved
 			schemaV2 = true
 		}

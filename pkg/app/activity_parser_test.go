@@ -37,7 +37,7 @@ func TestActivityDriveCommentOnIdentityCellBecomesCardComment(t *testing.T) {
 		rowData(cellData("Alice", ""), cellData("0,7", "")),
 	}, nil)
 	grid.applyDriveComments([]driveCellComment{
-		{Text: "comentario na celula do nome", Author: "Professor", QuotedText: "Alice", SheetID: 0, HasSheetID: true},
+		{Text: "comentario na celula do nome", Author: "Professor", QuotedText: "Alice", SheetID: 123, HasSheetID: true},
 	}, 123, nil)
 
 	table, found, err := parseActivityRubric(grid, TableConfig{

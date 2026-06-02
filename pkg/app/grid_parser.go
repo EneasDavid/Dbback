@@ -65,8 +65,7 @@ func applyMergedRanges(values [][]string, notes [][]string, merges []*sheets.Gri
 
 func (g *sheetGrid) applyDriveComments(comments []driveCellComment, sheetID int64, merges []*sheets.GridRange) {
 	for _, comment := range comments {
-		// Drive anchors for Sheets comments can expose uid:0 even when the target sheet has another sheetId.
-		if comment.HasSheetID && comment.SheetID != 0 && comment.SheetID != sheetID {
+		if !comment.HasSheetID || comment.SheetID == 0 || comment.SheetID != sheetID {
 			continue
 		}
 		comment.Text = visibleFeedbackComment(comment.Text)
@@ -75,14 +74,10 @@ func (g *sheetGrid) applyDriveComments(comments []driveCellComment, sheetID int6
 		}
 		if comment.HasCell {
 			rowIdx, colIdx := logicalMergedCell(comment.RowIndex, comment.ColumnIndex, merges)
-			quoted := strings.TrimSpace(comment.QuotedText)
-			needsValueCheck := !comment.HasSheetID || comment.SheetID == 0
-			if !needsValueCheck || (quoted != "" && strings.TrimSpace(g.valueAtAbsolute(rowIdx, colIdx)) == quoted) {
-				if g.noteAtAbsolute(rowIdx, colIdx) == "" {
-					g.setNoteAtAbsolute(rowIdx, colIdx, comment.Text, comment.Author)
-				}
-				continue
+			if g.noteAtAbsolute(rowIdx, colIdx) == "" {
+				g.setNoteAtAbsolute(rowIdx, colIdx, comment.Text, comment.Author)
 			}
+			continue
 		}
 		if strings.TrimSpace(comment.QuotedText) == "" {
 			continue

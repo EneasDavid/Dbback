@@ -1,8 +1,8 @@
 export const appVersion = {
   name: 'dbback',
-  major: 2,
-  label: 'v2',
-  cacheKey: 'v2',
+  major: 3,
+  label: 'v3',
+  cacheKey: 'v3-abs-strict-comments',
   v2_stable: true,
   stable: true,
 } as const;

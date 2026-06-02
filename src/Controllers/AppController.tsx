@@ -22,7 +22,7 @@ import { api, apiSWR, clearApiValidators } from './apiController';
 
 const EMPTY_STATE_MS = 5_000;
 const GRADES_REVALIDATE_MS = 30_000;
-const GRADES_PATH = '/api/grades/all';
+const GRADES_PATH = '/api/grades/all?refresh=1';
 const LAST_MATRICULA_KEY = 'dbback-last-matricula';
 const THEME_QUERY = '(prefers-color-scheme: dark)';
 
@@ -311,7 +311,7 @@ export default function AppController() {
   return (
     <main className="shell">
       <Topbar session={session} theme={theme} setTheme={handleThemeChange} onLogout={handleLogout} />
-      {!gradesRefreshing && <ExamSwitch exam={exam} exams={availableExams} labels={examLabels} carousel={useExamCarousel} setExam={handleExamChange} />}
+      <ExamSwitch exam={exam} exams={availableExams} labels={examLabels} carousel={useExamCarousel} setExam={handleExamChange} />
 
       {error && <InlineError message={error} />}
       {loading && <div className="loading" role="status" aria-live="polite">Carregando notas...</div>}

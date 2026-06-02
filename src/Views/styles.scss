@@ -397,7 +397,7 @@ input:focus-visible {
   -webkit-backdrop-filter: blur(20px) saturate(150%);
 }
 
-.exam-switch button {
+.exam-option {
   min-width: 0;
   min-height: 40px;
   padding: 0 14px;
@@ -410,13 +410,13 @@ input:focus-visible {
   white-space: nowrap;
 }
 
-.exam-switch button.active {
+.exam-option.active {
   color: var(--text);
   background: color-mix(in srgb, var(--panel) 92%, transparent);
   box-shadow: none;
 }
 
-:root[data-theme="dark"] .exam-switch button.active {
+:root[data-theme="dark"] .exam-option.active {
   background: color-mix(in srgb, var(--panel-solid) 88%, var(--accent-soft));
   box-shadow: none;
 }
@@ -426,26 +426,59 @@ input:focus-visible {
   justify-content: center;
 }
 
+.exam-switch[data-mode="fit"] {
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+}
+
 .exam-switch[data-mode="carousel"] {
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  align-items: center;
+}
+
+.exam-track {
+  min-width: 0;
   display: flex;
+  gap: 6px;
   overflow-x: auto;
   overflow-y: hidden;
   scroll-snap-type: x mandatory;
-  scrollbar-width: thin;
+  scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
 }
 
-.exam-switch[data-mode="carousel"] button {
+.exam-track::-webkit-scrollbar {
+  display: none;
+}
+
+.exam-switch[data-mode="carousel"] .exam-option {
   flex: 0 0 clamp(124px, 32%, 188px);
   scroll-snap-align: center;
 }
 
-.exam-switch[data-mode="carousel"] button:first-child {
+.exam-switch[data-mode="carousel"] .exam-option:first-child {
   scroll-snap-align: start;
 }
 
-.exam-switch[data-mode="carousel"] button:last-child {
+.exam-switch[data-mode="carousel"] .exam-option:last-child {
   scroll-snap-align: end;
+}
+
+.exam-nav {
+  width: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 15px;
+  color: var(--muted-strong);
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+  box-shadow: var(--inner-highlight);
+}
+
+.exam-nav:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel-solid) 94%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {

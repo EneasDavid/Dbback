@@ -1,6 +1,6 @@
-import { AlertCircle, BookOpenCheck, ChevronRight, LogOut, MessageSquareText, Moon, Search, Sun } from 'lucide-react';
+import { AlertCircle, BookOpenCheck, ChevronLeft, ChevronRight, LogOut, MessageSquareText, Moon, Search, Sun } from 'lucide-react';
 import type { CSSProperties, FormEvent } from 'react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cardsFor, isMediaTable } from '../Models/gradeModel';
 import type { GradeCard as GradeCardData, GradeDetail, GradeTable, SessionUser } from '../Models/types';
 
@@ -100,15 +100,101 @@ export function ExamSwitch({
   carousel?: boolean;
   setExam: (exam: string) => void;
 }) {
+  const switchRef = useRef<HTMLElement>(null);
+  const optionRefs = useRef(new Map<string, HTMLButtonElement>());
+  const [needsCarousel, setNeedsCarousel] = useState(false);
+  const canCarousel = exams.length > 2 || Boolean(carousel);
+  const mode = exams.length <= 1 ? 'single' : canCarousel && needsCarousel ? 'carousel' : exams.length === 2 ? 'pair' : 'fit';
+  const activeIndex = Math.max(exams.indexOf(exam), 0);
+
+  useEffect(() => {
+    if (!canCarousel || exams.length <= 1) {
+      setNeedsCarousel(false);
+      return;
+    }
+
+    let frame = 0;
+    const updateCarouselNeed = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const container = switchRef.current;
+        const buttons = exams.map((option) => optionRefs.current.get(option));
+        if (!container || buttons.some((button) => !button)) return;
+
+        const styles = window.getComputedStyle(container);
+        const padding = parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight);
+        const availableWidth = container.clientWidth - padding;
+        if (availableWidth <= 0) return;
+
+        const gap = 6;
+        const minimumOptionWidth = 124;
+        const totalOptionWidth = buttons.reduce((total, button) => total + Math.max(button?.scrollWidth ?? 0, minimumOptionWidth), 0);
+        setNeedsCarousel(totalOptionWidth + gap * (exams.length - 1) > availableWidth + 1);
+      });
+    };
+
+    updateCarouselNeed();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateCarouselNeed);
+    if (observer && switchRef.current) {
+      observer.observe(switchRef.current);
+    }
+    window.addEventListener('resize', updateCarouselNeed);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      window.removeEventListener('resize', updateCarouselNeed);
+    };
+  }, [canCarousel, exams, labels]);
+
+  useEffect(() => {
+    if (mode !== 'carousel') return;
+    const activeOption = optionRefs.current.get(exam);
+    if (!activeOption) return;
+
+    const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    activeOption.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'nearest', inline: 'center' });
+  }, [exam, mode]);
+
+  const chooseNearbyExam = (direction: -1 | 1) => {
+    const nextIndex = (activeIndex + direction + exams.length) % exams.length;
+    setExam(exams[nextIndex]);
+  };
+
   if (exams.length === 0) return null;
-  const mode = exams.length === 1 ? 'single' : carousel || exams.length > 2 ? 'carousel' : 'pair';
+
+  const optionButtons = exams.map((option) => (
+    <button
+      className={`exam-option ${exam === option ? 'active' : ''}`}
+      type="button"
+      onClick={() => setExam(option)}
+      aria-pressed={exam === option}
+      key={option}
+      ref={(node) => {
+        if (node) {
+          optionRefs.current.set(option, node);
+          return;
+        }
+        optionRefs.current.delete(option);
+      }}
+    >
+      {labels[option] || option.toUpperCase()}
+    </button>
+  ));
+
   return (
-    <section className="exam-switch" data-mode={mode} aria-label="Selecionar avaliacao">
-      {exams.map((option) => (
-        <button className={exam === option ? 'active' : ''} type="button" onClick={() => setExam(option)} aria-pressed={exam === option} key={option}>
-          {labels[option] || option.toUpperCase()}
-        </button>
-      ))}
+    <section className="exam-switch" data-mode={mode} aria-label="Selecionar avaliacao" ref={switchRef}>
+      {mode === 'carousel' ? (
+        <>
+          <button className="exam-nav" type="button" onClick={() => chooseNearbyExam(-1)} aria-label="Avaliação anterior" title="Anterior">
+            <ChevronLeft size={18} />
+          </button>
+          <div className="exam-track">{optionButtons}</div>
+          <button className="exam-nav" type="button" onClick={() => chooseNearbyExam(1)} aria-label="Próxima avaliação" title="Próxima">
+            <ChevronRight size={18} />
+          </button>
+        </>
+      ) : optionButtons}
     </section>
   );
 }
@@ -190,16 +276,17 @@ function ActivityStickyBlock({
 export function SummaryTable({ table }: { table: GradeTable }) {
   const cards = cardsFor(table);
   const firstTone = cards.find((card) => card.tone)?.tone || '';
+  const title = isMediaTable(table) ? 'Média' : table.label;
 
   return (
     <article className={`grade-table summary ${isMediaTable(table) ? `final-average ${firstTone}` : ''}`}>
       <header>
-        <h2>{table.label}</h2>
+        <h2>{title}</h2>
       </header>
       {cards.length > 0 && (
         <div className="summary-grid">
           {cards.map((card) => (
-            <SummaryScoreCard card={card} fallbackLabel={table.label} key={`${table.key}-${card.key}`} />
+            <SummaryScoreCard card={card} fallbackLabel={title} key={`${table.key}-${card.key}`} />
           ))}
         </div>
       )}
