@@ -41,3 +41,11 @@ func TestScoreToneFromRatioUsesRequestedBands(t *testing.T) {
 		}
 	}
 }
+
+func TestParseNumberRejectsNonFiniteValues(t *testing.T) {
+	for _, value := range []string{"NaN", "+Inf", "-Inf", "Infinity"} {
+		if parsed, ok := parseNumber(value); ok {
+			t.Fatalf("parseNumber(%q) = %v, true; want rejected", value, parsed)
+		}
+	}
+}

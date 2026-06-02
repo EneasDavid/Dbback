@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -58,6 +59,9 @@ func parseNumericID(value string) (int64, bool) {
 	}
 	floatValue, err := strconv.ParseFloat(text, 64)
 	if err != nil {
+		return 0, false
+	}
+	if math.IsNaN(floatValue) || math.IsInf(floatValue, 0) {
 		return 0, false
 	}
 	intValue := int64(floatValue)
@@ -191,6 +195,9 @@ func parseNumber(value string) (float64, bool) {
 	}
 	parsed, err := strconv.ParseFloat(text, 64)
 	if err != nil {
+		return 0, false
+	}
+	if math.IsNaN(parsed) || math.IsInf(parsed, 0) {
 		return 0, false
 	}
 	return parsed, true
