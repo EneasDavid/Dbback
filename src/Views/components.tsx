@@ -2,6 +2,7 @@ import { AlertCircle, BookOpenCheck, ChevronRight, LogOut, MessageSquareText, Mo
 import type { CSSProperties, FormEvent } from 'react';
 import { useEffect, useRef } from 'react';
 import { cardsFor, isMediaTable } from '../Models/gradeModel';
+import { appVersion } from '../Models/version';
 import type { GradeCard as GradeCardData, GradeDetail, GradeTable, SessionUser } from '../Models/types';
 
 export function LoginView({
@@ -76,6 +77,7 @@ export function Topbar({
       <div>
         <span>{session.matricula}</span>
         <strong>{session.name || 'Aluno'}</strong>
+        {appVersion.stable && <span className="version-badge">{appVersion.label}</span>}
       </div>
       <div className="topbar-actions">
         <ThemeButton theme={theme} setTheme={setTheme} compact />
@@ -324,18 +326,8 @@ function GradeDetailPanel({ tableKey, card }: { tableKey: string; card: GradeCar
       const detailHeading = panel?.querySelector<HTMLElement>('[data-detail-heading="true"]');
       if (!panel || !detailHeading) return;
 
-      const stickyBlock = panel.parentElement?.querySelector<HTMLElement>('[data-detail-sticky]');
-      const rootStyles = window.getComputedStyle(document.documentElement);
-      const stickyTop = Number.parseFloat(rootStyles.getPropertyValue('--activity-sticky-offset')) || 0;
-      const visualGap = 12;
-      const targetTop = stickyTop + (stickyBlock?.offsetHeight ?? 0) + visualGap;
-      const top = window.scrollY + detailHeading.getBoundingClientRect().top - targetTop;
       const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-
-      window.scrollTo({
-        top: Math.max(0, top),
-        behavior: prefersReducedMotion ? 'auto' : 'smooth',
-      });
+      detailHeading.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'start' });
     });
 
     return () => window.cancelAnimationFrame(frame);
@@ -343,9 +335,9 @@ function GradeDetailPanel({ tableKey, card }: { tableKey: string; card: GradeCar
 
   return (
     <section className="detail-panel" id={detailPanelId(tableKey, card.key)} ref={panelRef}>
-      <div className="detail-header" data-detail-heading="true">
+      <div className="detail-header">
         <div>
-          <strong>Critérios avaliados</strong>
+          <strong data-detail-heading="true">Critérios avaliados</strong>
         </div>
       </div>
       <DetailList details={details} />

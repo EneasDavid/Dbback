@@ -33,7 +33,7 @@ Query comum de notas: `refresh=1` limpa o cache em memoria do processo antes de 
 
 O projeto segue uma organizacao MVC. No frontend, a arvore fisica separa explicitamente responsabilidades:
 
-- `src/Models/`: tipos, normalizacao de payloads, cache, compatibilidade legado/V2 e flag `v2_stable: true`.
+- `src/Models/`: tipos, normalizacao de payloads, cache, compatibilidade legado/V2 e flag `v2_stable: true` com label de runtime `v2`.
 - `src/Views/`: componentes React e estilos da interface.
 - `src/Controllers/`: controle de fluxo da aplicacao, sessoes, chamadas HTTP e coordenacao entre Models e Views.
 

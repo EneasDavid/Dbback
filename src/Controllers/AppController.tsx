@@ -83,10 +83,12 @@ export default function AppController() {
     document.documentElement.dataset.screen = session ? 'app' : 'login';
     document.documentElement.dataset.version = appVersion.label;
     document.documentElement.dataset.v2Stable = appVersion.v2_stable ? 'true' : 'false';
+    document.documentElement.dataset.stable = appVersion.stable ? 'true' : 'false';
     return () => {
       delete document.documentElement.dataset.screen;
       delete document.documentElement.dataset.version;
       delete document.documentElement.dataset.v2Stable;
+      delete document.documentElement.dataset.stable;
     };
   }, [session]);
 
