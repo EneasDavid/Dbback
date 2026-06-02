@@ -99,3 +99,19 @@ func TestPostRejectsCrossOrigin(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusForbidden)
 	}
 }
+
+func TestNormalizeMatriculaAcceptsSingleDigit(t *testing.T) {
+	got, ok := normalizeMatricula(" 1 ")
+
+	if !ok || got != "1" {
+		t.Fatalf("normalizeMatricula() = %q/%v, want 1/true", got, ok)
+	}
+}
+
+func TestNormalizeMatriculaRejectsEmptyAndNonNumeric(t *testing.T) {
+	for _, value := range []string{"", "   ", "1a"} {
+		if got, ok := normalizeMatricula(value); ok || got != "" {
+			t.Fatalf("normalizeMatricula(%q) = %q/%v, want empty/false", value, got, ok)
+		}
+	}
+}

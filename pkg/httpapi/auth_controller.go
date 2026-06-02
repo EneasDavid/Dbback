@@ -75,7 +75,7 @@ func (AuthController) Me(w http.ResponseWriter, r *http.Request) {
 
 func normalizeMatricula(value string) (string, bool) {
 	value = strings.TrimSpace(value)
-	if len(value) < 3 || len(value) > 32 {
+	if len(value) < 1 || len(value) > 32 {
 		return "", false
 	}
 	for _, char := range value {

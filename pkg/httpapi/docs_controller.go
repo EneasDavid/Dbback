@@ -159,11 +159,11 @@ func docsPayload() map[string]any {
 			"batching":          "Leituras do Google Sheets são agrupadas por range em uma chamada sempre que possível.",
 			"serverCache":       "Cache em memória por aba, planilha e comentários com TTL configurado em CacheTTL; refresh=1 limpa o cache do processo.",
 			"httpCache":         "GET /api/grades e /api/grades/all retornam ETag, Cache-Control private max-age=30 stale-while-revalidate=300 e Vary: Cookie, Accept-Encoding.",
-			"clientSWR":         "O frontend renderiza sessionStorage imediatamente, revalida em background com If-None-Match e preserva o payload antigo quando o servidor responde 304.",
+			"clientSWR":         "O frontend renderiza sessionStorage imediatamente, respeita max-age do cache HTTP, revalida com If-None-Match quando necessário e preserva o payload antigo quando o servidor responde 304.",
 			"prefetch":          "Cards de atividade disparam prefetch em hover e foco, antes do clique de expansão.",
 			"deduplication":     "singleflight no backend e dedupe de GET em voo no frontend evitam leituras duplicadas quando requisições simultâneas pedem as mesmas notas.",
 			"compression":       "Payloads JSON são textuais, têm Vary: Accept-Encoding e são elegíveis à compressão Brotli/Gzip automática da Vercel; localmente o foco é medir payload e cache.",
-			"payloadControl":    "Fields restrito na Sheets API, export XLSX limitado a 25MiB e respostas públicas removem spreadsheetId.",
+			"payloadControl":    "Fields restrito na Sheets API, export XLSX limitado a 25MiB, respostas públicas removem spreadsheetId e abas de controle v2 não disparam busca de comentários Drive/XLSX.",
 		},
 		"paa": map[string]any{
 			"plano":     "Resolver a matrícula em Base de dados, fixar spreadsheetId apenas na sessão assinada e escolher parser legado/v2 por runtime/schemaStatus.",

@@ -321,15 +321,15 @@ function GradeDetailPanel({ tableKey, card }: { tableKey: string; card: GradeCar
 
     const frame = window.requestAnimationFrame(() => {
       const panel = panelRef.current;
-      const firstSubtopic = panel?.querySelector<HTMLElement>('[data-first-subtopic="true"]');
-      if (!panel || !firstSubtopic) return;
+      const detailHeading = panel?.querySelector<HTMLElement>('[data-detail-heading="true"]');
+      if (!panel || !detailHeading) return;
 
       const stickyBlock = panel.parentElement?.querySelector<HTMLElement>('[data-detail-sticky]');
       const rootStyles = window.getComputedStyle(document.documentElement);
       const stickyTop = Number.parseFloat(rootStyles.getPropertyValue('--activity-sticky-offset')) || 0;
       const visualGap = 12;
       const targetTop = stickyTop + (stickyBlock?.offsetHeight ?? 0) + visualGap;
-      const top = window.scrollY + firstSubtopic.getBoundingClientRect().top - targetTop;
+      const top = window.scrollY + detailHeading.getBoundingClientRect().top - targetTop;
       const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
       window.scrollTo({
@@ -343,7 +343,7 @@ function GradeDetailPanel({ tableKey, card }: { tableKey: string; card: GradeCar
 
   return (
     <section className="detail-panel" id={detailPanelId(tableKey, card.key)} ref={panelRef}>
-      <div className="detail-header">
+      <div className="detail-header" data-detail-heading="true">
         <div>
           <strong>Critérios avaliados</strong>
         </div>
@@ -365,16 +365,16 @@ function GradeDetailPanel({ tableKey, card }: { tableKey: string; card: GradeCar
 function DetailList({ details }: { details: GradeDetail[] }) {
   return (
     <div className="detail-items">
-      {details.map((item, index) => (
-        <DetailItem item={item} first={index === 0} key={item.key} />
+      {details.map((item) => (
+        <DetailItem item={item} key={item.key} />
       ))}
     </div>
   );
 }
 
-function DetailItem({ item, first }: { item: GradeDetail; first?: boolean }) {
+function DetailItem({ item }: { item: GradeDetail }) {
   return (
-    <article className={`detail-item ${item.tone || ''}`} data-first-subtopic={first ? 'true' : undefined}>
+    <article className={`detail-item ${item.tone || ''}`}>
       <div className="detail-item-row">
         <div>
           <strong>{item.label}</strong>

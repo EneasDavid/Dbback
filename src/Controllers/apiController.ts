@@ -53,7 +53,7 @@ async function fetchSWR<T>(path: string, init?: RequestInit): Promise<T | undefi
 
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
-    cache: init?.cache ?? 'no-cache',
+    cache: init?.cache ?? 'default',
     credentials: 'include',
     headers: jsonHeaders({ ...init, headers }),
   });

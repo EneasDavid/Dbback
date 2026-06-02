@@ -24,6 +24,15 @@ func TestOptionalDriveCommentsDoesNotBlockSheetsAccess(t *testing.T) {
 	}
 }
 
+func TestRequiresDriveCommentsSkipsControlSheets(t *testing.T) {
+	if requiresDriveComments([]string{"Base de dados", v2ABsSheet, v2ActivitiesSheet}, "Base de dados") {
+		t.Fatal("control sheets should not require Drive/XLSX comments")
+	}
+	if !requiresDriveComments([]string{"nota ab1"}, "Base de dados") {
+		t.Fatal("grade sheets should still allow Drive/XLSX comments")
+	}
+}
+
 func TestSheetReadErrorExplainsServiceAccountPermission(t *testing.T) {
 	err := sheetReadError(&googleapi.Error{Code: http.StatusForbidden})
 

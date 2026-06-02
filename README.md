@@ -67,10 +67,11 @@ Os comentarios ricos do Google Drive sao usados apenas como enriquecimento. Se a
 - `singleflight` evita chamadas duplicadas quando varias requisicoes pedem as mesmas abas ao mesmo tempo.
 - Escopos de planilha compartilham o mesmo runtime de cache/singleflight, sem misturar abas homonimas de planilhas diferentes.
 - As rotas de notas retornam `ETag` e aceitam `If-None-Match`; respostas sem alteracao voltam como `304 Not Modified`.
-- O frontend aplica SWR: renderiza `sessionStorage` imediatamente, revalida em background, preserva dados locais em `304` e deduplica GETs em voo.
+- O frontend aplica SWR: renderiza `sessionStorage` imediatamente, respeita `max-age` do cache HTTP, preserva dados locais em `304` e deduplica GETs em voo.
 - Cards de atividade fazem prefetch das notas em `hover` e `focus`, antecipando a rede antes da expansao.
 - O cliente Google usa timeout total, timeout de handshake/cabecalho, keep-alive e pool de conexoes para impedir que chamadas lentas prendam a API e para reduzir latencia em rajadas.
 - O Vercel entrega payloads textuais com compressao Brotli/Gzip conforme `Accept-Encoding`; a API sinaliza `Vary: Accept-Encoding` nas notas.
+- Abas de controle v2 (`abs` e `atividades`) nao disparam export/busca de comentarios Drive/XLSX, reduzindo trafego antes da leitura das notas.
 - O export XLSX usado para comentarios e limitado a 25 MiB.
 - O frontend guarda o payload de notas em `sessionStorage`; alternar entre avaliacoes nao dispara nova chamada de rede.
 - A UI usa o payload normalizado do backend e nao recalcula regras sensiveis de nota no navegador.

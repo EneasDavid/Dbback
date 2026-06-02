@@ -567,12 +567,21 @@ var (
 
 func requiresDriveComments(sheetNames []string, loginSheet string) bool {
 	for _, sheetName := range sheetNames {
-		sheetName = strings.TrimSpace(sheetName)
-		if sheetName != "" && sheetName != loginSheet {
+		if requiresSheetComments(sheetName, loginSheet) {
 			return true
 		}
 	}
 	return false
+}
+
+func requiresSheetComments(sheetName string, loginSheet string) bool {
+	normalized := normalizeHeader(sheetName)
+	if normalized == "" {
+		return false
+	}
+	return normalized != normalizeHeader(loginSheet) &&
+		normalized != normalizeHeader(v2ABsSheet) &&
+		normalized != normalizeHeader(v2ActivitiesSheet)
 }
 
 func (c *SheetsClient) driveCommentsForSpreadsheet(ctx context.Context, spreadsheetID string) ([]driveCellComment, error) {
