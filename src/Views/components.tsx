@@ -207,6 +207,81 @@ export function SummaryTable({ table }: { table: GradeTable }) {
   );
 }
 
+export function ReaderGradeDocument({
+  session,
+  examLabel,
+  tables,
+}: {
+  session: SessionUser;
+  examLabel: string;
+  tables: GradeTable[];
+}) {
+  const readableTables = tables
+    .map((table) => ({ table, cards: cardsFor(table) }))
+    .filter(({ cards }) => cards.length > 0);
+
+  if (readableTables.length === 0) return null;
+
+  return (
+    <article className="reader-document" aria-labelledby="reader-document-title" itemScope itemType="https://schema.org/Article">
+      <header>
+        <p>Resumo em tópicos</p>
+        <h1 id="reader-document-title">Notas e feedbacks - {examLabel}</h1>
+        <dl>
+          <div>
+            <dt>Aluno</dt>
+            <dd>{session.name || 'Aluno'}</dd>
+          </div>
+          <div>
+            <dt>Matrícula</dt>
+            <dd>{session.matricula}</dd>
+          </div>
+          <div>
+            <dt>Avaliação</dt>
+            <dd>{examLabel}</dd>
+          </div>
+        </dl>
+      </header>
+
+      {readableTables.map(({ table, cards }) => (
+        <section className="reader-topic" key={`reader-${table.key}`}>
+          <h2>{table.label}</h2>
+          {table.status && <p>Status: {table.status}</p>}
+          <ul>
+            {cards.map((card) => (
+              <li key={`reader-${table.key}-${card.key}`}>
+                <h3>{card.label}: {card.displayValue}</h3>
+                {card.comment && (
+                  <p>
+                    Feedback{card.commentAuthor ? ` de ${card.commentAuthor}` : ''}: {card.comment}
+                  </p>
+                )}
+                {card.details && card.details.length > 0 && (
+                  <ul>
+                    {card.details.map((detail) => (
+                      <li key={`reader-${table.key}-${card.key}-${detail.key}`}>
+                        <p>
+                          <strong>{detail.label}</strong>: {detail.displayScore}
+                        </p>
+                        <p>Progresso: {formatReaderPercent(detail.ratio)}</p>
+                        {detail.comment && (
+                          <p>
+                            Feedback{detail.commentAuthor ? ` de ${detail.commentAuthor}` : ''}: {detail.comment}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </article>
+  );
+}
+
 function SummaryScoreCard({ card, fallbackLabel }: { card: GradeCardData; fallbackLabel: string }) {
   return (
     <section className={`summary-score ${summaryHighlight(card) ? 'highlight' : ''} ${card.tone || ''}`}>
@@ -397,6 +472,11 @@ function ProgressBar({ value }: { value: number }) {
 function summaryHighlight(card: GradeCardData) {
   const label = card.label.toLowerCase();
   return label.includes('total');
+}
+
+function formatReaderPercent(value: number) {
+  const percent = Math.min(Math.max(Number.isFinite(value) ? value : 0, 0), 100);
+  return `${percent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
 }
 
 function detailPanelId(tableKey: string, cardKey: string) {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { EmptyState, ExamSwitch, GradeCard, InlineError, LoginView, SummaryTable, Topbar } from '../Views/components';
+import { EmptyState, ExamSwitch, GradeCard, InlineError, LoginView, ReaderGradeDocument, SummaryTable, Topbar } from '../Views/components';
 import {
   cardsFor,
   clearGradeCache,
@@ -224,6 +224,7 @@ export default function AppController() {
   const summaryTables = useMemo(() => visibleTables.filter((table) => isSummaryTable(table.kind) && !isMediaTable(table) && cardsFor(table).length > 0), [visibleTables]);
   const mediaTables = useMemo(() => visibleTables.filter((table) => isMediaTable(table) && cardsFor(table).length > 0), [visibleTables]);
   const hasRenderableTables = activityTables.length + summaryTables.length + mediaTables.length > 0;
+  const currentExamLabel = examLabels[exam] || exam.toUpperCase();
 
   useEffect(() => {
     if (!session || loading || hasRenderableTables) {
@@ -316,17 +317,20 @@ export default function AppController() {
       {loading && <div className="loading" role="status" aria-live="polite">Carregando notas...</div>}
 
       {hasRenderableTables ? (
-        <section className="grade-list" id="grades" aria-live="polite">
-          {activityTables.map((table) => (
-            <GradeCard table={table} key={table.key} activeDetail={activeDetail} onToggleDetail={handleToggleDetail} onPrefetch={prefetchGrades} />
-          ))}
-          {summaryTables.map((table) => (
-            <SummaryTable table={table} key={table.key} />
-          ))}
-          {mediaTables.map((table) => (
-            <SummaryTable table={table} key={table.key} />
-          ))}
-        </section>
+        <>
+          <section className="grade-list" id="grades" aria-live="polite">
+            {activityTables.map((table) => (
+              <GradeCard table={table} key={table.key} activeDetail={activeDetail} onToggleDetail={handleToggleDetail} onPrefetch={prefetchGrades} />
+            ))}
+            {summaryTables.map((table) => (
+              <SummaryTable table={table} key={table.key} />
+            ))}
+            {mediaTables.map((table) => (
+              <SummaryTable table={table} key={table.key} />
+            ))}
+          </section>
+          <ReaderGradeDocument session={session} examLabel={currentExamLabel} tables={[...activityTables, ...summaryTables, ...mediaTables]} />
+        </>
       ) : (
         !loading && showEmptyState && <EmptyState exam={exam} />
       )}

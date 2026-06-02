@@ -465,6 +465,109 @@ input:focus-visible {
   gap: 14px;
 }
 
+.reader-document {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+}
+
+.reader-document > header {
+  display: block;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.reader-document header > p {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  text-transform: none;
+}
+
+.reader-document h1,
+.reader-document h2,
+.reader-document h3 {
+  margin: 0;
+  color: var(--text);
+  letter-spacing: 0;
+}
+
+.reader-document h1 {
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.reader-document h2 {
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.reader-document h3 {
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.reader-document dl {
+  display: block;
+  margin: 0;
+}
+
+.reader-document dl > div {
+  display: block;
+}
+
+.reader-document dt {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  text-transform: none;
+}
+
+.reader-document dd {
+  margin: 0;
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+
+.reader-topic {
+  display: block;
+}
+
+.reader-topic p {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.reader-topic ul {
+  display: block;
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.reader-topic li {
+  padding-left: 0.2rem;
+}
+
+.reader-topic li::marker {
+  color: inherit;
+}
+
+.reader-topic li > p {
+  margin-top: 6px;
+}
+
+.reader-topic li > ul {
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .grade-table {
   overflow: hidden;
   padding: 16px;
@@ -828,6 +931,9 @@ input:focus-visible {
   border-radius: 20px;
   background: color-mix(in srgb, var(--panel) 90%, transparent);
   border: 1px solid var(--border-soft);
+  --score-badge-bg: color-mix(in srgb, var(--brand-soft) 70%, var(--panel));
+  --score-badge-text: var(--brand);
+  --score-badge-border: color-mix(in srgb, var(--brand) 22%, var(--border-soft));
   overflow: hidden;
   box-shadow: var(--inner-highlight);
 }
@@ -835,27 +941,33 @@ input:focus-visible {
 .detail-item.score-danger {
   border-color: var(--danger-border);
   background: color-mix(in srgb, var(--danger-bg) 32%, var(--panel));
+  --score-badge-bg: color-mix(in srgb, var(--danger-bg) 72%, var(--panel));
+  --score-badge-text: var(--danger);
+  --score-badge-border: var(--danger-border);
 }
 
 .detail-item.score-warning {
   border-color: color-mix(in srgb, var(--warning) 36%, var(--border-soft));
   background: color-mix(in srgb, var(--warning-bg) 34%, var(--panel));
+  --score-badge-bg: color-mix(in srgb, var(--warning-bg) 74%, var(--panel));
+  --score-badge-text: var(--warning);
+  --score-badge-border: color-mix(in srgb, var(--warning) 38%, var(--border-soft));
 }
 
 .detail-item.score-success {
   border-color: color-mix(in srgb, var(--success) 32%, var(--border-soft));
   background: color-mix(in srgb, var(--success-bg) 34%, var(--panel));
+  --score-badge-bg: color-mix(in srgb, var(--success-bg) 72%, var(--panel));
+  --score-badge-text: var(--success);
+  --score-badge-border: color-mix(in srgb, var(--success) 34%, var(--border-soft));
 }
 
 .detail-item.score-pending {
   border-color: color-mix(in srgb, var(--border) 72%, transparent);
   background: color-mix(in srgb, var(--panel) 82%, transparent);
-}
-
-.detail-item.score-pending .badge {
-  color: var(--muted-strong);
-  background: color-mix(in srgb, var(--panel-soft) 82%, transparent);
-  border-color: color-mix(in srgb, var(--border) 86%, transparent);
+  --score-badge-bg: color-mix(in srgb, var(--panel-soft) 82%, transparent);
+  --score-badge-text: var(--muted-strong);
+  --score-badge-border: color-mix(in srgb, var(--border) 86%, transparent);
 }
 
 .detail-item-row {
