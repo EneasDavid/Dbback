@@ -191,6 +191,32 @@ func TestV2ActivityItemsKeepsRubricScaleAndComments(t *testing.T) {
 	}
 }
 
+func TestV2ActivityItemsUsesMaximoPossivelRowForQuestionWeights(t *testing.T) {
+	grid := &sheetGrid{
+		headers: []string{"grupo", "Questão 1", "Questão 2", "Questão 3", "Questão 4", "Questão 5", "Questão 6", "Adequação", "Organização", "nota final"},
+		rows: [][]string{
+			{"maximo possivel", "1", "1,5", "1,5", "2", "1", "1,5", "1", "0,5", "10"},
+			{"Grupo A", "1", "1", "1,5", "1", "0,5", "1", "1", "0,5", "8"},
+		},
+	}
+
+	maxRowIdx := findMaxRow(grid.rows)
+	items := v2ActivityItems(grid, maxRowIdx, 1, 0.33)
+
+	if maxRowIdx != 0 {
+		t.Fatalf("findMaxRow() = %d, want maximo possivel row", maxRowIdx)
+	}
+	if len(items) != 8 {
+		t.Fatalf("items len = %d, want 8 criteria without group/final grade: %#v", len(items), items)
+	}
+	wantMaxima := []string{"1", "1,5", "1,5", "2", "1", "1,5", "1", "0,5"}
+	for idx, want := range wantMaxima {
+		if items[idx].NotaMaxima != want {
+			t.Fatalf("items[%d].NotaMaxima = %q, want %q: %#v", idx, items[idx].NotaMaxima, want, items[idx])
+		}
+	}
+}
+
 func TestV2ActivityItemsCapsScoresAtCriterionMaximum(t *testing.T) {
 	grid := &sheetGrid{
 		headers: []string{"Matrícula", "Critério A", "Critério B"},

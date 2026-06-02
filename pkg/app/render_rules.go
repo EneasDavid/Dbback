@@ -424,12 +424,12 @@ func inferMaxForLabel(label string) float64 {
 	normalized := normalizeHeader(label)
 	values := map[string]float64{
 		"organizacao":  0.5,
-		"q.1":          1.5,
-		"q.2":          1,
+		"q.1":          1,
+		"q.2":          1.5,
 		"q.3":          1.5,
 		"q.4":          2,
-		"q.5":          1.5,
-		"q.6":          2,
+		"q.5":          1,
+		"q.6":          1.5,
 		"semana 1":     0.25,
 		"semana 2":     0.25,
 		"semana 3":     0.25,

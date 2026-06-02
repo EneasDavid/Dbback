@@ -78,11 +78,20 @@ func activityStatus(items []activityItem) string {
 
 func findMaxRow(rows [][]string) int {
 	for rowIdx, row := range rows {
-		if strings.Contains(normalizeHeader(valueAt(row, 0)), "nota maxima") || strings.Contains(normalizeHeader(valueAt(row, 0)), "exemplo nota maxima") {
+		if isMaxRowLabel(valueAt(row, 0)) {
 			return rowIdx
 		}
 	}
 	return -1
+}
+
+func isMaxRowLabel(value string) bool {
+	label := normalizeHeader(value)
+	return strings.Contains(label, "nota maxima") ||
+		strings.Contains(label, "exemplo nota maxima") ||
+		strings.Contains(label, "maximo possivel") ||
+		strings.Contains(label, "pontuacao maxima") ||
+		strings.Contains(label, "pontuacao possivel")
 }
 
 func findStudentRow(grid *sheetGrid, start int, user SessionUser) int {
