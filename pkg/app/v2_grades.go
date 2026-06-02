@@ -333,7 +333,7 @@ func v2ABFromRow(row []string, abIdx int, labelIdx int, activeIdx int) v2ABConfi
 	if label == "" {
 		label = strings.ToUpper(key)
 	}
-	return v2ABConfig{Key: key, Label: label, Active: activeIdx < 0 || activeABValue(valueAt(row, activeIdx))}
+	return v2ABConfig{Key: key, Label: label, Active: activeIdx < 0 || activeSpreadsheetValue(valueAt(row, activeIdx), false)}
 }
 
 func v2ABRouteCandidates(exam string) []string {
@@ -370,7 +370,7 @@ func v2ActivitiesForAB(grid *sheetGrid, exam string) []v2ActivityConfig {
 		if abIdx >= 0 && normalizeABKey(valueAt(row, abIdx)) != normalizeABKey(exam) {
 			continue
 		}
-		if activeIdx >= 0 && !activeActivityValue(valueAt(row, activeIdx)) {
+		if activeIdx >= 0 && !activeSpreadsheetValue(valueAt(row, activeIdx), true) {
 			continue
 		}
 		label := valueAt(row, nameIdx)
@@ -598,42 +598,30 @@ func v2AverageCard(grid *sheetGrid, row []string) *CardResult {
 }
 
 func firstHeaderIndex(headers []string, candidates ...string) int {
-	for _, candidate := range candidates {
-		wanted := normalizeHeader(candidate)
+	return headerIndex(headers, false, candidates...)
+}
+
+func matchingHeaderIndex(headers []string, labels ...string) int {
+	return headerIndex(headers, true, labels...)
+}
+
+func headerIndex(headers []string, bidirectionalContains bool, labels ...string) int {
+	for _, label := range labels {
+		wanted := normalizeHeader(label)
 		for idx, header := range headers {
 			if normalizeHeader(header) == wanted {
 				return idx
 			}
 		}
 	}
-	for _, candidate := range candidates {
-		wanted := normalizeHeader(candidate)
+	for _, label := range labels {
+		wanted := normalizeHeader(label)
 		if len([]rune(wanted)) <= 2 {
 			continue
 		}
 		for idx, header := range headers {
-			if strings.Contains(normalizeHeader(header), wanted) {
-				return idx
-			}
-		}
-	}
-	return -1
-}
-
-func matchingHeaderIndex(headers []string, labels ...string) int {
-	for _, label := range labels {
-		wanted := normalizeHeader(label)
-		for idx, header := range headers {
-			if normalizeHeader(header) == wanted {
-				return idx
-			}
-		}
-	}
-	for _, label := range labels {
-		wanted := normalizeHeader(label)
-		for idx, header := range headers {
 			normalized := normalizeHeader(header)
-			if wanted != "" && (strings.Contains(normalized, wanted) || strings.Contains(wanted, normalized)) {
+			if strings.Contains(normalized, wanted) || (bidirectionalContains && strings.Contains(wanted, normalized)) {
 				return idx
 			}
 		}
@@ -641,37 +629,11 @@ func matchingHeaderIndex(headers []string, labels ...string) int {
 	return -1
 }
 
-func truthySpreadsheetValue(value string) bool {
-	normalized := normalizeHeader(value)
-	return normalized == "" ||
-		normalized == "0" ||
-		normalized == "1" ||
-		normalized == "sim" ||
-		normalized == "s" ||
-		normalized == "true" ||
-		normalized == "ativo" ||
-		normalized == "ativa" ||
-		normalized == "lancada" ||
-		normalized == "lançada"
-}
-
-func activeActivityValue(value string) bool {
+func activeSpreadsheetValue(value string, blankAllowed bool) bool {
 	normalized := normalizeHeader(value)
 	if normalized == "" {
-		return true
+		return blankAllowed
 	}
-	return normalized == "1" ||
-		normalized == "sim" ||
-		normalized == "s" ||
-		normalized == "true" ||
-		normalized == "ativo" ||
-		normalized == "ativa" ||
-		normalized == "lancada" ||
-		normalized == "lançada"
-}
-
-func activeABValue(value string) bool {
-	normalized := normalizeHeader(value)
 	return normalized == "1" ||
 		normalized == "sim" ||
 		normalized == "s" ||

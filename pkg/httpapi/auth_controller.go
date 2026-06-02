@@ -1,14 +1,18 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"feedback/pkg/app"
 )
 
 type AuthController struct{}
+
+const maxLoginBodyBytes = 1024
 
 type loginRequest struct {
 	Matricula string `json:"matricula"`
@@ -23,13 +27,16 @@ func (AuthController) Login(w http.ResponseWriter, r *http.Request) {
 		app.Error(w, err)
 		return
 	}
+	defer r.Body.Close()
 	var req loginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxLoginBodyBytes))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
 		app.Error(w, app.NewHTTPError(400, "json invalido"))
 		return
 	}
-	matricula := strings.TrimSpace(req.Matricula)
-	if matricula == "" {
+	matricula, ok := normalizeMatricula(req.Matricula)
+	if !ok {
 		app.Error(w, app.NewHTTPError(400, "informe a matricula"))
 		return
 	}
@@ -40,7 +47,8 @@ func (AuthController) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	user := app.SessionUser{Matricula: identity.Matricula, Name: identity.Name, SpreadsheetID: identity.SpreadsheetID, SchemaStatus: identity.SchemaStatus}
 	sessions.Set(w, user)
-	app.JSON(w, http.StatusOK, user)
+	warmGradesAfterLogin(sheetsClient, user)
+	app.JSON(w, http.StatusOK, publicUser(user))
 }
 
 func (AuthController) Logout(w http.ResponseWriter, r *http.Request) {
@@ -62,5 +70,26 @@ func (AuthController) Me(w http.ResponseWriter, r *http.Request) {
 		app.JSON(w, http.StatusOK, nil)
 		return
 	}
-	app.JSON(w, http.StatusOK, user)
+	app.JSON(w, http.StatusOK, publicUser(user))
+}
+
+func normalizeMatricula(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if len(value) < 3 || len(value) > 32 {
+		return "", false
+	}
+	for _, char := range value {
+		if char < '0' || char > '9' {
+			return "", false
+		}
+	}
+	return value, true
+}
+
+func warmGradesAfterLogin(sheetsClient *app.SheetsClient, user app.SessionUser) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+		defer cancel()
+		_, _ = sheetsClient.GradesFor(ctx, []string{"ab1", "ab2"}, user)
+	}()
 }

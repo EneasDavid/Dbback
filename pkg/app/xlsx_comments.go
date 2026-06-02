@@ -73,29 +73,30 @@ type xlsxInnerXML struct {
 }
 
 func (c *SheetsClient) workbookCommentsForSpreadsheet(ctx context.Context, spreadsheetID string) (map[string][]workbookCellComment, error) {
-	c.mu.Lock()
-	if c.workbookComments == nil {
-		c.workbookComments = map[string]cachedWorkbookComments{}
+	owner := c.cacheRuntime()
+	owner.mu.Lock()
+	if owner.workbookComments == nil {
+		owner.workbookComments = map[string]cachedWorkbookComments{}
 	}
-	cached := c.workbookComments[spreadsheetID]
+	cached := owner.workbookComments[spreadsheetID]
 	if cached.comments != nil && time.Now().Before(cached.expires) {
 		comments := cloneWorkbookComments(cached.comments)
-		c.mu.Unlock()
+		owner.mu.Unlock()
 		return comments, nil
 	}
-	c.mu.Unlock()
+	owner.mu.Unlock()
 
-	value, err, _ := c.group.Do("workbook-comments:"+spreadsheetID, func() (interface{}, error) {
+	value, err, _ := owner.group.Do("workbook-comments:"+spreadsheetID, func() (interface{}, error) {
 		comments, err := c.fetchWorkbookComments(ctx, spreadsheetID)
 		if err != nil {
 			return nil, err
 		}
-		c.mu.Lock()
-		if c.workbookComments == nil {
-			c.workbookComments = map[string]cachedWorkbookComments{}
+		owner.mu.Lock()
+		if owner.workbookComments == nil {
+			owner.workbookComments = map[string]cachedWorkbookComments{}
 		}
-		c.workbookComments[spreadsheetID] = cachedWorkbookComments{expires: time.Now().Add(c.cfg.CacheTTL), comments: comments}
-		c.mu.Unlock()
+		owner.workbookComments[spreadsheetID] = cachedWorkbookComments{expires: time.Now().Add(c.cfg.CacheTTL), comments: comments}
+		owner.mu.Unlock()
 		return comments, nil
 	})
 	if err != nil {

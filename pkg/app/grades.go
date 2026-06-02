@@ -338,6 +338,9 @@ func (c *SheetsClient) candidateSpreadsheetIDs(user SessionUser) []string {
 }
 
 func (c *SheetsClient) userForSpreadsheet(ctx context.Context, user SessionUser) (SessionUser, bool, error) {
+	if c.trustsSessionSpreadsheet(user) {
+		return user, true, nil
+	}
 	identity, err := c.LoginIdentity(ctx, user.Matricula)
 	if err != nil {
 		if canFallbackToNextBase(err) {
@@ -346,6 +349,14 @@ func (c *SheetsClient) userForSpreadsheet(ctx context.Context, user SessionUser)
 		return SessionUser{}, false, err
 	}
 	return SessionUser{Matricula: identity.Matricula, Name: identity.Name, SpreadsheetID: identity.SpreadsheetID, SchemaStatus: identity.SchemaStatus}, true, nil
+}
+
+func (c *SheetsClient) trustsSessionSpreadsheet(user SessionUser) bool {
+	spreadsheetID := strings.TrimSpace(user.SpreadsheetID)
+	if spreadsheetID == "" || strings.TrimSpace(user.Matricula) == "" {
+		return false
+	}
+	return len(c.cfg.SpreadsheetIDs) == 1 && c.cfg.SpreadsheetIDs[0] == spreadsheetID
 }
 
 func (c *SheetsClient) scopedToSpreadsheet(spreadsheetID string) *SheetsClient {
@@ -358,12 +369,10 @@ func (c *SheetsClient) scopedToSpreadsheet(spreadsheetID string) *SheetsClient {
 	cfg.SpreadsheetIDs = []string{spreadsheetID}
 	cfg.RuntimeVersion = c.runtimeForSpreadsheet(spreadsheetID)
 	return &SheetsClient{
-		cfg:              cfg,
-		service:          c.service,
-		httpClient:       c.httpClient,
-		cache:            map[string]cachedGrid{},
-		driveComments:    map[string]cachedDriveComments{},
-		workbookComments: map[string]cachedWorkbookComments{},
+		cfg:        cfg,
+		service:    c.service,
+		httpClient: c.httpClient,
+		cacheOwner: c.cacheRuntime(),
 	}
 }
 

@@ -4,11 +4,17 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"feedback/pkg/app"
 )
 
 type GradesController struct{}
+
+const (
+	gradesMaxAge               = 30 * time.Second
+	gradesStaleWhileRevalidate = 5 * time.Minute
+)
 
 func (GradesController) Show(w http.ResponseWriter, r *http.Request, path string) {
 	if !app.Method(w, r, http.MethodGet) {
@@ -36,7 +42,7 @@ func (GradesController) Show(w http.ResponseWriter, r *http.Request, path string
 		app.Error(w, err)
 		return
 	}
-	app.JSON(w, http.StatusOK, result)
+	app.CacheableJSON(w, r, http.StatusOK, publicGradeResult(result), gradesMaxAge, gradesStaleWhileRevalidate)
 }
 
 func (GradesController) All(w http.ResponseWriter, r *http.Request) {
@@ -63,7 +69,7 @@ func (GradesController) All(w http.ResponseWriter, r *http.Request) {
 		app.Error(w, err)
 		return
 	}
-	app.JSON(w, http.StatusOK, result)
+	app.CacheableJSON(w, r, http.StatusOK, publicGradeResults(result), gradesMaxAge, gradesStaleWhileRevalidate)
 }
 
 func ensureUserSpreadsheet(w http.ResponseWriter, r *http.Request, sessions app.SessionManager, sheetsClient *app.SheetsClient, user app.SessionUser) app.SessionUser {

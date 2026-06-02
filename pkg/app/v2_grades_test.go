@@ -641,7 +641,7 @@ func TestV2ActivityTableUsesCriteriaScoreWhenSummaryIsPending(t *testing.T) {
 				expires: time.Now().Add(time.Hour),
 				grid: &sheetGrid{
 					headers: []string{"Matrícula", "Projeto"},
-					rows:    [][]string{{"123", "Não corrigida ainda"}},
+					rows:    [][]string{{"123", "Em correção"}},
 					rowNotes: [][]string{
 						{"", "Comentário geral do projeto"},
 					},
@@ -676,7 +676,7 @@ func TestV2ActivityTableUsesCriteriaScoreWhenSummaryIsPending(t *testing.T) {
 		t.Fatalf("gradeForV2() error = %v", err)
 	}
 	card := result.Tables[0].Cards[0]
-	if card.Value != "Não corrigida ainda" || card.DisplayValue != "Não corrigida ainda" {
+	if card.Value != "Em correção" || card.DisplayValue != "Em correção" {
 		t.Fatalf("card score = %q/%q, want pending summary score", card.Value, card.DisplayValue)
 	}
 	if card.Comment != "Comentário geral do projeto" || card.CommentAuthor != "Prof. Geral" {

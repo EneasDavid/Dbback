@@ -2,7 +2,6 @@ package app
 
 import (
 	"math"
-	"sort"
 	"strings"
 	"unicode"
 )
@@ -76,9 +75,6 @@ func cellDetails(cells []studentCell, include func(string) bool) []DetailResult 
 		detail.CommentAuthor = cell.CommentAuthor
 		details = append(details, detail)
 	}
-	sort.SliceStable(details, func(i, j int) bool {
-		return compareDetailLabels(details[i].Label, details[j].Label) < 0
-	})
 	return details
 }
 
@@ -138,7 +134,7 @@ func scaledScoreDetail(key string, label string, value string, maximum float64, 
 
 func detailDisplayScore(value string, maximum float64, pending bool) string {
 	if pending {
-		return "Não corrigido ainda"
+		return "Em correção"
 	}
 	if obtained, ok := parseScore(value); ok && maximum > 0 {
 		return formatScore(obtained) + " / " + formatScore(maximum)
@@ -151,11 +147,11 @@ func detailDisplayScore(value string, maximum float64, pending bool) string {
 
 func displayValue(label string, value string) string {
 	if isPendingValue(value) {
-		return "Não corrigida ainda"
+		return "Em correção"
 	}
 	if isGradeLabel(label) {
 		if _, ok := parseScore(value); !ok {
-			return "Não corrigida ainda"
+			return "Em correção"
 		}
 	}
 	return value
@@ -163,7 +159,7 @@ func displayValue(label string, value string) string {
 
 func isPendingValue(value string) bool {
 	text := normalizeHeader(value)
-	return text == "" || strings.Contains(text, "nao corrigid")
+	return text == "" || strings.Contains(text, "nao corrigid") || strings.Contains(text, "em correcao")
 }
 
 func scoreTone(label string, value string) string {

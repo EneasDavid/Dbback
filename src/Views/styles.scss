@@ -2,6 +2,10 @@
   color: #172033;
   background: #eef2f8;
   color-scheme: light;
+  --tabs-sticky-offset: 10px;
+  --tabs-sticky-height: 52px;
+  --activity-sticky-gap: 8px;
+  --activity-sticky-offset: calc(var(--tabs-sticky-offset) + var(--tabs-sticky-height) + var(--activity-sticky-gap));
   --page: #eef2f8;
   --shell: rgba(248, 250, 253, 0.78);
   --panel: rgba(255, 255, 255, 0.72);
@@ -383,8 +387,8 @@ input:focus-visible {
   border-radius: 22px;
   background: color-mix(in srgb, var(--panel-soft) 88%, transparent);
   position: sticky;
-  top: 10px;
-  z-index: 1;
+  top: var(--tabs-sticky-offset);
+  z-index: 10;
   margin-top: 12px;
   box-shadow: var(--inner-highlight);
   backdrop-filter: blur(20px) saturate(150%);
@@ -407,12 +411,12 @@ input:focus-visible {
 .exam-switch button.active {
   color: var(--text);
   background: color-mix(in srgb, var(--panel) 92%, transparent);
-  box-shadow: 0 8px 18px rgba(33, 43, 63, 0.1), var(--inner-highlight);
+  box-shadow: none;
 }
 
 :root[data-theme="dark"] .exam-switch button.active {
   background: color-mix(in srgb, var(--panel-solid) 88%, var(--accent-soft));
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22), var(--inner-highlight);
+  box-shadow: none;
 }
 
 .exam-switch[data-mode="single"] {
@@ -468,6 +472,32 @@ input:focus-visible {
   box-shadow: var(--shadow-soft), var(--inner-highlight);
   backdrop-filter: blur(24px) saturate(160%);
   -webkit-backdrop-filter: blur(24px) saturate(160%);
+}
+
+.grade-table.activity-open {
+  overflow: visible;
+}
+
+.activity-sticky-block {
+  position: sticky;
+  top: var(--activity-sticky-offset);
+  z-index: 9;
+  margin: -16px -16px 8px;
+  padding: 16px 16px 8px;
+  border-radius: 28px 28px 22px 22px;
+  border-bottom: 1px solid var(--border-soft);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--panel-solid) 94%, transparent), color-mix(in srgb, var(--panel) 92%, transparent));
+  box-shadow: var(--inner-highlight);
+  backdrop-filter: blur(24px) saturate(165%);
+  -webkit-backdrop-filter: blur(24px) saturate(165%);
+}
+
+.activity-sticky-block .grade-row {
+  border-bottom: 0;
+}
+
+.activity-sticky-block .grade-row-trigger {
+  min-height: 60px;
 }
 
 .grade-table header {
@@ -665,34 +695,31 @@ input:focus-visible {
   transform: rotate(90deg);
 }
 
-.grade-row.score-danger {
+.grade-row.score-danger,
+.grade-row.score-warning,
+.grade-row.score-success,
+.grade-row.score-pending {
   margin: 8px 0 0;
   padding: 0 10px;
   border-radius: 18px;
+}
+
+.grade-row.score-danger {
   color: var(--danger);
   background: var(--danger-bg);
 }
 
 .grade-row.score-warning {
-  margin: 8px 0 0;
-  padding: 0 10px;
-  border-radius: 18px;
   color: var(--warning);
   background: var(--warning-bg);
 }
 
 .grade-row.score-success {
-  margin: 8px 0 0;
-  padding: 0 10px;
-  border-radius: 18px;
   color: var(--success);
   background: var(--success-bg);
 }
 
 .grade-row.score-pending {
-  margin: 8px 0 0;
-  padding: 0 10px;
-  border-radius: 18px;
   color: var(--pending-text);
   background: var(--pending-bg);
 }
@@ -760,7 +787,7 @@ input:focus-visible {
 }
 
 .detail-panel {
-  margin: 8px 0 18px;
+  margin: 10px 0 18px;
   padding: 14px;
   max-width: 100%;
   border-radius: 24px;
@@ -797,6 +824,7 @@ input:focus-visible {
   gap: 14px;
   min-width: 0;
   max-width: 100%;
+  scroll-margin-top: calc(var(--activity-sticky-offset) + 150px);
   padding: 17px;
   border-radius: 20px;
   background: color-mix(in srgb, var(--panel) 90%, transparent);

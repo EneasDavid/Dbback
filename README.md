@@ -7,20 +7,20 @@ Monolito Go + React para consulta autenticada de notas e feedbacks a partir de G
 A documentacao de rotas, schemas e organizacao do payload fica na propria API:
 
 - Local: `GET /api/docs`
-- Vercel: <https://dbback-nxak8qw9b-eneasdavids-projects.vercel.app/api/docs>
+- Vercel: <https://dbback.vercel.app/api/docs>
 
 A rota de docs usa Basic Auth. O usuario e a senha existem somente no ambiente da aplicacao; nao registre valores de login no README.
 
 ### Endpoints HTTP
 
-Todos os endpoints respondem com `Cache-Control: no-store` e headers de seguranca basicos. Em Vercel, o roteador tambem aceita o prefixo serverless `/api/index.go/` para as mesmas rotas.
+Os endpoints de sessao e documentacao respondem com `Cache-Control: no-store`. As rotas de notas usam cache privado por usuario com `ETag`, `Cache-Control: private, max-age=30, stale-while-revalidate=300` e `Vary: Cookie, Accept-Encoding`. Em Vercel, o roteador tambem aceita o prefixo serverless `/api/index.go/` para as mesmas rotas.
 
 | Metodo | Caminho | Auth | Descricao |
 | --- | --- | --- | --- |
 | `GET` | `/api`, `/api/index`, `/api/index.go` | Basic Auth docs | Alias para a documentacao HTML da API. |
 | `GET` | `/api/docs` | Basic Auth docs | Documentacao HTML quando `Accept` pede HTML. |
 | `GET` | `/api/docs?format=json` | Basic Auth docs | Documentacao JSON com rotas, schemas, organizacao de dados e rede/performance. |
-| `POST` | `/api/login` | Nao | Recebe `{ "matricula": "..." }`, valida a aba `Base de dados`, cria cookie de sessao e fixa `spreadsheetId/schemaStatus`. |
+| `POST` | `/api/login` | Nao | Recebe `{ "matricula": "..." }`, valida a aba `Base de dados`, cria cookie de sessao e fixa a planilha internamente com `schemaStatus` publico. |
 | `POST` | `/api/logout` | Nao | Limpa o cookie de sessao. |
 | `GET` | `/api/me` | Cookie opcional | Retorna o usuario da sessao ou `null`. |
 | `GET` | `/api/grades?exam=<avaliacao>` | Cookie | Retorna uma avaliacao. No legado use `ab1`/`ab2`; na v2 use a chave ativa da aba `abs`. |
@@ -31,13 +31,19 @@ Query comum de notas: `refresh=1` limpa o cache em memoria do processo antes de 
 
 ## Arquitetura
 
-O projeto segue uma organizacao MVC pragmatica para Go:
+O projeto segue uma organizacao MVC. No frontend, a arvore fisica separa explicitamente responsabilidades:
+
+- `src/Models/`: tipos, normalizacao de payloads, cache, compatibilidade legado/V2 e flag `v2_stable: true`.
+- `src/Views/`: componentes React e estilos da interface.
+- `src/Controllers/`: controle de fluxo da aplicacao, sessoes, chamadas HTTP e coordenacao entre Models e Views.
+
+No backend Go, a separacao continua organizada por responsabilidade:
 
 - `api/`: roteador serverless, controllers HTTP e view HTML das docs.
 - `pkg/app/`: modelos, configuracao, sessoes, servicos de notas e repositorio Google Sheets/Drive.
 - `cmd/dev/`: servidor local que serve frontend e API no mesmo processo.
 - `cmd/comments/`: utilitario de diagnostico para comentarios vistos pela service account.
-- `src/`: UI React, cliente HTTP, tipos e componentes.
+- `src/`: raiz do frontend MVC (`Models`, `Views`, `Controllers`).
 
 Fluxo principal:
 
@@ -49,15 +55,22 @@ Os comentarios ricos do Google Drive sao usados apenas como enriquecimento. Se a
 
 ## Otimizacoes tecnicas
 
+- Meta de UX: no caminho quente, login + primeiro render de notas deve ficar em ate 2s. Caminho quente significa runtime Vercel ativo, cache do servidor dentro do TTL e/ou cache SWR local no navegador.
 - `GET /api/grades/all` carrega todas as avaliacoes disponiveis em uma unica chamada HTTP do frontend.
+- `POST /api/login` inicia um warm-up assíncrono de `GradesFor` logo depois de criar a sessao; a chamada seguinte de notas compartilha cache/singleflight quando cai no mesmo runtime.
 - Na v2, `GET /api/grades/all` carrega apenas ABs ativas da aba `abs`, evitando payload e UI para avaliacoes indisponiveis.
 - O backend agrega as abas configuradas e faz uma unica leitura em lote no Google Sheets sempre que possivel.
 - Valores, notas de celula e metadados de merges sao buscados juntos pelo Sheets API com `Fields` restrito.
 - Comentarios ricos do Drive e comentarios exportados do XLSX sao buscados em paralelo com a leitura das abas e aplicados como enriquecimento quando a celula pode ser mapeada.
 - Comentarios em celulas de criterio/nota entram no mesmo payload das notas, sem requisicao extra do frontend.
-- Cache em memoria por aba com TTL reduz chamadas repetidas ao Google durante a mesma janela de uso.
+- Cache em memoria por planilha/aba com TTL reduz chamadas repetidas ao Google durante a mesma janela de uso.
 - `singleflight` evita chamadas duplicadas quando varias requisicoes pedem as mesmas abas ao mesmo tempo.
+- Escopos de planilha compartilham o mesmo runtime de cache/singleflight, sem misturar abas homonimas de planilhas diferentes.
+- As rotas de notas retornam `ETag` e aceitam `If-None-Match`; respostas sem alteracao voltam como `304 Not Modified`.
+- O frontend aplica SWR: renderiza `sessionStorage` imediatamente, revalida em background, preserva dados locais em `304` e deduplica GETs em voo.
+- Cards de atividade fazem prefetch das notas em `hover` e `focus`, antecipando a rede antes da expansao.
 - O cliente Google usa timeout total, timeout de handshake/cabecalho, keep-alive e pool de conexoes para impedir que chamadas lentas prendam a API e para reduzir latencia em rajadas.
+- O Vercel entrega payloads textuais com compressao Brotli/Gzip conforme `Accept-Encoding`; a API sinaliza `Vary: Accept-Encoding` nas notas.
 - O export XLSX usado para comentarios e limitado a 25 MiB.
 - O frontend guarda o payload de notas em `sessionStorage`; alternar entre avaliacoes nao dispara nova chamada de rede.
 - A UI usa o payload normalizado do backend e nao recalcula regras sensiveis de nota no navegador.
@@ -68,9 +81,19 @@ PAA aqui significa Plano de Acesso e Auditoria: cada requisicao deve validar ace
 
 - Plano: `GOOGLE_SHEET_IDS` define todas as bases ativas. A API consulta as bases em ordem, prende a sessao ao `spreadsheetId` encontrado e, se aquela base nao tiver notas renderizaveis, tenta a proxima antes de devolver vazio.
 - Acesso: login e notas usam apenas a service account configurada; a planilha precisa estar compartilhada com o `client_email`. Arquivos JSON locais ficam no `.gitignore`; em deploy use `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64`.
-- Auditoria: o payload retorna `spreadsheetId` e `schemaStatus` quando a origem e conhecida, permitindo conferir se a resposta veio de legado ou v2.
-- Integridade: a sessao usa HMAC-SHA256, uma tecnica de assinatura semelhante ao principio de hash encadeado usado em blockchains para detectar alteracao. O sistema nao grava dados em blockchain publica; aplica o conceito util aqui: token assinavel, verificavel e resistente a adulteracao.
+- Auditoria: o payload retorna `schemaStatus` quando a origem e conhecida; o `spreadsheetId` fica apenas na sessao assinada do servidor e nao e exposto nas respostas publicas.
+- Integridade: a sessao usa HMAC-SHA256 e respostas JSON recebem digest SHA-256, tecnicas semelhantes ao principio de hash encadeado usado em blockchains para detectar alteracao. O sistema nao grava dados em blockchain publica; aplica o conceito util aqui: token assinavel, verificavel e resistente a adulteracao.
 - Disponibilidade: erros de uma planilha inacessivel em configuracoes com multiplas bases nao derrubam todo o fluxo quando outra base valida pode responder.
+
+Grafo de fluxo principal:
+
+```text
+LoginView -> POST /api/login -> AuthController -> LoginIdentity(Base de dados)
+AuthController -> warm-up GradesFor -> SheetsClient cache/singleflight
+AppController -> GET /api/grades/all + If-None-Match -> GradesController
+GradesController -> SheetsClient -> Google Sheets/Drive
+GradesController -> JSON privado + ETag -> GradeModel -> GradeCard/DetailPanel
+```
 
 ## Configuracao
 
@@ -133,7 +156,7 @@ Na v2, a nota principal do card da atividade vem da aba `nota <ab>`; se a coluna
 
 Mesmo com `SHEETS_RUNTIME_VERSION=v2`, o parser legado continua disponivel como fallback. Se a estrutura v2 nao existir, se a AB estiver sem tabelas v2 renderizaveis ou se a planilha ainda estiver no formato antigo, a mesma requisicao tenta o fluxo legado configurado por `SHEET_AB1_*`/`SHEET_AB2_*`.
 
-No login, a API procura a matricula em todas as planilhas configuradas e salva o `spreadsheetId` de origem na sessao. As consultas de notas seguintes ficam presas a esse mesmo arquivo, evitando misturar dados da planilha antiga com os da nova.
+No login, a API procura a matricula em todas as planilhas configuradas e salva o `spreadsheetId` de origem somente na sessao assinada. As consultas de notas seguintes ficam presas a esse mesmo arquivo, evitando misturar dados da planilha antiga com os da nova sem expor o ID da planilha ao frontend.
 
 ### Gerar o JSON da service account
 

@@ -1,6 +1,8 @@
 import { AlertCircle, BookOpenCheck, ChevronRight, LogOut, MessageSquareText, Moon, Search, Sun } from 'lucide-react';
 import type { CSSProperties, FormEvent } from 'react';
-import type { GradeCard as GradeCardData, GradeDetail, GradeTable, SessionUser } from './types';
+import { useEffect, useRef } from 'react';
+import { cardsFor, isMediaTable } from '../Models/gradeModel';
+import type { GradeCard as GradeCardData, GradeDetail, GradeTable, SessionUser } from '../Models/types';
 
 export function LoginView({
   matricula,
@@ -115,27 +117,73 @@ export function GradeCard({
   table,
   activeDetail,
   onToggleDetail,
+  onPrefetch,
 }: {
   table: GradeTable;
   activeDetail: { tableKey: string; cardKey: string } | null;
   onToggleDetail: (tableKey: string, cardKey: string) => void;
+  onPrefetch?: () => void;
 }) {
   const activeKey = activeDetail?.tableKey === table.key ? activeDetail.cardKey : null;
+  const cards = cardsFor(table);
+  const activeCard = cards.find((card) => card.key === activeKey);
   return (
-    <article className={`grade-table ${table.kind}`}>
-      <header>
-        <div>
-          <h2>{table.label}</h2>
-          {table.status && <span className="table-status">{table.status}</span>}
-        </div>
-      </header>
-      {cardsFor(table).map((card) => (
-        <div key={`${table.key}-${card.key}`}>
-          <GradeRow tableKey={table.key} card={card} expanded={activeKey === card.key} onToggle={() => onToggleDetail(table.key, card.key)} />
-          {activeKey === card.key && <GradeDetailPanel tableKey={table.key} card={card} />}
-        </div>
-      ))}
+    <article className={`grade-table ${table.kind} ${activeCard ? 'activity-open' : ''}`}>
+      {activeCard ? (
+        <OpenGradeCard table={table} cards={cards} activeCard={activeCard} onToggleDetail={onToggleDetail} onPrefetch={onPrefetch} />
+      ) : (
+        <>
+          <GradeTableHeader table={table} />
+          {cards.map((card) => (
+            <GradeRow tableKey={table.key} card={card} expanded={false} onToggle={() => onToggleDetail(table.key, card.key)} onPrefetch={onPrefetch} key={`${table.key}-${card.key}`} />
+          ))}
+        </>
+      )}
     </article>
+  );
+}
+
+function OpenGradeCard({
+  table,
+  cards,
+  activeCard,
+  onToggleDetail,
+  onPrefetch,
+}: {
+  table: GradeTable;
+  cards: GradeCardData[];
+  activeCard: GradeCardData;
+  onToggleDetail: (tableKey: string, cardKey: string) => void;
+  onPrefetch?: () => void;
+}) {
+  const inactiveCards = cards.filter((card) => card.key !== activeCard.key);
+  return (
+    <>
+      <ActivityStickyBlock table={table} card={activeCard} onToggleDetail={onToggleDetail} onPrefetch={onPrefetch} />
+      <GradeDetailPanel tableKey={table.key} card={activeCard} />
+      {inactiveCards.map((card) => (
+        <GradeRow tableKey={table.key} card={card} expanded={false} onToggle={() => onToggleDetail(table.key, card.key)} onPrefetch={onPrefetch} key={`${table.key}-${card.key}`} />
+      ))}
+    </>
+  );
+}
+
+function ActivityStickyBlock({
+  table,
+  card,
+  onToggleDetail,
+  onPrefetch,
+}: {
+  table: GradeTable;
+  card: GradeCardData;
+  onToggleDetail: (tableKey: string, cardKey: string) => void;
+  onPrefetch?: () => void;
+}) {
+  return (
+    <div className="activity-sticky-block" data-detail-sticky>
+      <GradeTableHeader table={table} />
+      <GradeRow tableKey={table.key} card={card} expanded onToggle={() => onToggleDetail(table.key, card.key)} onPrefetch={onPrefetch} />
+    </div>
   );
 }
 
@@ -179,6 +227,17 @@ function SummaryScoreCard({ card, fallbackLabel }: { card: GradeCardData; fallba
   );
 }
 
+function GradeTableHeader({ table }: { table: GradeTable }) {
+  return (
+    <header>
+      <div>
+        <h2>{table.label}</h2>
+        {table.status && <span className="table-status">{table.status}</span>}
+      </div>
+    </header>
+  );
+}
+
 export function ThemeButton({
   theme,
   setTheme,
@@ -218,7 +277,7 @@ export function EmptyState({ exam }: { exam: string }) {
   );
 }
 
-function GradeRow({ tableKey, card, expanded, onToggle }: { tableKey: string; card: GradeCardData; expanded: boolean; onToggle: () => void }) {
+function GradeRow({ tableKey, card, expanded, onToggle, onPrefetch }: { tableKey: string; card: GradeCardData; expanded: boolean; onToggle: () => void; onPrefetch?: () => void }) {
   const clickable = Boolean(card.details?.length);
   const panelId = detailPanelId(tableKey, card.key);
   return (
@@ -227,6 +286,8 @@ function GradeRow({ tableKey, card, expanded, onToggle }: { tableKey: string; ca
         type="button"
         className="grade-row-trigger"
         onClick={clickable ? onToggle : undefined}
+        onMouseEnter={clickable ? onPrefetch : undefined}
+        onFocus={clickable ? onPrefetch : undefined}
         aria-controls={clickable ? panelId : undefined}
         aria-expanded={clickable ? expanded : undefined}
         disabled={!clickable}
@@ -253,18 +314,41 @@ function GradeRow({ tableKey, card, expanded, onToggle }: { tableKey: string; ca
 
 function GradeDetailPanel({ tableKey, card }: { tableKey: string; card: GradeCardData }) {
   const details = card.details ?? [];
+  const panelRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (details.length === 0) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const panel = panelRef.current;
+      const firstSubtopic = panel?.querySelector<HTMLElement>('[data-first-subtopic="true"]');
+      if (!panel || !firstSubtopic) return;
+
+      const stickyBlock = panel.parentElement?.querySelector<HTMLElement>('[data-detail-sticky]');
+      const rootStyles = window.getComputedStyle(document.documentElement);
+      const stickyTop = Number.parseFloat(rootStyles.getPropertyValue('--activity-sticky-offset')) || 0;
+      const visualGap = 12;
+      const targetTop = stickyTop + (stickyBlock?.offsetHeight ?? 0) + visualGap;
+      const top = window.scrollY + firstSubtopic.getBoundingClientRect().top - targetTop;
+      const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+      window.scrollTo({
+        top: Math.max(0, top),
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [tableKey, card.key, details.length]);
+
   return (
-    <section className="detail-panel" id={detailPanelId(tableKey, card.key)}>
+    <section className="detail-panel" id={detailPanelId(tableKey, card.key)} ref={panelRef}>
       <div className="detail-header">
         <div>
           <strong>Critérios avaliados</strong>
         </div>
       </div>
-      <div className="detail-items">
-        {details.map((item) => (
-          <DetailItem item={item} key={item.key} />
-        ))}
-      </div>
+      <DetailList details={details} />
       {card.comment && (
         <div className="comment-bubble">
           <div className="comment-avatar">P</div>
@@ -278,9 +362,19 @@ function GradeDetailPanel({ tableKey, card }: { tableKey: string; card: GradeCar
   );
 }
 
-function DetailItem({ item }: { item: GradeDetail }) {
+function DetailList({ details }: { details: GradeDetail[] }) {
   return (
-    <article className={`detail-item ${item.tone || ''}`}>
+    <div className="detail-items">
+      {details.map((item, index) => (
+        <DetailItem item={item} first={index === 0} key={item.key} />
+      ))}
+    </div>
+  );
+}
+
+function DetailItem({ item, first }: { item: GradeDetail; first?: boolean }) {
+  return (
+    <article className={`detail-item ${item.tone || ''}`} data-first-subtopic={first ? 'true' : undefined}>
       <div className="detail-item-row">
         <div>
           <strong>{item.label}</strong>
@@ -313,14 +407,6 @@ function ProgressBar({ value }: { value: number }) {
 function summaryHighlight(card: GradeCardData) {
   const label = card.label.toLowerCase();
   return label.includes('total');
-}
-
-function cardsFor(table: GradeTable) {
-  return Array.isArray(table.cards) ? table.cards : [];
-}
-
-function isMediaTable(table: GradeTable) {
-  return table.kind === 'ab1summary' || table.kind === 'ab2summary' || table.key.startsWith('media-');
 }
 
 function detailPanelId(tableKey: string, cardKey: string) {

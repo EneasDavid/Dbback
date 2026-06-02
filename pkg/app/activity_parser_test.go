@@ -143,6 +143,30 @@ func TestActivityDetailsKeepSpreadsheetSubtopicLabel(t *testing.T) {
 	}
 }
 
+func TestActivityStartsAtFirstSubtopicColumn(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Nome", ""), cellData("Matrícula", ""), cellData("Critério", "")),
+		rowData(cellData("Nota maxima", ""), cellData("", ""), cellData("10", "")),
+		rowData(cellData("Alice", ""), cellData("123", ""), cellData("7", "")),
+	}, nil)
+
+	table, found, err := parseActivityRubric(grid, TableConfig{
+		Key:       "at1",
+		Label:     "AT. 1",
+		SheetName: "AT. 1",
+		Kind:      "activity",
+	}, SessionUser{Name: "Alice", Matricula: "123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("student row was not found")
+	}
+	if len(table.Cards[0].Details) != 1 || table.Cards[0].Details[0].Label != "Critério" {
+		t.Fatalf("details = %#v, want first subtopic Critério", table.Cards[0].Details)
+	}
+}
+
 func TestActivityCriterionCommentBecomesDetailComment(t *testing.T) {
 	grid := parseGrid([]*sheets.RowData{
 		rowData(cellData("Grupo", ""), cellData("Critério", "")),
@@ -352,7 +376,7 @@ func TestSummaryPayloadKeepsCommonGradeColumns(t *testing.T) {
 	grid := &sheetGrid{
 		headers: []string{"Nome", "Matricula", "Prova", "Média"},
 		rows: [][]string{
-			{"Alice", "123", "8", "Não corrigida ainda"},
+			{"Alice", "123", "8", "Em correção"},
 		},
 		rowNotes: [][]string{
 			{"", "", "", ""},

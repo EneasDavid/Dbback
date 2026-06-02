@@ -30,7 +30,6 @@ export type GradeTable = {
   complete: boolean;
   status?: string;
   schemaStatus?: string;
-  spreadsheetId?: string;
   cards?: GradeCard[];
 };
 
@@ -46,7 +45,6 @@ export type GradeResult = {
   matricula: string;
   name: string;
   schemaStatus?: string;
-  spreadsheetId?: string;
   tables: GradeTable[];
   studentStatus?: StudentStatus;
 };
@@ -54,7 +52,6 @@ export type GradeResult = {
 export type SessionUser = {
   matricula: string;
   name: string;
-  spreadsheetId?: string;
   schemaStatus?: string;
 };
 

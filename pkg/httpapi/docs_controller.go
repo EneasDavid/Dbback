@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
 	"html/template"
@@ -40,6 +41,10 @@ func docsPayload() map[string]any {
 		"name":        "dbBack",
 		"type":        "Go + React monolith",
 		"description": "Consulta autenticada de notas e feedbacks a partir de Google Sheets/Drive.",
+		"version": map[string]any{
+			"label":     "v2-stable",
+			"v2_stable": true,
+		},
 		"routes": []map[string]any{
 			{
 				"method": "POST",
@@ -47,12 +52,12 @@ func docsPayload() map[string]any {
 				"auth":   false,
 				"body":   map[string]string{"matricula": "string"},
 				"response": map[string]string{
-					"matricula":     "string",
-					"name":          "string",
-					"spreadsheetId": "string optional",
-					"schemaStatus":  "legacy|v2 optional",
+					"matricula":    "string",
+					"name":         "string",
+					"schemaStatus": "legacy|v2 optional",
 				},
 				"result": "Cria sessão assinada depois de validar a matrícula na aba Base de dados de uma ou mais planilhas configuradas.",
+				"cache":  "no-store",
 			},
 			{
 				"method": "POST",
@@ -62,6 +67,7 @@ func docsPayload() map[string]any {
 					"ok": "boolean",
 				},
 				"result": "Remove o cookie de sessão.",
+				"cache":  "no-store",
 			},
 			{
 				"method": "GET",
@@ -72,6 +78,7 @@ func docsPayload() map[string]any {
 					"anonymous":     nil,
 				},
 				"result": "Retorna o usuário da sessão atual ou null.",
+				"cache":  "no-store",
 			},
 			{
 				"method": "GET",
@@ -91,6 +98,7 @@ func docsPayload() map[string]any {
 					"exam":    "ab1, ab2 ou qualquer chave ativa v2 vinda da aba abs; aceita ab1|ab2 e usa o primeiro valor válido",
 					"refresh": "1 opcional; limpa cache em memória",
 				},
+				"cache":    "private, max-age=30, stale-while-revalidate=300, ETag e Vary: Cookie, Accept-Encoding",
 				"response": gradeResponseSchema(),
 			},
 			{
@@ -100,6 +108,7 @@ func docsPayload() map[string]any {
 				"aliases":  []string{"/api/index.go/grades/all"},
 				"result":   "Retorna todas as avaliações disponíveis. Na v2, usa somente ABs ativas da aba abs; no legado, retorna AB1/AB2.",
 				"query":    map[string]string{"refresh": "1 opcional; limpa cache em memória"},
+				"cache":    "private, max-age=30, stale-while-revalidate=300, ETag e Vary: Cookie, Accept-Encoding",
 				"response": map[string]any{"<examKey>": gradeResponseSchema()},
 			},
 			{
@@ -118,26 +127,70 @@ func docsPayload() map[string]any {
 					"name":              "string",
 					"type":              "string",
 					"description":       "string",
+					"version":           "object",
 					"routes":            "array<object>",
 					"gradeOrganization": "object",
 					"network":           "object",
+					"paa":               "object",
+					"dataFlowGraph":     "object",
 				},
 				"result": "Documentação técnica de todas as rotas HTTP públicas e aliases serverless.",
+				"cache":  "no-store",
 			},
 		},
 		"gradeOrganization": map[string]any{
 			"identitySource": "Base de dados",
-			"rowSelection":   "A matrícula resolve uma identidade e fixa spreadsheetId/schemaStatus na sessão. Cada aba de notas é lida pela linha cuja célula de identidade contém nome, matrícula ou grupo equivalente.",
+			"rowSelection":   "A matrícula resolve uma identidade e fixa a planilha internamente na sessão assinada. O spreadsheetId não é exposto nas respostas públicas.",
 			"feedbackSource": "Comentários vêm de cell notes, workbook/XLSX comments e Drive comments quando a service account consegue enxergar e mapear célula. Na v2, comentários de critério entram em Detail.comment; comentários da célula da nota final/atividade entram no card.",
 			"rendering":      "O backend monta cards/detalhes render-ready. Critérios v2 usam a escala da rubrica; a nota da atividade vem da aba nota <ab> e médias são limitadas a 10.",
 			"versioning":     "SHEETS_RUNTIME_VERSION=v2/auto usa a aba abs e developer metadata. Em /api/grades/all, só ABs com status ativo=1 são retornadas na v2.",
 		},
+		"security": map[string]any{
+			"readOnlySheets": "A service account é criada com escopos somente leitura para Sheets e Drive; não há chamada de update, append ou batchUpdate.",
+			"publicPayload":  "Respostas removem spreadsheetId e nunca expõem linhas completas: só a linha do aluno autenticado e cards/detalhes tipados.",
+			"inputControl":   "POST aceita apenas login/logout, valida origem, limita body de login a 1 KiB e aceita matrícula numérica.",
+			"sqlInjection":   "A aplicação não usa banco SQL nem monta queries SQL; entradas são normalizadas antes de escolher rotas/abas permitidas.",
+			"integrity":      "Sessões são HMAC-SHA256 e respostas JSON incluem digest SHA-256 para verificação tamper-evident, inspirado em cadeias de hash.",
+		},
 		"network": map[string]any{
-			"httpClient":     "Cliente Google com timeout total de 15s, keep-alive, pool de conexões e timeout de cabeçalho/TLS para evitar conexões presas.",
-			"batching":       "Leituras do Google Sheets são agrupadas por range em uma chamada sempre que possível.",
-			"cache":          "Cache em memória por aba e por comentários com TTL configurado em CacheTTL; refresh=1 limpa o cache do processo.",
-			"deduplication":  "singleflight evita leituras duplicadas quando requisições simultâneas pedem as mesmas abas ou comentários.",
-			"payloadControl": "Fields restrito na Sheets API, export XLSX limitado a 25MiB e headers no-store/nosniff/referrer-policy nas respostas.",
+			"performanceBudget": "Meta operacional: login + primeiro render de notas em até 2s no caminho quente. Caminho quente significa runtime Vercel já inicializado, planilha e comentários dentro do TTL e navegador com cache SWR local.",
+			"httpClient":        "Cliente Google com timeout total de 15s, keep-alive, pool de conexões e timeout de cabeçalho/TLS para evitar conexões presas.",
+			"connectionReuse":   "O mesmo SheetsClient é mantido por runtime e os escopos por planilha compartilham cache/singleflight, reaproveitando conexões, tokens e leituras já feitas.",
+			"batching":          "Leituras do Google Sheets são agrupadas por range em uma chamada sempre que possível.",
+			"serverCache":       "Cache em memória por aba, planilha e comentários com TTL configurado em CacheTTL; refresh=1 limpa o cache do processo.",
+			"httpCache":         "GET /api/grades e /api/grades/all retornam ETag, Cache-Control private max-age=30 stale-while-revalidate=300 e Vary: Cookie, Accept-Encoding.",
+			"clientSWR":         "O frontend renderiza sessionStorage imediatamente, revalida em background com If-None-Match e preserva o payload antigo quando o servidor responde 304.",
+			"prefetch":          "Cards de atividade disparam prefetch em hover e foco, antes do clique de expansão.",
+			"deduplication":     "singleflight no backend e dedupe de GET em voo no frontend evitam leituras duplicadas quando requisições simultâneas pedem as mesmas notas.",
+			"compression":       "Payloads JSON são textuais, têm Vary: Accept-Encoding e são elegíveis à compressão Brotli/Gzip automática da Vercel; localmente o foco é medir payload e cache.",
+			"payloadControl":    "Fields restrito na Sheets API, export XLSX limitado a 25MiB e respostas públicas removem spreadsheetId.",
+		},
+		"paa": map[string]any{
+			"plano":     "Resolver a matrícula em Base de dados, fixar spreadsheetId apenas na sessão assinada e escolher parser legado/v2 por runtime/schemaStatus.",
+			"acesso":    "Validar cookie HMAC, aceitar POST apenas same-origin, usar service account read-only e nunca expor credenciais ou spreadsheetId no payload público.",
+			"auditoria": "Publicar schemaStatus, Digest SHA-256, ETag e X-Dbback-Content-SHA256 para rastrear versão, integridade e revalidação sem revelar dados sensíveis.",
+			"acao":      "Renderizar somente a linha do aluno autenticado, normalizada em cards/detalhes tipados para a UI.",
+		},
+		"dataFlowGraph": map[string]any{
+			"nodes": []string{
+				"Browser LoginView",
+				"AppController",
+				"AuthController",
+				"GradesController",
+				"SheetsClient cache/singleflight",
+				"Google Sheets/Drive",
+				"GradeModel normalizer",
+				"Views GradeCard/DetailPanel",
+			},
+			"edges": []string{
+				"Browser LoginView -> AuthController: POST /api/login",
+				"AuthController -> SheetsClient: LoginIdentity(Base de dados)",
+				"AuthController -> SheetsClient: warm-up assíncrono de GradesFor",
+				"AppController -> GradesController: GET /api/grades/all com If-None-Match",
+				"GradesController -> SheetsClient cache/singleflight -> Google Sheets/Drive",
+				"GradesController -> Browser: JSON privado com ETag",
+				"GradeModel normalizer -> Views GradeCard/DetailPanel: cards e subtópicos render-ready",
+			},
 		},
 	}
 }
@@ -149,12 +202,35 @@ func renderDocsHTML(w http.ResponseWriter, payload map[string]any) {
 		Description: stringValue(payload["description"]),
 		Routes:      docsHTMLRoutes(payload["routes"]),
 		GradeFacts:  docsHTMLFacts(payload["gradeOrganization"], gradeFactOrder()),
+		SecurityFacts: docsHTMLFacts(payload["security"], []docsHTMLFactKey{
+			{key: "readOnlySheets", label: "Planilha somente leitura"},
+			{key: "publicPayload", label: "Payload público"},
+			{key: "inputControl", label: "Entrada controlada"},
+			{key: "sqlInjection", label: "SQL injection"},
+			{key: "integrity", label: "Integridade"},
+		}),
 		NetworkFacts: docsHTMLFacts(payload["network"], []docsHTMLFactKey{
+			{key: "performanceBudget", label: "Orçamento de performance"},
 			{key: "httpClient", label: "Cliente HTTP"},
+			{key: "connectionReuse", label: "Reuso de conexão"},
 			{key: "batching", label: "Batching"},
-			{key: "cache", label: "Cache"},
+			{key: "serverCache", label: "Cache servidor"},
+			{key: "httpCache", label: "Cache HTTP"},
+			{key: "clientSWR", label: "SWR no navegador"},
+			{key: "prefetch", label: "Prefetch"},
 			{key: "deduplication", label: "Deduplicação"},
+			{key: "compression", label: "Compressão"},
 			{key: "payloadControl", label: "Controle de payload"},
+		}),
+		PAAFacts: docsHTMLFacts(payload["paa"], []docsHTMLFactKey{
+			{key: "plano", label: "Plano"},
+			{key: "acesso", label: "Acesso"},
+			{key: "auditoria", label: "Auditoria"},
+			{key: "acao", label: "Ação"},
+		}),
+		GraphFacts: docsHTMLFacts(docsGraphFacts(payload["dataFlowGraph"]), []docsHTMLFactKey{
+			{key: "nodes", label: "Nós"},
+			{key: "edges", label: "Arestas"},
 		}),
 	}
 	for idx := range data.Routes {
@@ -172,12 +248,15 @@ func renderDocsHTML(w http.ResponseWriter, payload map[string]any) {
 }
 
 type docsHTMLData struct {
-	Name         string
-	Type         string
-	Description  string
-	Routes       []docsHTMLRoute
-	GradeFacts   []docsHTMLFact
-	NetworkFacts []docsHTMLFact
+	Name          string
+	Type          string
+	Description   string
+	Routes        []docsHTMLRoute
+	GradeFacts    []docsHTMLFact
+	SecurityFacts []docsHTMLFact
+	NetworkFacts  []docsHTMLFact
+	PAAFacts      []docsHTMLFact
+	GraphFacts    []docsHTMLFact
 }
 
 type docsHTMLRoute struct {
@@ -185,6 +264,7 @@ type docsHTMLRoute struct {
 	Path        string
 	Auth        bool
 	Result      string
+	Cache       string
 	Body        any
 	Query       any
 	Aliases     []string
@@ -211,6 +291,7 @@ func docsHTMLRoutes(value any) []docsHTMLRoute {
 			Path:     stringValue(item["path"]),
 			Auth:     boolValue(item["auth"]),
 			Result:   stringValue(item["result"]),
+			Cache:    stringValue(item["cache"]),
 			Body:     item["body"],
 			Query:    item["query"],
 			Aliases:  stringSlice(item["aliases"]),
@@ -247,6 +328,17 @@ func docsHTMLFacts(value any, order []docsHTMLFactKey) []docsHTMLFact {
 	return facts
 }
 
+func docsGraphFacts(value any) map[string]any {
+	graph, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	return map[string]any{
+		"nodes": strings.Join(stringSlice(graph["nodes"]), " -> "),
+		"edges": strings.Join(stringSlice(graph["edges"]), " | "),
+	}
+}
+
 func prettyJSON(value any) string {
 	if value == nil {
 		return "null"
@@ -280,21 +372,19 @@ func stringSlice(value any) []string {
 
 func gradeResponseSchema() map[string]any {
 	return map[string]any{
-		"exam":          "string",
-		"matricula":     "string",
-		"name":          "string",
-		"schemaStatus":  "legacy|v2 optional",
-		"spreadsheetId": "string optional",
+		"exam":         "string",
+		"matricula":    "string",
+		"name":         "string",
+		"schemaStatus": "legacy|v2 optional",
 		"tables": []map[string]any{
 			{
-				"key":           "string",
-				"label":         "string",
-				"sheetName":     "string",
-				"kind":          "string",
-				"complete":      "boolean",
-				"status":        "string optional",
-				"schemaStatus":  "legacy|v2 optional",
-				"spreadsheetId": "string optional",
+				"key":          "string",
+				"label":        "string",
+				"sheetName":    "string",
+				"kind":         "string",
+				"complete":     "boolean",
+				"status":       "string optional",
+				"schemaStatus": "legacy|v2 optional",
 				"cards": []map[string]any{
 					{
 						"key":           "string",
@@ -342,7 +432,9 @@ func docsAuthorized(w http.ResponseWriter, r *http.Request) bool {
 }
 
 func secureCompare(left string, right string) bool {
-	return subtle.ConstantTimeCompare([]byte(left), []byte(right)) == 1
+	leftHash := sha256.Sum256([]byte(left))
+	rightHash := sha256.Sum256([]byte(right))
+	return subtle.ConstantTimeCompare(leftHash[:], rightHash[:]) == 1
 }
 
 var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
@@ -384,14 +476,7 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
       }
     }
     * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      background:
-        radial-gradient(circle at top left, rgba(20, 90, 58, .16), transparent 30rem),
-        var(--bg);
-      color: var(--text);
-      line-height: 1.5;
-    }
+    body { margin: 0; background: var(--bg); color: var(--text); line-height: 1.5; }
     a { color: inherit; }
     .page {
       width: min(1120px, calc(100% - 32px));
@@ -412,7 +497,7 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
     }
     h1 {
       margin: 0;
-      font-size: clamp(36px, 7vw, 72px);
+      font-size: clamp(32px, 7vw, 72px);
       line-height: .94;
       letter-spacing: 0;
     }
@@ -447,7 +532,7 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
     }
     .overview {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       gap: 12px;
       margin: 24px 0;
     }
@@ -525,6 +610,7 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
       color: var(--code);
       font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
       font-size: 13px;
+      overflow-wrap: anywhere;
     }
     .route-body {
       display: grid;
@@ -543,6 +629,7 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
       margin-top: 10px;
     }
     .chip {
+      min-width: 0;
       border: 1px solid var(--line);
       border-radius: 999px;
       padding: 6px 9px;
@@ -555,6 +642,7 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
     }
     .schema {
       min-width: 0;
+      max-width: 100%;
       margin: 0;
       overflow: auto;
       border-radius: 7px;
@@ -570,7 +658,7 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
     }
     .facts {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       gap: 12px;
     }
     .fact {
@@ -586,12 +674,16 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
       color: var(--muted);
     }
     @media (max-width: 780px) {
-      .page { width: min(100% - 24px, 1120px); padding-top: 24px; }
-      .overview, .facts, .route-body { grid-template-columns: 1fr; }
+      .page { width: min(100% - 20px, 1120px); padding: 18px 0 34px; }
+      .hero { gap: 14px; padding: 18px 0; }
+      .hero p { font-size: 16px; }
+      .route, .metric, .fact { border-radius: 7px; box-shadow: none; }
+      .route-body { grid-template-columns: 1fr; padding: 12px; }
       .route-header { grid-template-columns: auto 1fr; }
       .auth { grid-column: 1 / -1; justify-self: start; }
       .section-title { display: block; }
       .section-title p { margin-top: 6px; }
+      .button { flex: 1 1 150px; justify-content: center; }
     }
   </style>
 </head>
@@ -611,7 +703,7 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
       <div class="metric"><span>Rotas</span><strong>{{len .Routes}}</strong></div>
       <div class="metric"><span>Autenticação</span><strong>Cookie + Basic</strong></div>
       <div class="metric"><span>Privacidade</span><strong>Campos tipados</strong></div>
-      <div class="metric"><span>Cache</span><strong>No-store</strong></div>
+      <div class="metric"><span>Cache</span><strong>SWR + ETag</strong></div>
     </section>
 
     <section id="routes">
@@ -631,6 +723,10 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
           <div class="route-body">
             <div>
               <p class="route-copy">{{.Result}}</p>
+              {{if .Cache}}
+              <strong>Cache</strong>
+              <p class="route-copy"><code>{{.Cache}}</code></p>
+              {{end}}
               {{if .Aliases}}
               <strong>Aliases</strong>
               <div class="chips">
@@ -670,11 +766,56 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
 
     <section>
       <div class="section-title">
+        <h2>Segurança</h2>
+        <p>Controles para reduzir vazamento de dados, escrita indevida e abuso de entrada.</p>
+      </div>
+      <div class="facts">
+        {{range .SecurityFacts}}
+        <article class="fact">
+          <strong>{{.Label}}</strong>
+          <p>{{.Value}}</p>
+        </article>
+        {{end}}
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title">
         <h2>Rede e performance</h2>
         <p>Controles usados para reduzir latência, evitar chamadas duplicadas e manter respostas previsíveis em serverless.</p>
       </div>
       <div class="facts">
         {{range .NetworkFacts}}
+        <article class="fact">
+          <strong>{{.Label}}</strong>
+          <p>{{.Value}}</p>
+        </article>
+        {{end}}
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <h2>PAA</h2>
+        <p>Plano de Acesso e Auditoria usado para decidir fonte, acesso, rastreabilidade e ação de renderização.</p>
+      </div>
+      <div class="facts">
+        {{range .PAAFacts}}
+        <article class="fact">
+          <strong>{{.Label}}</strong>
+          <p>{{.Value}}</p>
+        </article>
+        {{end}}
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <h2>Grafo de dados</h2>
+        <p>Fluxo lógico das principais arestas de autenticação, cache, planilha e renderização.</p>
+      </div>
+      <div class="facts">
+        {{range .GraphFacts}}
         <article class="fact">
           <strong>{{.Label}}</strong>
           <p>{{.Value}}</p>

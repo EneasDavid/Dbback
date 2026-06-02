@@ -20,7 +20,7 @@ func parseActivityRubric(grid *sheetGrid, table TableConfig, user SessionUser) (
 	}
 
 	items := make([]activityItem, 0, len(grid.headers))
-	for colIdx := 1; colIdx < len(grid.headers); colIdx++ {
+	for colIdx := firstSubtopicColumn(grid.headers); colIdx < len(grid.headers); colIdx++ {
 		subtopic := rubricLabel(grid, maxRowIdx, colIdx)
 		if subtopic == "" {
 			continue
@@ -95,6 +95,16 @@ func findStudentRow(grid *sheetGrid, start int, user SessionUser) int {
 		}
 	}
 	return -1
+}
+
+func firstSubtopicColumn(headers []string) int {
+	startIdx := 0
+	for _, colIdx := range identityCommentColumns(headers) {
+		if colIdx > startIdx {
+			startIdx = colIdx
+		}
+	}
+	return startIdx + 1
 }
 
 func activityItemComment(grid *sheetGrid, maxRowIdx int, studentRowIdx int, colIdx int) (string, string) {

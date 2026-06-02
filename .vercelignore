@@ -1,0 +1,13 @@
+.bin
+.env
+.gocache
+.gomodcache
+.vercel/cache
+.vercel/go
+.vercel/output
+coverage
+dist
+node_modules
+service-account*.json
+spheric-radio-*.json
+*.log

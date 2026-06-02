@@ -29,6 +29,7 @@ type SheetsClient struct {
 	driveComments    map[string]cachedDriveComments
 	workbookComments map[string]cachedWorkbookComments
 	group            singleflight.Group
+	cacheOwner       *SheetsClient
 }
 
 type cachedGrid struct {
@@ -79,11 +80,12 @@ func googleHTTPClient(source oauth2.TokenSource) *http.Client {
 }
 
 func (c *SheetsClient) ClearCache() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.cache = map[string]cachedGrid{}
-	c.driveComments = map[string]cachedDriveComments{}
-	c.workbookComments = map[string]cachedWorkbookComments{}
+	owner := c.cacheRuntime()
+	owner.mu.Lock()
+	defer owner.mu.Unlock()
+	owner.cache = map[string]cachedGrid{}
+	owner.driveComments = map[string]cachedDriveComments{}
+	owner.workbookComments = map[string]cachedWorkbookComments{}
 }
 
 func (c *SheetsClient) loadSheet(ctx context.Context, sheetName string) (*sheetGrid, error) {
@@ -107,7 +109,8 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 	}
 
 	key := "sheets:" + strings.Join(c.cfg.SpreadsheetIDs, "\x00") + "\x00" + strings.Join(missing, "\x00")
-	_, err, _ := c.group.Do(key, func() (interface{}, error) {
+	owner := c.cacheRuntime()
+	_, err, _ := owner.group.Do(key, func() (interface{}, error) {
 		missing := c.missingSheets(missing)
 		if len(missing) == 0 {
 			return nil, nil
@@ -163,8 +166,8 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 			}
 		}
 
-		c.mu.Lock()
-		defer c.mu.Unlock()
+		owner.mu.Lock()
+		defer owner.mu.Unlock()
 		for _, sheetName := range missing {
 			grid := grids[sheetName]
 			if grid == nil {
@@ -173,7 +176,7 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 				}
 				return nil, NewHTTPError(404, "aba nao encontrada: "+sheetName)
 			}
-			c.cache[sheetName] = cachedGrid{expires: now.Add(c.cfg.CacheTTL), grid: grid}
+			owner.cache[c.sheetCacheKey(sheetName)] = cachedGrid{expires: now.Add(c.cfg.CacheTTL), grid: grid}
 		}
 		return nil, nil
 	})
@@ -222,13 +225,44 @@ func (c *SheetsClient) optionalWorkbookCommentsAsync(ctx context.Context, spread
 }
 
 func (c *SheetsClient) cachedSheet(sheetName string) (cachedGrid, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	cached, ok := c.cache[sheetName]
+	owner := c.cacheRuntime()
+	owner.mu.Lock()
+	defer owner.mu.Unlock()
+	cached, ok := owner.cache[c.sheetCacheKey(sheetName)]
+	if !ok {
+		cached, ok = owner.cache[sheetName]
+	}
 	if !ok || time.Now().After(cached.expires) {
 		return cachedGrid{}, false
 	}
 	return cached, true
+}
+
+func (c *SheetsClient) cacheRuntime() *SheetsClient {
+	if c.cacheOwner != nil {
+		return c.cacheOwner.cacheRuntime()
+	}
+	if c.cache == nil {
+		c.cache = map[string]cachedGrid{}
+	}
+	if c.driveComments == nil {
+		c.driveComments = map[string]cachedDriveComments{}
+	}
+	if c.workbookComments == nil {
+		c.workbookComments = map[string]cachedWorkbookComments{}
+	}
+	return c
+}
+
+func (c *SheetsClient) sheetCacheKey(sheetName string) string {
+	scope := strings.Join(c.cfg.SpreadsheetIDs, "\x00")
+	if strings.TrimSpace(scope) == "" {
+		scope = strings.TrimSpace(c.cfg.SpreadsheetID)
+	}
+	if strings.TrimSpace(scope) == "" {
+		return sheetName
+	}
+	return scope + "\x00" + sheetName
 }
 
 func (c *SheetsClient) missingSheets(sheetNames []string) []string {
@@ -542,29 +576,30 @@ func requiresDriveComments(sheetNames []string, loginSheet string) bool {
 }
 
 func (c *SheetsClient) driveCommentsForSpreadsheet(ctx context.Context, spreadsheetID string) ([]driveCellComment, error) {
-	c.mu.Lock()
-	if c.driveComments == nil {
-		c.driveComments = map[string]cachedDriveComments{}
+	owner := c.cacheRuntime()
+	owner.mu.Lock()
+	if owner.driveComments == nil {
+		owner.driveComments = map[string]cachedDriveComments{}
 	}
-	cached := c.driveComments[spreadsheetID]
+	cached := owner.driveComments[spreadsheetID]
 	if cached.comments != nil && time.Now().Before(cached.expires) {
 		comments := append([]driveCellComment(nil), cached.comments...)
-		c.mu.Unlock()
+		owner.mu.Unlock()
 		return comments, nil
 	}
-	c.mu.Unlock()
+	owner.mu.Unlock()
 
-	value, err, _ := c.group.Do("drive-comments:"+spreadsheetID, func() (interface{}, error) {
+	value, err, _ := owner.group.Do("drive-comments:"+spreadsheetID, func() (interface{}, error) {
 		comments, err := c.fetchDriveComments(ctx, spreadsheetID)
 		if err != nil {
 			return nil, err
 		}
-		c.mu.Lock()
-		if c.driveComments == nil {
-			c.driveComments = map[string]cachedDriveComments{}
+		owner.mu.Lock()
+		if owner.driveComments == nil {
+			owner.driveComments = map[string]cachedDriveComments{}
 		}
-		c.driveComments[spreadsheetID] = cachedDriveComments{expires: time.Now().Add(c.cfg.CacheTTL), comments: comments}
-		c.mu.Unlock()
+		owner.driveComments[spreadsheetID] = cachedDriveComments{expires: time.Now().Add(c.cfg.CacheTTL), comments: comments}
+		owner.mu.Unlock()
 		return comments, nil
 	})
 	if err != nil {
