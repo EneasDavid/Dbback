@@ -27,18 +27,6 @@ Para publicar, incremente `version` em `package.json` e publique uma release no 
 
 Os endpoints de sessao e documentacao respondem com `Cache-Control: no-store`. As rotas de notas usam cache privado por usuario com `ETag`, `Cache-Control: private, max-age=30, stale-while-revalidate=300` e `Vary: Cookie, Accept-Encoding`. Em Vercel, o roteador tambem aceita o prefixo serverless `/api/index.go/` para as mesmas rotas.
 
-| Metodo | Caminho | Auth | Descricao |
-| --- | --- | --- | --- |
-| `GET` | `/api`, `/api/index`, `/api/index.go` | Basic Auth docs | Alias para a documentacao HTML da API. |
-| `GET` | `/api/docs` | Basic Auth docs | Documentacao HTML quando `Accept` pede HTML. |
-| `GET` | `/api/docs?format=json` | Basic Auth docs | Documentacao JSON com rotas, schemas, organizacao de dados e rede/performance. |
-| `POST` | `/api/login` | Nao | Recebe `{ "matricula": "..." }`, valida a aba `Base de dados`, cria cookie de sessao e fixa a planilha internamente com `schemaStatus` publico. |
-| `POST` | `/api/logout` | Nao | Limpa o cookie de sessao. |
-| `GET` | `/api/me` | Cookie opcional | Retorna o usuario da sessao ou `null`. |
-| `GET` | `/api/grades?exam=<avaliacao>` | Cookie | Retorna uma avaliacao. No legado use `ab1`/`ab2`; na v2 use a chave ativa da aba `abs`. |
-| `GET` | `/api/grades/<avaliacao>` | Cookie | Alias path-based de `/api/grades?exam=<avaliacao>`. |
-| `GET` | `/api/grades/all` | Cookie | Retorna todas as avaliacoes disponiveis. Na v2 retorna somente ABs com `status`/ativo igual a `1` na aba `abs`. |
-
 Query comum de notas: `refresh=1` limpa o cache em memoria do processo antes de ler dados.
 
 ## Arquitetura
