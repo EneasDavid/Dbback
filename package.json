@@ -1,14 +1,47 @@
 {
-  "name": "feedback-notas",
+  "name": "@eneasdavid/dbback",
   "version": "1.0.0",
-  "private": true,
+  "description": "Consulta autenticada de notas e feedbacks com Go, React e Google Sheets.",
+  "private": false,
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EneasDavid/Dbback.git"
+  },
+  "bugs": {
+    "url": "https://github.com/EneasDavid/Dbback/issues"
+  },
+  "homepage": "https://github.com/EneasDavid/Dbback#readme",
+  "license": "UNLICENSED",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "files": [
+    "api",
+    "cmd",
+    "dist",
+    "docs",
+    "pkg",
+    "src",
+    "env.example",
+    "go.mod",
+    "go.sum",
+    "index.html",
+    "README.md",
+    "tsconfig.json",
+    "tsconfig.app.json",
+    "vite.config.ts"
+  ],
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "dev:full": "npm run build && go run ./cmd/dev",
     "production:full": "npm run build && go run ./cmd/dev",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "package": "npm pack",
+    "package:dry-run": "npm pack --dry-run",
+    "prepack": "npm run build",
     "preview": "vite preview --host 0.0.0.0",
     "quality": "npm run lint && npm run build"
   },

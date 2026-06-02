@@ -11,6 +11,18 @@ A documentacao de rotas, schemas e organizacao do payload fica na propria API:
 
 A rota de docs usa Basic Auth. O usuario e a senha existem somente no ambiente da aplicacao; nao registre valores de login no README.
 
+## Wiki e pacote GitHub
+
+A fonte da GitHub Wiki fica em `docs/wiki`. O workflow `sync-wiki` sincroniza esses arquivos com o repositorio wiki do GitHub quando houver alteracao em `main` ou execucao manual.
+
+O pacote npm para GitHub Packages esta configurado como `@eneasdavid/dbback`. Para conferir o conteudo localmente:
+
+```bash
+npm run package:dry-run
+```
+
+Para publicar, incremente `version` em `package.json` e publique uma release no GitHub, ou execute manualmente o workflow `publish-package`.
+
 ### Endpoints HTTP
 
 Os endpoints de sessao e documentacao respondem com `Cache-Control: no-store`. As rotas de notas usam cache privado por usuario com `ETag`, `Cache-Control: private, max-age=30, stale-while-revalidate=300` e `Vary: Cookie, Accept-Encoding`. Em Vercel, o roteador tambem aceita o prefixo serverless `/api/index.go/` para as mesmas rotas.

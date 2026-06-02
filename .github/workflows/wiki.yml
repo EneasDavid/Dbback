@@ -1,0 +1,58 @@
+name: sync-wiki
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - docs/wiki/**
+      - .github/workflows/wiki.yml
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: wiki-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    name: sync GitHub Wiki
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push docs/wiki to GitHub Wiki
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WIKI_URL: https://github.com/${{ github.repository }}.wiki.git
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+
+          if git -c http.extraheader="AUTHORIZATION: bearer ${GH_TOKEN}" clone "${WIKI_URL}" "${tmp}"; then
+            echo "Wiki repository cloned."
+          else
+            echo "Wiki repository is empty or unavailable. Initializing local wiki checkout."
+            git init "${tmp}"
+            git -C "${tmp}" remote add origin "${WIKI_URL}"
+          fi
+
+          find "${tmp}" -mindepth 1 -not -path "${tmp}/.git" -not -path "${tmp}/.git/*" -exec rm -rf {} +
+          cp -R docs/wiki/. "${tmp}/"
+
+          git -C "${tmp}" config user.name "github-actions[bot]"
+          git -C "${tmp}" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "${tmp}" add .
+
+          if git -C "${tmp}" diff --cached --quiet; then
+            echo "Wiki already up to date."
+            exit 0
+          fi
+
+          git -C "${tmp}" commit -m "Sync wiki"
+          git -C "${tmp}" branch -M master
+          git -C "${tmp}" -c http.extraheader="AUTHORIZATION: bearer ${GH_TOKEN}" push origin master

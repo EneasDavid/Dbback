@@ -18,7 +18,6 @@ import {
   storeGradeCache,
 } from '../Models/gradeModel';
 import type { GradeCache, SessionUser } from '../Models/types';
-import { appVersion } from '../Models/version';
 import { api, apiSWR, clearApiValidators } from './apiController';
 
 const EMPTY_STATE_MS = 5_000;
@@ -81,14 +80,8 @@ export default function AppController() {
 
   useEffect(() => {
     document.documentElement.dataset.screen = session ? 'app' : 'login';
-    document.documentElement.dataset.version = appVersion.label;
-    document.documentElement.dataset.v2Stable = appVersion.v2_stable ? 'true' : 'false';
-    document.documentElement.dataset.stable = appVersion.stable ? 'true' : 'false';
     return () => {
       delete document.documentElement.dataset.screen;
-      delete document.documentElement.dataset.version;
-      delete document.documentElement.dataset.v2Stable;
-      delete document.documentElement.dataset.stable;
     };
   }, [session]);
 

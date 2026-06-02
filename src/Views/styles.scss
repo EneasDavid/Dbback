@@ -2,10 +2,8 @@
   color: #172033;
   background: #eef2f8;
   color-scheme: light;
-  --tabs-sticky-offset: 10px;
+  --tabs-sticky-offset: max(10px, env(safe-area-inset-top));
   --tabs-sticky-height: 52px;
-  --activity-sticky-gap: 8px;
-  --activity-sticky-offset: calc(var(--tabs-sticky-offset) + var(--tabs-sticky-height) + var(--activity-sticky-gap));
   --page: #eef2f8;
   --shell: rgba(248, 250, 253, 0.78);
   --panel: rgba(255, 255, 255, 0.72);
@@ -102,6 +100,10 @@ body {
   min-height: 100vh;
   line-height: 1.5;
   background: linear-gradient(180deg, color-mix(in srgb, var(--page) 84%, #ffffff 16%) 0%, var(--page) 48%, color-mix(in srgb, var(--page) 92%, #dbe5f2 8%) 100%);
+}
+
+html {
+  scroll-padding-top: calc(var(--tabs-sticky-offset) + var(--tabs-sticky-height) + 16px);
 }
 
 :root[data-theme="dark"] body {
@@ -327,20 +329,6 @@ input:focus-visible {
   overflow-wrap: anywhere;
 }
 
-.version-badge {
-  display: inline-flex;
-  align-items: center;
-  margin-top: 7px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: rgba(40, 116, 240, 0.12);
-  color: var(--blue);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
 .icon-button {
   display: grid;
   width: 44px;
@@ -493,17 +481,13 @@ input:focus-visible {
 }
 
 .activity-sticky-block {
-  position: sticky;
-  top: var(--activity-sticky-offset);
-  z-index: 9;
   margin: -16px -16px 8px;
   padding: 16px 16px 8px;
+  scroll-margin-top: calc(var(--tabs-sticky-offset) + var(--tabs-sticky-height) + 14px);
   border-radius: 28px 28px 22px 22px;
   border-bottom: 1px solid var(--border-soft);
   background: linear-gradient(180deg, color-mix(in srgb, var(--panel-solid) 94%, transparent), color-mix(in srgb, var(--panel) 92%, transparent));
   box-shadow: var(--inner-highlight);
-  backdrop-filter: blur(24px) saturate(165%);
-  -webkit-backdrop-filter: blur(24px) saturate(165%);
 }
 
 .activity-sticky-block .grade-row {
@@ -817,7 +801,7 @@ input:focus-visible {
   padding: 2px 4px 14px;
   border-bottom: 0;
   align-items: center;
-  scroll-margin-top: calc(var(--activity-sticky-offset, 0px) + 24px);
+  scroll-margin-top: calc(var(--tabs-sticky-offset) + var(--tabs-sticky-height) + 16px);
 }
 
 .detail-header strong {
@@ -839,7 +823,7 @@ input:focus-visible {
   gap: 14px;
   min-width: 0;
   max-width: 100%;
-  scroll-margin-top: calc(var(--activity-sticky-offset) + 150px);
+  scroll-margin-top: calc(var(--tabs-sticky-offset) + var(--tabs-sticky-height) + 16px);
   padding: 17px;
   border-radius: 20px;
   background: color-mix(in srgb, var(--panel) 90%, transparent);
