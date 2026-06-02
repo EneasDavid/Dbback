@@ -19,15 +19,17 @@ import {
 } from '../Models/gradeModel';
 import type { GradeCache, SessionUser } from '../Models/types';
 import { appVersion } from '../Models/version';
-import { api, apiSWR } from './apiController';
+import { api, apiSWR, clearApiValidators } from './apiController';
 
 const EMPTY_STATE_MS = 5_000;
 const GRADES_REVALIDATE_MS = 30_000;
+const GRADES_PATH = '/api/grades/all';
 const LAST_MATRICULA_KEY = 'dbback-last-matricula';
 const THEME_QUERY = '(prefers-color-scheme: dark)';
 
 type Theme = 'light' | 'dark';
 type Exam = string;
+type GradeActivationMode = 'replace' | 'store';
 
 function systemTheme(): Theme {
   return window.matchMedia?.(THEME_QUERY).matches ? 'dark' : 'light';
@@ -55,6 +57,21 @@ export default function AppController() {
   useEffect(() => {
     gradesRef.current = grades;
   }, [grades]);
+
+  const activateGradeResults = useCallback((incoming: GradeCache, cacheKey: string, mode: GradeActivationMode = 'replace') => {
+    const allResults = normalizeGradeCache(incoming);
+    const keys = gradeKeys(allResults);
+
+    setExamOrder(keys);
+    setGrades((current) =>
+      mode === 'replace'
+        ? replaceGradeCache(current, allResults, cacheKey, gradesRef)
+        : storeGradeCache(current, allResults, cacheKey, gradesRef),
+    );
+    setExam((currentExam) => (keys.length > 0 && !allResults[currentExam] ? keys[0] : currentExam));
+
+    return keys.length > 0;
+  }, []);
 
   useEffect(() => {
     if (!error) return;
@@ -103,10 +120,12 @@ export default function AppController() {
           return;
         }
         clearGradeCache();
+        clearApiValidators([GRADES_PATH]);
         setSession(null);
       })
       .catch(() => {
         clearGradeCache();
+        clearApiValidators([GRADES_PATH]);
         setSession(null);
       });
   }, []);
@@ -116,9 +135,9 @@ export default function AppController() {
     const cacheKey = gradeCacheKey(session.matricula);
     const cached = readGradeCache(cacheKey);
     if (Object.keys(cached).length > 0) {
-      setGrades((current) => storeGradeCache(current, cached, cacheKey, gradesRef));
+      activateGradeResults(cached, cacheKey, 'store');
     }
-  }, [session]);
+  }, [activateGradeResults, session]);
 
   useEffect(() => {
     if (!session) return;
@@ -134,23 +153,26 @@ export default function AppController() {
       setLoading(!hasCachedVisibleGrade);
       setError('');
       try {
-        const maybeResults = await apiSWR<GradeCache>('/api/grades/all');
+        let maybeResults = await apiSWR<GradeCache>(GRADES_PATH);
+        if (!maybeResults && !hasCachedVisibleGrade) {
+          clearApiValidators([GRADES_PATH]);
+          maybeResults = await apiSWR<GradeCache>(GRADES_PATH, { cache: 'reload' });
+        }
         if (cancelled) return;
         gradesFetchedAtRef.current = Date.now();
         if (maybeResults) {
-          const allResults = normalizeGradeCache(maybeResults);
-          const keys = gradeKeys(allResults);
-          setExamOrder(keys);
-          setGrades((current) => replaceGradeCache(current, allResults, cacheKey, gradesRef));
-          if (keys.length > 0) {
-            setExam(keys[0]);
-          }
+          activateGradeResults(maybeResults, cacheKey);
+        } else if (hasCachedVisibleGrade) {
+          activateGradeResults(cachedGrades, cacheKey, 'store');
+        } else {
+          setError('Nao foi possivel revalidar as notas. Tente entrar novamente.');
         }
       } catch (err) {
         if (cancelled) return;
         if (err instanceof DOMException && err.name === 'AbortError') return;
         if (isSessionExpired(err)) {
           clearGradeCache(currentSession.matricula);
+          clearApiValidators([GRADES_PATH]);
           setGrades({});
           setError('');
           setSession(null);
@@ -172,7 +194,7 @@ export default function AppController() {
     return () => {
       cancelled = true;
     };
-  }, [session]);
+  }, [activateGradeResults, session]);
 
   const prefetchGrades = useCallback(() => {
     if (!session || gradesRefreshing || loading) return;
@@ -181,21 +203,15 @@ export default function AppController() {
       return;
     }
     gradesFetchedAtRef.current = Date.now();
-    void apiSWR<GradeCache>('/api/grades/all')
+    void apiSWR<GradeCache>(GRADES_PATH)
       .then((maybeResults) => {
         if (!maybeResults) return;
-        const allResults = normalizeGradeCache(maybeResults);
-        const keys = gradeKeys(allResults);
-        setExamOrder(keys);
-        setGrades((current) => replaceGradeCache(current, allResults, cacheKey, gradesRef));
-        if (keys.length > 0) {
-          setExam(keys[0]);
-        }
+        activateGradeResults(maybeResults, cacheKey);
       })
       .catch(() => {
         gradesFetchedAtRef.current = 0;
       });
-  }, [session, gradesRefreshing, loading]);
+  }, [activateGradeResults, session, gradesRefreshing, loading]);
 
   const visibleTables = useMemo(() => grades[exam]?.tables ?? [], [grades, exam]);
   const availableExams = useMemo(() => {
@@ -249,6 +265,7 @@ export default function AppController() {
       const resolvedMatricula = result.matricula || normalizedMatricula;
       if (matriculasDiffer(previousMatricula, resolvedMatricula)) {
         clearGradeCache();
+        clearApiValidators([GRADES_PATH]);
       }
       window.localStorage.setItem(LAST_MATRICULA_KEY, resolvedMatricula);
       gradesFetchedAtRef.current = 0;
@@ -269,6 +286,7 @@ export default function AppController() {
   async function handleLogout() {
     await api('/api/logout', { method: 'POST' }).catch(() => null);
     clearGradeCache(session?.matricula);
+    clearApiValidators([GRADES_PATH]);
     gradesFetchedAtRef.current = 0;
     setSession(null);
     setGrades({});

@@ -1,8 +1,9 @@
 const API_BASE = import.meta.env.VITE_API_BASE || '';
+const ETAG_PREFIX = 'dbback-etag:';
 const swrRequests = new Map<string, Promise<unknown>>();
 
 function etagStorageKey(path: string) {
-  return `dbback-etag:${path}`;
+  return `${ETAG_PREFIX}${path}`;
 }
 
 function readEtag(path: string) {
@@ -11,6 +12,16 @@ function readEtag(path: string) {
 
 function storeEtag(path: string, etag: string) {
   window.sessionStorage.setItem(etagStorageKey(path), etag);
+}
+
+export function clearApiValidators(paths?: string[]) {
+  if (paths?.length) {
+    paths.forEach((path) => window.sessionStorage.removeItem(etagStorageKey(path)));
+    return;
+  }
+  Object.keys(window.sessionStorage)
+    .filter((key) => key.startsWith(ETAG_PREFIX))
+    .forEach((key) => window.sessionStorage.removeItem(key));
 }
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -84,6 +95,6 @@ function jsonHeaders(init?: RequestInit) {
 
 function swrRequestKey(path: string, init?: RequestInit) {
   const method = (init?.method || 'GET').toUpperCase();
-  if (method !== 'GET' || init?.signal) return '';
+  if (method !== 'GET' || init?.signal || init?.cache === 'reload') return '';
   return path;
 }
