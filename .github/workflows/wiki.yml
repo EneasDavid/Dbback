@@ -27,21 +27,22 @@ jobs:
 
       - name: Push docs/wiki to GitHub Wiki
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WIKI_TOKEN: ${{ secrets.WIKI_TOKEN || secrets.GITHUB_TOKEN }}
           WIKI_URL: https://github.com/${{ github.repository }}.wiki.git
         run: |
           set -euo pipefail
           tmp="$(mktemp -d)"
+          wiki_remote_url="https://x-access-token:${WIKI_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git"
 
-          if git -c http.extraheader="AUTHORIZATION: bearer ${GH_TOKEN}" clone "${WIKI_URL}" "${tmp}"; then
+          if git clone "${wiki_remote_url}" "${tmp}"; then
             echo "Wiki repository cloned."
           else
-            echo "Wiki repository is empty or unavailable. Initializing local wiki checkout."
+            echo "::notice::${WIKI_URL} is empty or unavailable. Initializing a new wiki checkout."
             git init "${tmp}"
-            git -C "${tmp}" remote add origin "${WIKI_URL}"
+            git -C "${tmp}" remote add origin "${wiki_remote_url}"
           fi
 
-          find "${tmp}" -mindepth 1 -not -path "${tmp}/.git" -not -path "${tmp}/.git/*" -exec rm -rf {} +
+          find "${tmp}" -mindepth 1 -maxdepth 1 -not -name .git -exec rm -rf {} +
           cp -R docs/wiki/. "${tmp}/"
 
           git -C "${tmp}" config user.name "github-actions[bot]"
@@ -55,4 +56,8 @@ jobs:
 
           git -C "${tmp}" commit -m "Sync wiki"
           git -C "${tmp}" branch -M master
-          git -C "${tmp}" -c http.extraheader="AUTHORIZATION: bearer ${GH_TOKEN}" push origin master
+          if git -C "${tmp}" push origin master; then
+            echo "Wiki synced."
+          else
+            echo "::warning::Could not push to ${WIKI_URL}. If this is the first wiki sync, create one page in the GitHub Wiki UI or add a WIKI_TOKEN secret with repository write access, then rerun this workflow."
+          fi
