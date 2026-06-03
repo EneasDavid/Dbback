@@ -46,6 +46,7 @@
     "quality": "npm run lint && npm run build"
   },
   "dependencies": {
+    "@vercel/speed-insights": "^2.0.0",
     "@vitejs/plugin-react": "^4.5.0",
     "lucide-react": "^0.511.0",
     "react": "^19.1.0",

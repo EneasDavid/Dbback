@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { EmptyState, ExamSwitch, GradeCard, InlineError, LoginView, ReaderGradeDocument, SummaryTable, Topbar } from '../Views/components';
+import { EmptyState, ExamSwitch, GradeCard, InlineError, LoginView, ReaderGradeDocument, ScrollTopButton, SummaryTable, Topbar } from '../Views/components';
 import {
   cardsFor,
   clearGradeCache,
@@ -334,6 +334,7 @@ export default function AppController() {
       ) : (
         !loading && showEmptyState && <EmptyState exam={exam} />
       )}
+      <ScrollTopButton />
     </main>
   );
 }

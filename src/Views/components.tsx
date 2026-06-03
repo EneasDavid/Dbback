@@ -1,4 +1,4 @@
-import { AlertCircle, BookOpenCheck, ChevronLeft, ChevronRight, LogOut, MessageSquareText, Moon, Search, Sun } from 'lucide-react';
+import { AlertCircle, BookOpenCheck, ChevronLeft, ChevronRight, ChevronUp, LogOut, MessageSquareText, Moon, Search, Sun } from 'lucide-react';
 import type { CSSProperties, FormEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { cardsFor, isMediaTable } from '../Models/gradeModel';
@@ -414,6 +414,57 @@ export function ThemeButton({
     <button className={compact ? 'icon-button theme-compact' : 'theme-button'} type="button" onClick={() => setTheme(next)} aria-label="Alternar modo noturno">
       {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
       {!compact && <span>{theme === 'dark' ? 'Modo claro' : 'Modo noturno'}</span>}
+    </button>
+  );
+}
+
+export function ScrollTopButton() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    let frame = 0;
+
+    const updateVisibility = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const root = document.scrollingElement ?? document.documentElement;
+        const hasVerticalScroll = root.scrollHeight - root.clientHeight > 12;
+        const shouldShow = hasVerticalScroll && root.scrollTop > 180;
+        setVisible((current) => (current === shouldShow ? current : shouldShow));
+      });
+    };
+
+    updateVisibility();
+    window.addEventListener('scroll', updateVisibility, { passive: true });
+    window.addEventListener('resize', updateVisibility);
+
+    const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateVisibility);
+    resizeObserver?.observe(document.body);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', updateVisibility);
+      window.removeEventListener('resize', updateVisibility);
+      resizeObserver?.disconnect();
+    };
+  }, []);
+
+  const scrollToTop = () => {
+    const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({ top: 0, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
+  };
+
+  return (
+    <button
+      className={`scroll-top-button ${visible ? 'visible' : ''}`}
+      type="button"
+      onClick={scrollToTop}
+      aria-label="Voltar ao topo"
+      title="Voltar ao topo"
+      disabled={!visible}
+      aria-hidden={!visible}
+    >
+      <ChevronUp size={19} />
     </button>
   );
 }
