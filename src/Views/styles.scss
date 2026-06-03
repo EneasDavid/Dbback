@@ -382,35 +382,35 @@ input:focus-visible {
 .scroll-top-button {
   position: fixed;
   right: calc(50vw - min(50vw, 300px) + max(16px, env(safe-area-inset-right)));
-  bottom: calc(max(18px, env(safe-area-inset-bottom)) + 2px);
+  bottom: calc(max(22px, env(safe-area-inset-bottom)) + 2px);
   z-index: 30;
   display: grid;
-  width: 44px;
-  height: 44px;
+  width: 52px;
+  height: 52px;
   place-items: center;
-  border: 1px solid color-mix(in srgb, var(--brand) 18%, var(--border-soft));
-  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--brand-contrast) 44%, var(--brand));
+  border-radius: 18px;
   color: var(--brand-contrast);
-  background: color-mix(in srgb, var(--brand) 88%, transparent);
-  box-shadow: 0 12px 26px color-mix(in srgb, var(--brand) 20%, transparent), var(--inner-highlight);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 96%, #ffffff 4%), var(--brand-hover));
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--brand) 30%, transparent), 0 0 0 1px color-mix(in srgb, var(--panel-solid) 55%, transparent), var(--inner-highlight);
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
-  transform: translateY(8px) scale(0.96);
+  transform: translateY(10px) scale(0.94);
   transition: opacity 180ms ease, transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
 }
 
 .scroll-top-button.visible {
-  animation: scroll-top-pulse 2.6s ease-in-out infinite;
-  opacity: 0.86;
+  animation: scroll-top-pulse 2.2s ease-in-out infinite;
+  opacity: 1;
   pointer-events: auto;
   transform: translateY(0) scale(1);
 }
 
 .scroll-top-button.visible:hover {
   background: var(--brand-hover);
-  opacity: 1;
-  transform: translateY(-1px) scale(1);
+  box-shadow: 0 18px 38px color-mix(in srgb, var(--brand) 36%, transparent), 0 0 0 1px color-mix(in srgb, var(--panel-solid) 70%, transparent), var(--inner-highlight);
+  transform: translateY(-2px) scale(1.02);
 }
 
 .scroll-top-button:disabled {
@@ -420,11 +420,11 @@ input:focus-visible {
 @keyframes scroll-top-pulse {
   0%,
   100% {
-    box-shadow: 0 12px 26px color-mix(in srgb, var(--brand) 18%, transparent), 0 0 0 0 color-mix(in srgb, var(--brand) 14%, transparent), var(--inner-highlight);
+    box-shadow: 0 16px 34px color-mix(in srgb, var(--brand) 30%, transparent), 0 0 0 0 color-mix(in srgb, var(--brand) 28%, transparent), 0 0 0 1px color-mix(in srgb, var(--panel-solid) 55%, transparent), var(--inner-highlight);
   }
 
   65% {
-    box-shadow: 0 12px 26px color-mix(in srgb, var(--brand) 18%, transparent), 0 0 0 8px transparent, var(--inner-highlight);
+    box-shadow: 0 16px 34px color-mix(in srgb, var(--brand) 30%, transparent), 0 0 0 11px transparent, 0 0 0 1px color-mix(in srgb, var(--panel-solid) 55%, transparent), var(--inner-highlight);
   }
 }
 

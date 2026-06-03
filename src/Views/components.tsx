@@ -429,7 +429,7 @@ export function ScrollTopButton() {
       frame = window.requestAnimationFrame(() => {
         const root = document.scrollingElement ?? document.documentElement;
         const hasVerticalScroll = root.scrollHeight - root.clientHeight > 12;
-        const shouldShow = hasVerticalScroll && root.scrollTop > 180;
+        const shouldShow = hasVerticalScroll && root.scrollTop > 24;
         setVisible((current) => (current === shouldShow ? current : shouldShow));
       });
     };
@@ -464,7 +464,7 @@ export function ScrollTopButton() {
       disabled={!visible}
       aria-hidden={!visible}
     >
-      <ChevronUp size={19} />
+      <ChevronUp size={22} />
     </button>
   );
 }
