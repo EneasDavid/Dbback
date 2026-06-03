@@ -383,7 +383,7 @@ input:focus-visible {
   position: fixed;
   right: calc(50vw - min(50vw, 300px) + max(16px, env(safe-area-inset-right)));
   bottom: calc(max(22px, env(safe-area-inset-bottom)) + 2px);
-  z-index: 30;
+  z-index: 1000;
   display: grid;
   width: 52px;
   height: 52px;

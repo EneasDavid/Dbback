@@ -309,32 +309,34 @@ export default function AppController() {
   }
 
   return (
-    <main className="shell">
-      <Topbar session={session} theme={theme} setTheme={handleThemeChange} onLogout={handleLogout} />
-      <ExamSwitch exam={exam} exams={availableExams} labels={examLabels} carousel={useExamCarousel} setExam={handleExamChange} />
+    <>
+      <main className="shell">
+        <Topbar session={session} theme={theme} setTheme={handleThemeChange} onLogout={handleLogout} />
+        <ExamSwitch exam={exam} exams={availableExams} labels={examLabels} carousel={useExamCarousel} setExam={handleExamChange} />
 
-      {error && <InlineError message={error} />}
-      {loading && <div className="loading" role="status" aria-live="polite">Carregando notas...</div>}
+        {error && <InlineError message={error} />}
+        {loading && <div className="loading" role="status" aria-live="polite">Carregando notas...</div>}
 
-      {hasRenderableTables ? (
-        <>
-          <section className="grade-list" id="grades" aria-live="polite">
-            {activityTables.map((table) => (
-              <GradeCard table={table} key={table.key} activeDetail={activeDetail} onToggleDetail={handleToggleDetail} onPrefetch={prefetchGrades} />
-            ))}
-            {summaryTables.map((table) => (
-              <SummaryTable table={table} key={table.key} />
-            ))}
-            {mediaTables.map((table) => (
-              <SummaryTable table={table} key={table.key} />
-            ))}
-          </section>
-          <ReaderGradeDocument session={session} examLabel={currentExamLabel} tables={[...activityTables, ...summaryTables, ...mediaTables]} />
-        </>
-      ) : (
-        !loading && showEmptyState && <EmptyState exam={exam} />
-      )}
+        {hasRenderableTables ? (
+          <>
+            <section className="grade-list" id="grades" aria-live="polite">
+              {activityTables.map((table) => (
+                <GradeCard table={table} key={table.key} activeDetail={activeDetail} onToggleDetail={handleToggleDetail} onPrefetch={prefetchGrades} />
+              ))}
+              {summaryTables.map((table) => (
+                <SummaryTable table={table} key={table.key} />
+              ))}
+              {mediaTables.map((table) => (
+                <SummaryTable table={table} key={table.key} />
+              ))}
+            </section>
+            <ReaderGradeDocument session={session} examLabel={currentExamLabel} tables={[...activityTables, ...summaryTables, ...mediaTables]} />
+          </>
+        ) : (
+          !loading && showEmptyState && <EmptyState exam={exam} />
+        )}
+      </main>
       <ScrollTopButton />
-    </main>
+    </>
   );
 }

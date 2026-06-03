@@ -428,23 +428,27 @@ export function ScrollTopButton() {
       window.cancelAnimationFrame(frame);
       frame = window.requestAnimationFrame(() => {
         const root = document.scrollingElement ?? document.documentElement;
-        const hasVerticalScroll = root.scrollHeight - root.clientHeight > 12;
-        const shouldShow = hasVerticalScroll && root.scrollTop > 24;
-        setVisible((current) => (current === shouldShow ? current : shouldShow));
+        const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+        const scrollHeight = Math.max(root.scrollHeight, document.documentElement.scrollHeight, document.body.scrollHeight);
+        const hasVerticalScroll = scrollHeight - viewportHeight > 12;
+        setVisible((current) => (current === hasVerticalScroll ? current : hasVerticalScroll));
       });
     };
 
     updateVisibility();
     window.addEventListener('scroll', updateVisibility, { passive: true });
     window.addEventListener('resize', updateVisibility);
+    window.visualViewport?.addEventListener('resize', updateVisibility);
 
     const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateVisibility);
+    resizeObserver?.observe(document.documentElement);
     resizeObserver?.observe(document.body);
 
     return () => {
       window.cancelAnimationFrame(frame);
       window.removeEventListener('scroll', updateVisibility);
       window.removeEventListener('resize', updateVisibility);
+      window.visualViewport?.removeEventListener('resize', updateVisibility);
       resizeObserver?.disconnect();
     };
   }, []);
