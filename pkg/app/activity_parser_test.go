@@ -57,7 +57,7 @@ func TestActivityDriveCommentOnIdentityCellBecomesCardComment(t *testing.T) {
 	}
 }
 
-func TestActivityAB1DetailsUseConfiguredScoreDivisor(t *testing.T) {
+func TestActivityDetailsNormalizeToActivityWeight(t *testing.T) {
 	grid := parseGrid([]*sheets.RowData{
 		rowData(cellData("Grupo", ""), cellData("Critério", "")),
 		rowData(cellData("Nota maxima", ""), cellData("10", "")),
@@ -80,16 +80,16 @@ func TestActivityAB1DetailsUseConfiguredScoreDivisor(t *testing.T) {
 	if got := table.Cards[0].Value; got != "0,7" {
 		t.Fatalf("card value = %q, want 0,7", got)
 	}
-	if got := table.Cards[0].DisplayValue; got != "0,7/1,00" {
-		t.Fatalf("card display value = %q, want 0,7/1,00", got)
+	if got := table.Cards[0].DisplayValue; got != "0,70 de 1,00" {
+		t.Fatalf("card display value = %q, want 0,70 de 1,00", got)
 	}
 	detail := table.Cards[0].Details[0]
-	if detail.Value != "0,7" || detail.Max != 1 || detail.DisplayScore != "0,7 / 1" || detail.Ratio != 70 {
+	if detail.Value != "0,7" || detail.Max != 1 || detail.DisplayScore != "0,70 de 1,00" || detail.Ratio != 70 {
 		t.Fatalf("unexpected scaled detail: %#v", detail)
 	}
 }
 
-func TestActivityAB1CapsNormalizedScoresAtConfiguredWeight(t *testing.T) {
+func TestActivityCapsNormalizedScoresAtActivityWeight(t *testing.T) {
 	grid := parseGrid([]*sheets.RowData{
 		rowData(cellData("Grupo", ""), cellData("Critério", "")),
 		rowData(cellData("Nota maxima", ""), cellData("10", "")),
@@ -115,6 +115,36 @@ func TestActivityAB1CapsNormalizedScoresAtConfiguredWeight(t *testing.T) {
 	detail := table.Cards[0].Details[0]
 	if detail.Value != "1" || detail.Max != 1 || detail.Ratio != 100 {
 		t.Fatalf("unexpected capped detail: %#v", detail)
+	}
+}
+
+func TestActivityQuestionRubricUsesOfficialCriterionWeights(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Grupo", ""), cellData("Questão 1", ""), cellData("Questão 2", ""), cellData("Questão 3", ""), cellData("Questão 4", ""), cellData("Questão 5", ""), cellData("Questão 6", ""), cellData("Adequação", ""), cellData("Organização", "")),
+		rowData(cellData("Nota maxima", ""), cellData("1,5", ""), cellData("10", ""), cellData("1,5", ""), cellData("2", ""), cellData("1,5", ""), cellData("2", ""), cellData("2", ""), cellData("5", "")),
+		rowData(cellData("Alice", ""), cellData("1", ""), cellData("7,5", ""), cellData("1,5", ""), cellData("1", ""), cellData("1,1", ""), cellData("1,3", ""), cellData("1", ""), cellData("3", "")),
+	}, nil)
+
+	table, found, err := parseActivityRubric(grid, TableConfig{
+		Key:          "at3",
+		Label:        "AT. 3",
+		SheetName:    "AT. 3",
+		Kind:         "activity",
+		ScoreDivisor: 10,
+	}, SessionUser{Name: "Alice", Matricula: "123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("student row was not found")
+	}
+
+	details := table.Cards[0].Details
+	wantScores := []string{"0,07 de 0,10", "0,11 de 0,15", "0,15 de 0,15", "0,10 de 0,20", "0,07 de 0,10", "0,10 de 0,15", "0,05 de 0,10", "0,03 de 0,05"}
+	for idx, want := range wantScores {
+		if details[idx].DisplayScore != want {
+			t.Fatalf("details[%d].DisplayScore = %q, want %q: %#v", idx, details[idx].DisplayScore, want, details[idx])
+		}
 	}
 }
 
@@ -263,6 +293,9 @@ func TestQuestionLetterHeadersAreRecognized(t *testing.T) {
 	}
 	if got := inferMaxForLabel("Questão C"); got != 1.5 {
 		t.Fatalf("inferMaxForLabel Questão C = %v, want 1.5", got)
+	}
+	if got := inferMaxForLabel("Adequação"); got != 1 {
+		t.Fatalf("inferMaxForLabel Adequação = %v, want 1", got)
 	}
 	if got := compareDetailLabels("Questão C", "Questão B"); got <= 0 {
 		t.Fatalf("compareDetailLabels Questão C vs Questão B = %d, want positive", got)

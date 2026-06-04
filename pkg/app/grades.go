@@ -443,7 +443,7 @@ func (c *SheetsClient) gradeForTables(ctx context.Context, exam string, tables [
 			result.SchemaStatus = mergeSchemaStatus(result.SchemaStatus, response.result.SchemaStatus)
 		}
 	}
-	addScoreAverages(&result)
+	finalizeScoreAverages(&result, tables)
 	if len(result.Tables) == 0 {
 		return GradeResult{}, NewHTTPError(404, "matricula nao encontrada em "+strings.ToUpper(strings.TrimSpace(exam)))
 	}
@@ -709,6 +709,14 @@ func addScoreAverages(result *GradeResult) {
 	addScoreAverage(result, ab2AverageRule)
 }
 
+func finalizeScoreAverages(result *GradeResult, configuredTables []TableConfig) {
+	if !configuredActivitiesComplete(configuredTables, result.Tables) {
+		removeAverageScores(result)
+		return
+	}
+	addScoreAverages(result)
+}
+
 func addAB1ScoreAverage(result *GradeResult) {
 	addScoreAverage(result, ab1AverageRule)
 }
@@ -718,7 +726,9 @@ func addAB2ScoreAverage(result *GradeResult) {
 }
 
 func addScoreAverage(result *GradeResult, rule scoreAverageRule) {
-	if strings.ToUpper(strings.TrimSpace(result.Exam)) != rule.exam || hasAverageTable(result.Tables, rule) {
+	if strings.ToUpper(strings.TrimSpace(result.Exam)) != rule.exam ||
+		hasAverageTable(result.Tables, rule) ||
+		!resultActivitiesComplete(result.Tables) {
 		return
 	}
 	total, ok := rule.calculate(result.Tables)
@@ -738,16 +748,79 @@ func hasAverageTable(tables []TableResult, rule scoreAverageRule) bool {
 }
 
 func averageTable(rule scoreAverageRule, total float64) TableResult {
+	card := makeCard(rule.key, "", formatScore(total), "", "", nil)
+	card.DisplayValue = formatGradeNumber(total)
 	return TableResult{
 		Key:       rule.key,
 		Label:     rule.label,
 		SheetName: rule.label,
 		Kind:      rule.kind,
 		Complete:  true,
-		Cards: []CardResult{
-			makeCard(rule.key, "", formatScore(total), "", "", nil),
-		},
+		Cards:     []CardResult{card},
 	}
+}
+
+func configuredActivitiesComplete(configured []TableConfig, tables []TableResult) bool {
+	tablesByKey := make(map[string]TableResult, len(tables))
+	for _, table := range tables {
+		tablesByKey[table.Key] = table
+	}
+	hasActivity := false
+	for _, config := range configured {
+		if !scoredActivityKind(config.Kind) {
+			continue
+		}
+		hasActivity = true
+		table, found := tablesByKey[config.Key]
+		if !found || !activityTableComplete(table) {
+			return false
+		}
+	}
+	return hasActivity
+}
+
+func resultActivitiesComplete(tables []TableResult) bool {
+	hasActivity := false
+	for _, table := range tables {
+		if !scoredActivityKind(table.Kind) {
+			continue
+		}
+		hasActivity = true
+		if !activityTableComplete(table) {
+			return false
+		}
+	}
+	return hasActivity
+}
+
+func scoredActivityKind(kind string) bool {
+	return kind == "activity" || kind == "project"
+}
+
+func activityTableComplete(table TableResult) bool {
+	if status := normalizeHeader(table.Status); status != "" {
+		return status == "encerrado"
+	}
+	return table.Complete
+}
+
+func removeAverageScores(result *GradeResult) {
+	tables := result.Tables[:0]
+	for _, table := range result.Tables {
+		if strings.HasPrefix(table.Key, "media-") || table.Kind == "ab1summary" || table.Kind == "ab2summary" {
+			continue
+		}
+		cards := table.Cards[:0]
+		for _, card := range table.Cards {
+			if strings.Contains(normalizeHeader(card.Label), "media") {
+				continue
+			}
+			cards = append(cards, card)
+		}
+		table.Cards = cards
+		tables = append(tables, table)
+	}
+	result.Tables = tables
 }
 
 func capScore(score float64) float64 {

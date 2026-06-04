@@ -90,6 +90,10 @@ func warmGradesAfterLogin(sheetsClient *app.SheetsClient, user app.SessionUser) 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 		defer cancel()
+		_, _ = sheetsClient.GradeFor(ctx, "ab1", user)
+		if ctx.Err() != nil {
+			return
+		}
 		_, _ = sheetsClient.GradesFor(ctx, []string{"ab1", "ab2"}, user)
 	}()
 }

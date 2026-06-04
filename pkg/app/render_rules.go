@@ -6,6 +6,27 @@ import (
 	"unicode"
 )
 
+const officialQuestionRubricMaximum = 10
+
+var inferredCriterionMaxima = map[string]float64{
+	"adequacao":    1,
+	"organizacao":  0.5,
+	"q.1":          1,
+	"q.2":          1.5,
+	"q.3":          1.5,
+	"q.4":          2,
+	"q.5":          1,
+	"q.6":          1.5,
+	"semana 1":     0.25,
+	"semana 2":     0.25,
+	"semana 3":     0.25,
+	"semana 4":     0.25,
+	"sgbd":         1,
+	"dataset":      1,
+	"crud":         1,
+	"apresentacao": 2,
+}
+
 type activityItem struct {
 	Key           string
 	Subtopic      string
@@ -37,19 +58,70 @@ func makeCard(key string, label string, value string, comment string, commentAut
 	}
 }
 
-func activityDetails(items []activityItem, divisor float64) []DetailResult {
+func activityDetails(items []activityItem) []DetailResult {
 	details := make([]DetailResult, 0, len(items))
 	for _, item := range items {
 		if normalizeHeader(item.Subtopic) == "total" {
 			continue
 		}
 		maximum, _ := parseScore(item.NotaMaxima)
-		detail := scaledScoreDetail(item.Key, strings.TrimSpace(item.Subtopic), item.NotaAlcancada, maximum, divisor)
+		detail := scoreDetail(item.Key, strings.TrimSpace(item.Subtopic), item.NotaAlcancada, maximum)
 		detail.Comment = item.Comment
 		detail.CommentAuthor = item.CommentAuthor
 		details = append(details, detail)
 	}
 	return details
+}
+
+func activityItemsForWeight(items []activityItem, weight float64) []activityItem {
+	if weight <= 0 {
+		return items
+	}
+	totalMaximum := 0.0
+	for _, item := range items {
+		if normalizeHeader(item.Subtopic) == "total" {
+			continue
+		}
+		if maximum, ok := parseScore(item.NotaMaxima); ok && maximum > 0 {
+			totalMaximum += maximum
+		}
+	}
+
+	normalized := append([]activityItem(nil), items...)
+	for idx, item := range normalized {
+		maximum, ok := parseScore(item.NotaMaxima)
+		if !ok || maximum <= 0 {
+			continue
+		}
+		if normalizeHeader(item.Subtopic) == "total" {
+			normalized[idx].NotaAlcancada = normalizedScore(item.NotaAlcancada, maximum, weight)
+			normalized[idx].NotaMaxima = formatNumber(weight)
+			continue
+		}
+		if totalMaximum <= 0 {
+			continue
+		}
+		value := normalizedScore(item.NotaAlcancada, maximum, maximum)
+		normalized[idx].NotaAlcancada = normalizedScore(value, totalMaximum, weight)
+		normalized[idx].NotaMaxima = formatNumber(normalizedMaximum(maximum, totalMaximum, weight))
+	}
+	return normalized
+}
+
+func activityItemsForDivisor(items []activityItem, divisor float64) []activityItem {
+	if divisor <= 1 {
+		return items
+	}
+	normalized := append([]activityItem(nil), items...)
+	for idx, item := range normalized {
+		maximum, ok := parseScore(item.NotaMaxima)
+		if !ok || maximum <= 0 {
+			continue
+		}
+		normalized[idx].NotaAlcancada = normalizedScore(item.NotaAlcancada, maximum, maximum/divisor)
+		normalized[idx].NotaMaxima = formatNumber(maximum / divisor)
+	}
+	return normalized
 }
 
 func columnDetails(cells []studentCell) []DetailResult {
@@ -115,32 +187,15 @@ func normalizedMaximum(sourceMaximum float64, totalMaximum float64, targetMaximu
 	return (sourceMaximum / totalMaximum) * targetMaximum
 }
 
-func scaledScoreDetail(key string, label string, value string, maximum float64, divisor float64) DetailResult {
-	if divisor <= 1 {
-		return scoreDetail(key, label, value, maximum)
-	}
-	parsed, hasValue := parseScore(value)
-	if maximum <= 1 && (!hasValue || parsed <= 1) {
-		return scoreDetail(key, label, value, maximum)
-	}
-	if hasValue && maximum > 0 {
-		value = normalizedScore(value, maximum, maximum/divisor)
-	}
-	if maximum > 0 {
-		maximum = maximum / divisor
-	}
-	return scoreDetail(key, label, value, maximum)
-}
-
 func detailDisplayScore(value string, maximum float64, pending bool) string {
 	if pending {
 		return "Em correção"
 	}
 	if obtained, ok := parseScore(value); ok && maximum > 0 {
-		return formatScore(obtained) + " / " + formatScore(maximum)
+		return scoreComparisonDisplay(obtained, maximum)
 	}
 	if maximum > 0 {
-		return "Max " + formatScore(maximum)
+		return "Max " + formatGradeNumber(maximum)
 	}
 	return strings.TrimSpace(value)
 }
@@ -150,9 +205,11 @@ func displayValue(label string, value string) string {
 		return "Em correção"
 	}
 	if isGradeLabel(label) {
-		if _, ok := parseScore(value); !ok {
+		score, ok := parseScore(value)
+		if !ok {
 			return "Em correção"
 		}
+		return formatGradeNumber(score)
 	}
 	return value
 }
@@ -420,31 +477,56 @@ func formatScore(value float64) string {
 	return formatNumber(value)
 }
 
+func formatGradeNumber(value float64) string {
+	return formatNumberFixed(value, 2)
+}
+
+func scoreComparisonDisplay(obtained float64, maximum float64) string {
+	return formatGradeNumber(obtained) + " de " + formatGradeNumber(maximum)
+}
+
+func canonicalCriterionMaximum(label string, sourceMaximum float64) float64 {
+	if maximum := inferMaxForLabel(label); maximum > 0 {
+		return maximum
+	}
+	return sourceMaximum
+}
+
+func usesOfficialQuestionWeights(labels []string) bool {
+	seen := [6]bool{}
+	questions := 0
+	for _, label := range labels {
+		switch questionScoreKey(label) {
+		case "q.1":
+			seen[0] = true
+		case "q.2":
+			seen[1] = true
+		case "q.3":
+			seen[2] = true
+		case "q.4":
+			seen[3] = true
+		case "q.5":
+			seen[4] = true
+		case "q.6":
+			seen[5] = true
+		}
+	}
+	for _, found := range seen {
+		if found {
+			questions++
+		}
+	}
+	return questions >= 4
+}
+
 func inferMaxForLabel(label string) float64 {
 	normalized := normalizeHeader(label)
-	values := map[string]float64{
-		"organizacao":  0.5,
-		"q.1":          1,
-		"q.2":          1.5,
-		"q.3":          1.5,
-		"q.4":          2,
-		"q.5":          1,
-		"q.6":          1.5,
-		"semana 1":     0.25,
-		"semana 2":     0.25,
-		"semana 3":     0.25,
-		"semana 4":     0.25,
-		"sgbd":         1,
-		"dataset":      1,
-		"crud":         1,
-		"apresentacao": 2,
-	}
 	if key := questionScoreKey(normalized); key != "" {
-		if value, ok := values[key]; ok {
+		if value, ok := inferredCriterionMaxima[key]; ok {
 			return value
 		}
 	}
-	for key, value := range values {
+	for key, value := range inferredCriterionMaxima {
 		if strings.Contains(normalized, key) {
 			return value
 		}

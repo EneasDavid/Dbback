@@ -195,7 +195,7 @@ func TestV2ActivitiesForABOnlyKeepsStatusOneWhenStatusColumnExists(t *testing.T)
 	}
 }
 
-func TestV2ActivityItemsKeepsRubricScaleAndComments(t *testing.T) {
+func TestV2ActivityItemsNormalizesCriteriaToActivityWeightAndKeepsComments(t *testing.T) {
 	grid := &sheetGrid{
 		headers: []string{"Matrícula", "Critério A", "Critério B"},
 		rows: [][]string{
@@ -217,8 +217,11 @@ func TestV2ActivityItemsKeepsRubricScaleAndComments(t *testing.T) {
 	if len(items) != 2 {
 		t.Fatalf("items len = %d, want 2: %#v", len(items), items)
 	}
-	if items[0].NotaMaxima != "2" || items[0].NotaAlcancada != "1" {
-		t.Fatalf("first rubric item = %#v, want max 2 and value 1", items[0])
+	if items[0].NotaMaxima != "0,8" || items[0].NotaAlcancada != "0,4" {
+		t.Fatalf("first rubric item = %#v, want normalized max 0,8 and value 0,4", items[0])
+	}
+	if items[1].NotaMaxima != "1,2" || items[1].NotaAlcancada != "1,2" {
+		t.Fatalf("second rubric item = %#v, want normalized max/value 1,2", items[1])
 	}
 	if items[1].Comment != "comentário B" || items[1].CommentAuthor != "Prof" {
 		t.Fatalf("second item comment = %#v", items[1])
@@ -243,10 +246,30 @@ func TestV2ActivityItemsUsesMaximoPossivelRowForQuestionWeights(t *testing.T) {
 	if len(items) != 8 {
 		t.Fatalf("items len = %d, want 8 criteria without group/final grade: %#v", len(items), items)
 	}
-	wantMaxima := []string{"1", "1,5", "1,5", "2", "1", "1,5", "1", "0,5"}
+	wantMaxima := []string{"0,03", "0,05", "0,05", "0,07", "0,03", "0,05", "0,03", "0,02"}
 	for idx, want := range wantMaxima {
 		if items[idx].NotaMaxima != want {
 			t.Fatalf("items[%d].NotaMaxima = %q, want %q: %#v", idx, items[idx].NotaMaxima, want, items[idx])
+		}
+	}
+}
+
+func TestV2ActivityItemsPreservesRatioWhenCorrectingQuestionWeights(t *testing.T) {
+	grid := &sheetGrid{
+		headers: []string{"grupo", "Questão 1", "Questão 2", "Questão 3", "Questão 4", "Adequação", "Organização"},
+		rows: [][]string{
+			{"maximo possivel", "1,5", "10", "1,5", "2", "2", "5"},
+			{"Grupo A", "1", "7,5", "1,5", "1", "1", "3"},
+		},
+	}
+
+	items := v2ActivityItems(grid, 0, 1, 1)
+
+	wantMaxima := []string{"0,1", "0,15", "0,15", "0,2", "0,1", "0,05"}
+	wantValues := []string{"0,07", "0,11", "0,15", "0,1", "0,05", "0,03"}
+	for idx := range wantMaxima {
+		if items[idx].NotaMaxima != wantMaxima[idx] || items[idx].NotaAlcancada != wantValues[idx] {
+			t.Fatalf("items[%d] = %#v, want value/max %s/%s", idx, items[idx], wantValues[idx], wantMaxima[idx])
 		}
 	}
 }
@@ -265,11 +288,11 @@ func TestV2ActivityItemsCapsScoresAtCriterionMaximum(t *testing.T) {
 	if len(items) != 2 {
 		t.Fatalf("items len = %d, want 2: %#v", len(items), items)
 	}
-	if items[0].NotaMaxima != "1" || items[0].NotaAlcancada != "1" {
-		t.Fatalf("first capped item = %#v, want max/value 1", items[0])
+	if items[0].NotaMaxima != "0,33" || items[0].NotaAlcancada != "0,33" {
+		t.Fatalf("first capped item = %#v, want normalized max/value 0,33", items[0])
 	}
-	if items[1].NotaMaxima != "2" || items[1].NotaAlcancada != "2" {
-		t.Fatalf("second capped item = %#v, want max/value 2", items[1])
+	if items[1].NotaMaxima != "0,67" || items[1].NotaAlcancada != "0,67" {
+		t.Fatalf("second capped item = %#v, want normalized max/value 0,67", items[1])
 	}
 }
 
@@ -303,7 +326,7 @@ func TestV2ActivityItemsIncludesGenericCriteriaWithoutMaxRow(t *testing.T) {
 	if len(items) != 2 {
 		t.Fatalf("items len = %d, want 2: %#v", len(items), items)
 	}
-	if items[0].Subtopic != "Originalidade" || items[0].NotaMaxima != "1" {
+	if items[0].Subtopic != "Originalidade" || items[0].NotaMaxima != "0,5" {
 		t.Fatalf("unexpected generic criterion: %#v", items[0])
 	}
 }
@@ -314,6 +337,36 @@ func TestV2ActivityLaunchedSkipsNotLaunchedText(t *testing.T) {
 
 	if v2ActivityLaunched(row, activity) {
 		t.Fatal("v2ActivityLaunched() = true, want false")
+	}
+}
+
+func TestV2ActivitiesCompleteRequiresEveryActivityToEnd(t *testing.T) {
+	activities := []v2ActivityConfig{
+		{Key: "at1", SummaryCol: 1},
+		{Key: "at2", SummaryCol: 2},
+	}
+	summaryRow := []string{"123", "1", "2"}
+	tables := []TableResult{
+		{Key: "at1", Kind: "activity", Complete: true, Status: "Encerrado"},
+		{Key: "at2", Kind: "activity", Complete: false, Status: "Não encerrado"},
+	}
+
+	if v2ActivitiesComplete(activities, summaryRow, tables) {
+		t.Fatal("v2ActivitiesComplete() = true with a pending activity")
+	}
+
+	tables[1].Complete = true
+	tables[1].Status = "Encerrado"
+	if !v2ActivitiesComplete(activities, summaryRow, tables) {
+		t.Fatal("v2ActivitiesComplete() = false after every activity ended")
+	}
+}
+
+func TestV2ActivityStatusWaitsForTopScore(t *testing.T) {
+	items := []activityItem{{NotaAlcancada: "1"}}
+
+	if got := v2ActivityStatus(items, "Em correção"); got != "Não encerrado" {
+		t.Fatalf("v2ActivityStatus() = %q, want Não encerrado", got)
 	}
 }
 
@@ -625,8 +678,8 @@ func TestV2ActivityTableKeepsCriteriaWithoutHeaderCommentsWhenNoSimilarGroup(t *
 		t.Fatalf("gradeForV2() tables len = %d, want 1", len(result.Tables))
 	}
 	card := result.Tables[0].Cards[0]
-	if card.Value != "2,5" || card.DisplayValue != "2,5/3" {
-		t.Fatalf("card score = %q/%q, want summary score 2,5/3", card.Value, card.DisplayValue)
+	if card.Value != "2,5" || card.DisplayValue != "2,50 de 3,00" {
+		t.Fatalf("card score = %q/%q, want summary score 2,50 de 3,00", card.Value, card.DisplayValue)
 	}
 	if len(card.Details) != 2 {
 		t.Fatalf("card.Details len = %d, want criteria without matching group: %#v", len(card.Details), card.Details)
@@ -685,11 +738,11 @@ func TestV2ActivityTableUsesSummaryScoreWithoutRubricNormalization(t *testing.T)
 		t.Fatalf("gradeForV2() error = %v", err)
 	}
 	card := result.Tables[0].Cards[0]
-	if card.Value != "12" || card.DisplayValue != "12/1" {
-		t.Fatalf("card score = %q/%q, want raw summary score 12/1", card.Value, card.DisplayValue)
+	if card.Value != "12" || card.DisplayValue != "12,00 de 1,00" {
+		t.Fatalf("card score = %q/%q, want raw summary score 12,00 de 1,00", card.Value, card.DisplayValue)
 	}
-	if card.Details[0].Value != "10" || card.Details[0].Max != 10 {
-		t.Fatalf("detail = %#v, want rubric value/max 10", card.Details[0])
+	if card.Details[0].Value != "1" || card.Details[0].Max != 1 || card.Details[0].DisplayScore != "1,00 de 1,00" {
+		t.Fatalf("detail = %#v, want criterion normalized to activity weight", card.Details[0])
 	}
 }
 
@@ -720,8 +773,19 @@ func TestV2AverageCardCapsAtTen(t *testing.T) {
 	if card == nil {
 		t.Fatal("v2AverageCard() = nil, want card")
 	}
-	if card.Value != "10" || card.DisplayValue != "10" {
-		t.Fatalf("v2AverageCard() = %#v, want capped 10", card)
+	if card.Value != "10" || card.DisplayValue != "10,00" {
+		t.Fatalf("v2AverageCard() = %#v, want capped display 10,00", card)
+	}
+}
+
+func TestV2AverageCardHidesPendingValue(t *testing.T) {
+	grid := &sheetGrid{
+		headers: []string{"Matrícula", "Média"},
+		rows:    [][]string{{"123", "Em correção"}},
+	}
+
+	if card := v2AverageCard(grid, grid.rows[0]); card != nil {
+		t.Fatalf("v2AverageCard() = %#v, want nil pending average", card)
 	}
 }
 
@@ -845,8 +909,8 @@ func TestV2ActivityTableFallsBackToSummaryFinalGradeColumn(t *testing.T) {
 		t.Fatalf("gradeForV2() error = %v", err)
 	}
 	card := result.Tables[0].Cards[0]
-	if card.Value != "4,5" || card.DisplayValue != "4,5/9" {
-		t.Fatalf("card score = %q/%q, want summary final grade 4,5/9", card.Value, card.DisplayValue)
+	if card.Value != "4,5" || card.DisplayValue != "4,50 de 9,00" {
+		t.Fatalf("card score = %q/%q, want summary final grade 4,50 de 9,00", card.Value, card.DisplayValue)
 	}
 	if card.Tone != "score-warning" {
 		t.Fatalf("card tone = %q, want warning for 50%% score", card.Tone)
@@ -857,7 +921,7 @@ func TestV2ActivityTableFallsBackToSummaryFinalGradeColumn(t *testing.T) {
 	if len(card.Details) != 2 {
 		t.Fatalf("details len = %d, want nota final excluded from criteria: %#v", len(card.Details), card.Details)
 	}
-	if card.Details[0].DisplayScore != "0 / 1" || card.Details[1].DisplayScore != "1 / 1" {
-		t.Fatalf("details = %#v, want rubric maxima /1", card.Details)
+	if card.Details[0].DisplayScore != "0,00 de 4,50" || card.Details[1].DisplayScore != "4,50 de 4,50" {
+		t.Fatalf("details = %#v, want criteria normalized to project weight", card.Details)
 	}
 }

@@ -193,17 +193,19 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 		result.SpreadsheetID = mergeSourceValue(result.SpreadsheetID, table.SpreadsheetID)
 	}
 
-	if average := v2AverageCard(summaryGrid, summaryRow); average != nil {
-		result.Tables = append(result.Tables, TableResult{
-			Key:           "media-" + exam,
-			Label:         "Média",
-			SheetName:     v2SummarySheetName(exam),
-			Kind:          exam + "summary",
-			Complete:      true,
-			SchemaStatus:  summaryGrid.schemaStatus,
-			SpreadsheetID: summaryGrid.spreadsheetID,
-			Cards:         []CardResult{*average},
-		})
+	if v2ActivitiesComplete(activities, summaryRow, result.Tables) {
+		if average := v2AverageCard(summaryGrid, summaryRow); average != nil {
+			result.Tables = append(result.Tables, TableResult{
+				Key:           "media-" + exam,
+				Label:         "Média",
+				SheetName:     v2SummarySheetName(exam),
+				Kind:          exam + "summary",
+				Complete:      true,
+				SchemaStatus:  summaryGrid.schemaStatus,
+				SpreadsheetID: summaryGrid.spreadsheetID,
+				Cards:         []CardResult{*average},
+			})
+		}
 	}
 	if len(result.Tables) == 0 {
 		return result, nil
@@ -426,19 +428,20 @@ func (c *SheetsClient) v2ActivityTable(ctx context.Context, activity v2ActivityC
 	if len(items) == 0 {
 		return v2ActivitySummaryTable(activity, summaryGrid, summaryRowIdx), true, nil
 	}
-	details := activityDetails(items, 1)
+	details := activityDetails(items)
 	score := valueAt(summaryRow, activity.SummaryCol)
 	comment, author := v2SummaryActivityComment(summaryGrid, summaryRowIdx, activity)
 	card := makeCard("nota", "Nota", score, comment, author, details)
 	card.DisplayValue = formatScoreForWeight(score, activity.Weight)
 	card.Tone = scoreToneForMaximum(score, activity.Weight)
+	status := v2ActivityStatus(items, score)
 	return TableResult{
 		Key:           activity.Key,
 		Label:         activity.Label,
 		SheetName:     activity.SheetName,
 		Kind:          "activity",
-		Complete:      true,
-		Status:        activityStatus(items),
+		Complete:      status == "Encerrado",
+		Status:        status,
 		SchemaStatus:  mergeSchemaStatus(activity.SchemaStatus, grid.schemaStatus),
 		SpreadsheetID: mergeSourceValue(activity.SpreadsheetID, grid.spreadsheetID),
 		Cards:         []CardResult{card},
@@ -484,14 +487,36 @@ func v2ActivityRow(grid *sheetGrid, groupValue string, user SessionUser) int {
 func v2ActivityItems(grid *sheetGrid, maxRowIdx int, studentRowIdx int, weight float64) []activityItem {
 	items := make([]activityItem, 0, len(grid.headers))
 	criterionColumns := v2CriterionColumns(grid, maxRowIdx, studentRowIdx)
+	useOfficialWeights := v2UsesOfficialQuestionWeights(grid, criterionColumns)
+	sourceMaxima := make(map[int]float64, len(criterionColumns))
+	maxima := make(map[int]float64, len(criterionColumns))
+	totalMaximum := 0.0
 	for _, colIdx := range criterionColumns {
-		maximum := v2CriterionMaximum(grid, maxRowIdx, colIdx)
+		sourceMaximum := v2CriterionSourceMaximum(grid, maxRowIdx, colIdx)
+		maximum := sourceMaximum
+		if useOfficialWeights {
+			maximum = canonicalCriterionMaximum(valueAt(grid.headers, colIdx), maximum)
+		}
+		sourceMaxima[colIdx] = sourceMaximum
+		maxima[colIdx] = maximum
+		totalMaximum += maximum
+	}
+	if useOfficialWeights {
+		totalMaximum = officialQuestionRubricMaximum
+	}
+	for _, colIdx := range criterionColumns {
+		sourceMaximum := sourceMaxima[colIdx]
+		maximum := maxima[colIdx]
 		value := ""
 		if studentRowIdx >= 0 && studentRowIdx < len(grid.rows) {
 			value = valueAt(grid.rows[studentRowIdx], colIdx)
 		}
-		if maximum > 0 {
-			value = normalizedScore(value, maximum, maximum)
+		if sourceMaximum > 0 && maximum > 0 {
+			value = normalizedScore(value, sourceMaximum, maximum)
+		}
+		if totalMaximum > 0 && weight > 0 {
+			value = normalizedScore(value, totalMaximum, weight)
+			maximum = normalizedMaximum(maximum, totalMaximum, weight)
 		}
 		comment, author := v2ActivityItemComment(grid, maxRowIdx, studentRowIdx, colIdx)
 		items = append(items, activityItem{
@@ -506,6 +531,14 @@ func v2ActivityItems(grid *sheetGrid, maxRowIdx int, studentRowIdx int, weight f
 	return items
 }
 
+func v2UsesOfficialQuestionWeights(grid *sheetGrid, columns []int) bool {
+	labels := make([]string, 0, len(columns))
+	for _, colIdx := range columns {
+		labels = append(labels, valueAt(grid.headers, colIdx))
+	}
+	return usesOfficialQuestionWeights(labels)
+}
+
 func v2CriterionColumns(grid *sheetGrid, maxRowIdx int, studentRowIdx int) []int {
 	var columns []int
 	for colIdx := 0; colIdx < len(grid.headers); colIdx++ {
@@ -517,7 +550,7 @@ func v2CriterionColumns(grid *sheetGrid, maxRowIdx int, studentRowIdx int) []int
 			value = valueAt(grid.rows[studentRowIdx], colIdx)
 		}
 		comment, _ := v2ActivityItemComment(grid, maxRowIdx, studentRowIdx, colIdx)
-		if v2CriterionMaximum(grid, maxRowIdx, colIdx) <= 0 && value == "" && comment == "" {
+		if v2CriterionSourceMaximum(grid, maxRowIdx, colIdx) <= 0 && value == "" && comment == "" {
 			continue
 		}
 		columns = append(columns, colIdx)
@@ -525,22 +558,11 @@ func v2CriterionColumns(grid *sheetGrid, maxRowIdx int, studentRowIdx int) []int
 	return columns
 }
 
-func v2TotalMaximum(grid *sheetGrid, maxRowIdx int, columns []int) float64 {
-	total := 0.0
-	for _, colIdx := range columns {
-		maximum := v2CriterionMaximum(grid, maxRowIdx, colIdx)
-		if maximum > 0 {
-			total += maximum
-		}
-	}
-	return total
-}
-
 func v2FinalGradeColumn(headers []string) int {
 	return firstHeaderIndex(headers, "nota final", "nota", "total")
 }
 
-func v2CriterionMaximum(grid *sheetGrid, maxRowIdx int, colIdx int) float64 {
+func v2CriterionSourceMaximum(grid *sheetGrid, maxRowIdx int, colIdx int) float64 {
 	if maxRowIdx >= 0 {
 		if maximum, ok := parseNumber(valueAt(grid.rows[maxRowIdx], colIdx)); ok {
 			return maximum
@@ -580,7 +602,14 @@ func v2AverageCard(grid *sheetGrid, row []string) *CardResult {
 	}
 	comment, author := commentAt(rowNotesAt(grid, indexOfRow(grid.rows, row)), rowNoteAuthorsAt(grid, indexOfRow(grid.rows, row)), idx)
 	value := valueAt(row, idx)
-	if score, ok := parseScore(value); ok && score > 10 {
+	if isPendingValue(value) {
+		return nil
+	}
+	score, ok := parseScore(value)
+	if !ok {
+		return nil
+	}
+	if score > 10 {
 		value = formatScore(10)
 	}
 	card := makeCard("media", "Média", value, comment, author, nil)
@@ -639,6 +668,30 @@ func v2ActivityStatusFromScore(value string) string {
 	return "Encerrado"
 }
 
+func v2ActivityStatus(items []activityItem, score string) string {
+	if isPendingValue(score) || activityStatus(items) != "Encerrado" {
+		return "Não encerrado"
+	}
+	return "Encerrado"
+}
+
+func v2ActivitiesComplete(activities []v2ActivityConfig, summaryRow []string, tables []TableResult) bool {
+	if len(activities) == 0 {
+		return false
+	}
+	tablesByKey := make(map[string]TableResult, len(tables))
+	for _, table := range tables {
+		tablesByKey[table.Key] = table
+	}
+	for _, activity := range activities {
+		table, found := tablesByKey[activity.Key]
+		if !v2ActivityLaunched(summaryRow, activity) || !found || !activityTableComplete(table) {
+			return false
+		}
+	}
+	return true
+}
+
 func normalizeABKey(value string) string {
 	normalized := normalizeHeader(value)
 	var builder strings.Builder
@@ -652,7 +705,7 @@ func normalizeABKey(value string) string {
 
 func formatScoreForWeight(value string, weight float64) string {
 	if parsed, ok := parseNumber(value); ok {
-		return formatScore(parsed) + "/" + formatScore(weight)
+		return scoreComparisonDisplay(parsed, weight)
 	}
 	return displayValue("Nota", value)
 }

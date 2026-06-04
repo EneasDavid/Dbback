@@ -20,28 +20,36 @@ func parseActivityRubric(grid *sheetGrid, table TableConfig, user SessionUser) (
 	}
 
 	items := make([]activityItem, 0, len(grid.headers))
+	useOfficialWeights := activityUsesOfficialQuestionWeights(grid, maxRowIdx)
 	for colIdx := firstSubtopicColumn(grid.headers); colIdx < len(grid.headers); colIdx++ {
 		subtopic := rubricLabel(grid, maxRowIdx, colIdx)
 		if subtopic == "" {
 			continue
 		}
-		maximum := valueAt(grid.rows[maxRowIdx], colIdx)
-		if maximum == "" {
+		maximumText := valueAt(grid.rows[maxRowIdx], colIdx)
+		if maximumText == "" {
 			value := valueAt(grid.rows[studentRowIdx], colIdx)
 			if value == "" && noteAt(grid.notes, colIdx) == "" {
 				continue
 			}
 			return TableResult{}, false, NewHTTPError(500, "erro de execução: nota máxima ausente em "+table.SheetName+" / "+subtopic)
 		}
-		if _, ok := parseNumber(maximum); !ok {
+		sourceMaximum, ok := parseNumber(maximumText)
+		if !ok {
 			continue
+		}
+		value := valueAt(grid.rows[studentRowIdx], colIdx)
+		maximum := sourceMaximum
+		if table.ScoreDivisor > 1 && useOfficialWeights {
+			maximum = canonicalCriterionMaximum(subtopic, sourceMaximum)
+			value = normalizedScore(value, sourceMaximum, maximum)
 		}
 		comment, author := activityItemComment(grid, maxRowIdx, studentRowIdx, colIdx)
 		items = append(items, activityItem{
 			Key:           fmt.Sprintf("i%d", colIdx),
 			Subtopic:      subtopic,
-			NotaMaxima:    maximum,
-			NotaAlcancada: valueAt(grid.rows[studentRowIdx], colIdx),
+			NotaMaxima:    formatNumber(maximum),
+			NotaAlcancada: value,
 			Comment:       comment,
 			CommentAuthor: author,
 		})
@@ -50,21 +58,35 @@ func parseActivityRubric(grid *sheetGrid, table TableConfig, user SessionUser) (
 		return TableResult{}, false, NewHTTPError(500, "erro de execução: lista de sub tópicos vazia na aba "+table.SheetName)
 	}
 
-	details := activityDetails(items, table.ScoreDivisor)
+	if useOfficialWeights && table.ScoreDivisor > 1 {
+		items = activityItemsForDivisor(items, table.ScoreDivisor)
+	} else {
+		items = activityItemsForWeight(items, 1)
+	}
+	details := activityDetails(items)
 	card := activityTotalCard(items, details)
 	if card.Comment == "" && rowComment != "" {
 		card.Comment = rowComment
 		card.CommentAuthor = rowCommentAuthor
 	}
+	status := activityStatus(items)
 	return TableResult{
 		Key:       table.Key,
 		Label:     table.Label,
 		SheetName: table.SheetName,
 		Kind:      table.Kind,
-		Complete:  true,
-		Status:    activityStatus(items),
+		Complete:  status == "Encerrado",
+		Status:    status,
 		Cards:     []CardResult{card},
 	}, true, nil
+}
+
+func activityUsesOfficialQuestionWeights(grid *sheetGrid, maxRowIdx int) bool {
+	labels := make([]string, 0, len(grid.headers))
+	for colIdx := firstSubtopicColumn(grid.headers); colIdx < len(grid.headers); colIdx++ {
+		labels = append(labels, rubricLabel(grid, maxRowIdx, colIdx))
+	}
+	return usesOfficialQuestionWeights(labels)
 }
 
 func activityStatus(items []activityItem) string {
@@ -192,7 +214,7 @@ func activityTotalCard(items []activityItem, details []DetailResult) CardResult 
 func makeActivityScoreCard(value string, comment string, commentAuthor string, details []DetailResult) CardResult {
 	card := makeCard("nota", "Nota", value, comment, commentAuthor, details)
 	if score, ok := parseScore(value); ok {
-		card.DisplayValue = formatNumber(score) + "/" + formatNumberFixed(1, 2)
+		card.DisplayValue = scoreComparisonDisplay(score, 1)
 	}
 	return card
 }

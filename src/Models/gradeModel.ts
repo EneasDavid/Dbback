@@ -135,13 +135,14 @@ function gradeOrderValue(grade?: GradeResult) {
 }
 
 function normalizeGradeResult(grade: GradeResult): GradeResult {
+  const tables = Array.isArray(grade.tables)
+    ? grade.tables
+        .filter(Boolean)
+        .map((table) => normalizeGradeTable(table as LegacyGradeTable))
+    : [];
   return {
     ...grade,
-    tables: Array.isArray(grade.tables)
-      ? grade.tables
-          .filter(Boolean)
-          .map((table) => normalizeGradeTable(table as LegacyGradeTable))
-      : [],
+    tables: hideAverageUntilActivitiesComplete(tables),
   };
 }
 
@@ -160,7 +161,7 @@ function normalizeGradeTable(table: LegacyGradeTable): GradeTable {
 function normalizeGradeCard(card: GradeCardPayload, index: number): GradeCardPayload {
   const label = asText(card.label) || 'Nota';
   const value = asText(card.value);
-  const display = asText(card.displayValue) || displayValue(label, value);
+  const display = normalizedCardDisplay(label, value, asText(card.displayValue));
   const details = normalizeGradeDetails(card.details);
   return {
     ...card,
@@ -192,7 +193,9 @@ function normalizeGradeDetails(details?: GradeDetail[]) {
       label,
       value,
       max,
-      displayScore: asText(detail.displayScore) || detailDisplayScore(value, max, pending),
+      displayScore: pending || max > 0
+        ? detailDisplayScore(value, max, pending)
+        : asText(detail.displayScore) || detailDisplayScore(value, max, pending),
       ratio,
       pending,
       tone: detail.tone || scoreToneFromRatio(ratio, pending),
@@ -215,7 +218,7 @@ function legacyCards(table: LegacyGradeTable): GradeCardPayload[] {
         key: asText(total.key) || 'nota',
         label,
         value,
-        displayValue: score !== null ? `${formatScore(score)}/${formatScoreFixed(1, 2)}` : displayValue(label, value),
+        displayValue: score !== null ? scoreComparisonDisplay(score, 1) : displayValue(label, value),
         tone: scoreTone(label, value, displayValue(label, value)),
         comment: total.comment,
         commentAuthor: total.commentAuthor,
@@ -297,14 +300,25 @@ function isVisibleLegacyColumn(column: LegacyColumn) {
 
 function displayValue(label: string, value: string) {
   if (isPendingValue(value)) return 'Em correção';
-  if (isGradeLabel(label) && parseScore(value) === null) return 'Em correção';
+  if (isGradeLabel(label)) {
+    const score = parseScore(value);
+    if (score === null) return 'Em correção';
+    return formatScore(score);
+  }
   return value;
+}
+
+function normalizedCardDisplay(label: string, value: string, display: string) {
+  if (isPendingValue(value)) return 'Em correção';
+  const comparison = parseDisplayScore(display);
+  if (comparison) return scoreComparisonDisplay(comparison.value, comparison.max);
+  return isGradeLabel(label) ? displayValue(label, value) : display || displayValue(label, value);
 }
 
 function detailDisplayScore(value: string, max: number, pending: boolean) {
   if (pending) return 'Em correção';
   const obtained = parseScore(value);
-  if (obtained !== null && max > 0) return `${formatScore(obtained)} / ${formatScore(max)}`;
+  if (obtained !== null && max > 0) return scoreComparisonDisplay(obtained, max);
   if (max > 0) return `Max ${formatScore(max)}`;
   return value.trim();
 }
@@ -329,7 +343,9 @@ function scoreToneFromRatio(ratio: number, pending: boolean) {
 }
 
 function parseDisplayScore(value: string) {
-  const [left, right] = value.split('/').map((part) => parseScore(part));
+  const parts = value.split(/\s*(?:\/|de)\s*/i);
+  if (parts.length !== 2) return null;
+  const [left, right] = parts.map((part) => parseScore(part));
   if (left === null || right === null) return null;
   return { value: left, max: right };
 }
@@ -365,7 +381,11 @@ function parseScore(value: string) {
 }
 
 function formatScore(value: number) {
-  return value.toLocaleString('pt-BR', { maximumFractionDigits: 2, minimumFractionDigits: value % 1 === 0 ? 0 : 1 });
+  return value.toLocaleString('pt-BR', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
+}
+
+function scoreComparisonDisplay(value: number, max: number) {
+  return `${formatScore(value)} de ${formatScore(max)}`;
 }
 
 function normalized(value: string) {
@@ -380,8 +400,31 @@ function asText(value: unknown) {
   return typeof value === 'string' ? value : '';
 }
 
-function formatScoreFixed(value: number, fractionDigits: number) {
-  return value.toLocaleString('pt-BR', { maximumFractionDigits: fractionDigits, minimumFractionDigits: fractionDigits });
+function hideAverageUntilActivitiesComplete(tables: GradeTable[]) {
+  const hasIncompleteActivity = tables.some((table) => scoredActivityTable(table) && !activityTableComplete(table));
+  if (!hasIncompleteActivity) return tables;
+  return tables
+    .filter((table) => !isMediaTable(table))
+    .map((table) => ({
+      ...table,
+      cards: cardsFor(table).filter((card) => !normalized(card.label).includes('media')),
+    }));
+}
+
+function scoredActivityTable(table: GradeTable) {
+  return table.kind === 'activity' || table.kind === 'project';
+}
+
+function activityTableComplete(table: GradeTable) {
+  const status = normalized(table.status || '');
+  if (status) return status === 'encerrado';
+  const cards = cardsFor(table);
+  return Boolean(table.complete) &&
+    cards.length > 0 &&
+    cards.every((card) =>
+      !isPendingValue(card.value) &&
+      (card.details || []).every((detail) => !detail.pending && !isPendingValue(detail.value)),
+    );
 }
 
 function gradesStorageSet(cacheKey: string, grades: GradeCache) {

@@ -8,9 +8,9 @@ func TestAddAB1ScoreAverageAddsVisibleScoreCards(t *testing.T) {
 	result := GradeResult{
 		Exam: "AB1",
 		Tables: []TableResult{
-			{Kind: "activity", Cards: []CardResult{{Label: "Nota", Value: "0,98"}}},
-			{Kind: "activity", Cards: []CardResult{{Label: "Nota", Value: "0,85"}}},
-			{Kind: "activity", Cards: []CardResult{{Label: "Nota", Value: "0,65"}}},
+			{Kind: "activity", Complete: true, Cards: []CardResult{{Label: "Nota", Value: "0,98"}}},
+			{Kind: "activity", Complete: true, Cards: []CardResult{{Label: "Nota", Value: "0,85"}}},
+			{Kind: "activity", Complete: true, Cards: []CardResult{{Label: "Nota", Value: "0,65"}}},
 			{Kind: "summary", Cards: []CardResult{
 				makeCard("prova", "Prova AB", "6", "", "", nil),
 			}},
@@ -30,7 +30,7 @@ func TestAddAB1ScoreAverageAddsVisibleScoreCards(t *testing.T) {
 	}
 
 	// A soma deve ser: 0.98 + 0.85 + 0.65 + 6 = 8.48
-	if len(summary.Cards) != 1 || summary.Cards[0].Label != "" || summary.Cards[0].Value != "8,48" {
+	if len(summary.Cards) != 1 || summary.Cards[0].Label != "" || summary.Cards[0].Value != "8,48" || summary.Cards[0].DisplayValue != "8,48" {
 		t.Fatalf("unexpected AB1 summary card: %#v", summary.Cards)
 	}
 }
@@ -40,9 +40,9 @@ func TestAddAB1ScoreAverageCapsAtTen(t *testing.T) {
 	result := GradeResult{
 		Exam: "AB1",
 		Tables: []TableResult{
-			{Kind: "activity", Cards: []CardResult{{Label: "Nota", Value: "0,98"}}},
-			{Kind: "activity", Cards: []CardResult{{Label: "Nota", Value: "0,85"}}},
-			{Kind: "activity", Cards: []CardResult{{Label: "Nota", Value: "0,65"}}},
+			{Kind: "activity", Complete: true, Cards: []CardResult{{Label: "Nota", Value: "0,98"}}},
+			{Kind: "activity", Complete: true, Cards: []CardResult{{Label: "Nota", Value: "0,85"}}},
+			{Kind: "activity", Complete: true, Cards: []CardResult{{Label: "Nota", Value: "0,65"}}},
 			{Kind: "summary", Cards: []CardResult{
 				makeCard("prova", "Prova AB", "8", "", "", nil),
 			}},
@@ -54,6 +54,9 @@ func TestAddAB1ScoreAverageCapsAtTen(t *testing.T) {
 	if got := result.Tables[4].Cards[0].Value; got != "10" {
 		t.Fatalf("capped AB1 value = %q, want 10", got)
 	}
+	if got := result.Tables[4].Cards[0].DisplayValue; got != "10,00" {
+		t.Fatalf("capped AB1 display value = %q, want 10,00", got)
+	}
 }
 
 // TestAddAB1ScoreAverageAppendsMediaAsLastTable garante que a tabela de média
@@ -62,11 +65,11 @@ func TestAddAB1ScoreAverageAppendsMediaAsLastTable(t *testing.T) {
 	result := GradeResult{
 		Exam: "AB1",
 		Tables: []TableResult{
-			{Kind: "activity", Cards: []CardResult{{Label: "Nota", Value: "0,98"}}},
+			{Kind: "activity", Complete: true, Cards: []CardResult{{Label: "Nota", Value: "0,98"}}},
 			{Kind: "summary", Cards: []CardResult{
 				makeCard("prova", "Prova AB", "5", "", "", nil),
 			}},
-			{Kind: "activity", Key: "extra", Cards: []CardResult{{Label: "Extra", Value: "0,5"}}},
+			{Kind: "activity", Key: "extra", Complete: true, Cards: []CardResult{{Label: "Extra", Value: "0,5"}}},
 		},
 	}
 
@@ -83,10 +86,10 @@ func TestAddAB2ScoreAverageAddsVisibleScoreCards(t *testing.T) {
 	result := GradeResult{
 		Exam: "AB2",
 		Tables: []TableResult{
-			{Key: "at4", Kind: "activity", Cards: []CardResult{
+			{Key: "at4", Kind: "activity", Complete: true, Cards: []CardResult{
 				makeCard("nota", "Nota", "0,65", "", "", nil),
 			}},
-			{Key: "projeto", Kind: "project", Cards: []CardResult{
+			{Key: "projeto", Kind: "project", Complete: true, Cards: []CardResult{
 				makeCard("total", "Total", "0,45", "", "", nil),
 			}},
 		},
@@ -111,8 +114,8 @@ func TestAddAB2ScoreAverageCapsAtTen(t *testing.T) {
 	result := GradeResult{
 		Exam: "AB2",
 		Tables: []TableResult{
-			{Key: "at4", Kind: "activity", Cards: []CardResult{{Label: "Nota", Value: "8"}}},
-			{Key: "projeto", Kind: "project", Cards: []CardResult{{Label: "Total", Value: "4"}}},
+			{Key: "at4", Kind: "activity", Complete: true, Cards: []CardResult{{Label: "Nota", Value: "8"}}},
+			{Key: "projeto", Kind: "project", Complete: true, Cards: []CardResult{{Label: "Total", Value: "4"}}},
 		},
 	}
 
@@ -120,5 +123,33 @@ func TestAddAB2ScoreAverageCapsAtTen(t *testing.T) {
 
 	if got := result.Tables[2].Cards[0].Value; got != "10" {
 		t.Fatalf("capped AB2 value = %q, want 10", got)
+	}
+}
+
+func TestAddScoreAverageWaitsForEveryActivityToEnd(t *testing.T) {
+	result := GradeResult{
+		Exam: "AB1",
+		Tables: []TableResult{
+			{Key: "at1", Kind: "activity", Complete: true, Status: "Encerrado", Cards: []CardResult{{Label: "Nota", Value: "1"}}},
+			{Key: "at2", Kind: "activity", Complete: false, Status: "Não encerrado", Cards: []CardResult{{Label: "Nota", Value: "0,5"}}},
+			{Kind: "summary", Cards: []CardResult{makeCard("media", "Média AB", "7", "", "", nil)}},
+			{Key: "media-ab1", Kind: "ab1summary", Cards: []CardResult{makeCard("media", "", "7", "", "", nil)}},
+		},
+	}
+
+	finalizeScoreAverages(&result, []TableConfig{
+		{Key: "at1", Kind: "activity"},
+		{Key: "at2", Kind: "activity"},
+	})
+
+	for _, table := range result.Tables {
+		if table.Key == "media-ab1" || table.Kind == "ab1summary" {
+			t.Fatalf("incomplete activities exposed average table: %#v", table)
+		}
+		for _, card := range table.Cards {
+			if normalizeHeader(card.Label) == "media ab" {
+				t.Fatalf("incomplete activities exposed average card: %#v", card)
+			}
+		}
 	}
 }
