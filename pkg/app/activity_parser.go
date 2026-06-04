@@ -70,6 +70,7 @@ func parseActivityRubric(grid *sheetGrid, table TableConfig, user SessionUser) (
 		card.CommentAuthor = rowCommentAuthor
 	}
 	status := activityStatus(items)
+	card.Tone = activityCardTone(status, card.Tone)
 	return TableResult{
 		Key:       table.Key,
 		Label:     table.Label,

@@ -84,7 +84,7 @@ export default function AppController() {
     );
     setExam((currentExam) => {
       if (keys.length === 0) return currentExam;
-      if (!visibleResults[currentExam]) return keys[0];
+      if (!keys.includes(currentExam)) return keys[0];
       if (!hasRenderableGrade(visibleResults[currentExam])) {
         return keys.find((key) => hasRenderableGrade(visibleResults[key])) || currentExam;
       }
@@ -107,7 +107,7 @@ export default function AppController() {
     void apiSWR<GradeCache>(ALL_GRADES_PATH)
       .then((maybeResults) => {
         if (!maybeResults) return;
-        activateGradeResults(maybeResults, cacheKey, 'store');
+        activateGradeResults(maybeResults, cacheKey, 'replace');
       })
       .catch((err) => {
         gradesFetchedAtRef.current = 0;

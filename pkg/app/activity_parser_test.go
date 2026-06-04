@@ -89,6 +89,30 @@ func TestActivityDetailsNormalizeToActivityWeight(t *testing.T) {
 	}
 }
 
+func TestActivityPendingUsesPendingCardTone(t *testing.T) {
+	grid := parseGrid([]*sheets.RowData{
+		rowData(cellData("Grupo", ""), cellData("Critério A", ""), cellData("Critério B", "")),
+		rowData(cellData("Nota maxima", ""), cellData("1", ""), cellData("1", "")),
+		rowData(cellData("Alice", ""), cellData("1", ""), cellData("", "")),
+	}, nil)
+
+	table, found, err := parseActivityRubric(grid, TableConfig{
+		Key:       "at1",
+		Label:     "AT. 1",
+		SheetName: "AT. 1",
+		Kind:      "activity",
+	}, SessionUser{Name: "Alice", Matricula: "123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("student row was not found")
+	}
+	if table.Status != "Não encerrado" || table.Cards[0].Tone != "score-pending" {
+		t.Fatalf("pending activity = %#v, want score-pending card", table)
+	}
+}
+
 func TestActivityCapsNormalizedScoresAtActivityWeight(t *testing.T) {
 	grid := parseGrid([]*sheets.RowData{
 		rowData(cellData("Grupo", ""), cellData("Critério", "")),

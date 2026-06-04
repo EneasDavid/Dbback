@@ -81,7 +81,7 @@ export function normalizeGradeCache(cache: GradeCache): GradeCache {
 
 export function gradeKeys(cache: GradeCache): string[] {
   return Object.entries(cache)
-    .filter(([, grade]) => Boolean(grade))
+    .filter(([, grade]) => Boolean(grade) && grade?.active !== false)
     .sort(([, left], [, right]) => gradeOrderValue(left) - gradeOrderValue(right))
     .map(([key]) => key);
 }
@@ -89,7 +89,7 @@ export function gradeKeys(cache: GradeCache): string[] {
 export function gradeLabels(cache: GradeCache): Record<string, string> {
   return Object.fromEntries(
     Object.entries(cache)
-      .filter((entry): entry is [string, GradeResult] => Boolean(entry[0]) && Boolean(entry[1]))
+      .filter((entry): entry is [string, GradeResult] => Boolean(entry[0]) && Boolean(entry[1]) && entry[1]?.active !== false)
       .map(([key, grade]) => [key, grade.exam || key.toUpperCase()]),
   );
 }
@@ -99,7 +99,7 @@ export function cardsFor(table: GradeTable) {
 }
 
 export function hasRenderableGrade(grade?: GradeResult) {
-  return Boolean(grade?.tables?.some((table) => cardsFor(table).length > 0));
+  return grade?.active !== false && Boolean(grade?.tables?.some((table) => cardsFor(table).length > 0));
 }
 
 export function isSummaryTable(kind: string) {

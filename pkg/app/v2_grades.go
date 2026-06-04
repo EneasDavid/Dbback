@@ -87,6 +87,7 @@ func (c *SheetsClient) emptyGradeResultForV2(ctx context.Context, exam string, u
 	}
 	if ab, found := v2ResolveAB(abGrid, exam); found {
 		result.Exam = ab.Label
+		result.Active = v2GradeActive(ab.Active)
 		result.SchemaStatus = abGrid.schemaStatus
 		result.SpreadsheetID = abGrid.spreadsheetID
 	}
@@ -111,6 +112,7 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 	if !active {
 		result := emptyGradeResult(exam, user)
 		result.Exam = abLabel
+		result.Active = v2GradeActive(false)
 		result.SchemaStatus = abGrid.schemaStatus
 		result.SpreadsheetID = abGrid.spreadsheetID
 		return result, nil
@@ -121,6 +123,7 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 	emptyActiveResult := func() GradeResult {
 		result := emptyGradeResult(exam, user)
 		result.Exam = abLabel
+		result.Active = v2GradeActive(true)
 		result.SchemaStatus = abGrid.schemaStatus
 		result.SpreadsheetID = abGrid.spreadsheetID
 		return result
@@ -171,6 +174,7 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 
 	result := emptyGradeResult(exam, user)
 	result.Exam = abLabel
+	result.Active = v2GradeActive(true)
 	result.SchemaStatus = mergeSchemaStatus(mergeSchemaStatus(abGrid.schemaStatus, activitiesGrid.schemaStatus), summaryGrid.schemaStatus)
 	result.SpreadsheetID = mergeSourceValue(mergeSourceValue(abGrid.spreadsheetID, activitiesGrid.spreadsheetID), summaryGrid.spreadsheetID)
 
@@ -229,6 +233,10 @@ type v2ABConfig struct {
 	Key    string
 	Label  string
 	Active bool
+}
+
+func v2GradeActive(active bool) *bool {
+	return &active
 }
 
 func v2ResolveAB(grid *sheetGrid, exam string) (v2ABConfig, bool) {
@@ -435,6 +443,7 @@ func (c *SheetsClient) v2ActivityTable(ctx context.Context, activity v2ActivityC
 	card.DisplayValue = formatScoreForWeight(score, activity.Weight)
 	card.Tone = scoreToneForMaximum(score, activity.Weight)
 	status := v2ActivityStatus(items, score)
+	card.Tone = activityCardTone(status, card.Tone)
 	return TableResult{
 		Key:           activity.Key,
 		Label:         activity.Label,
@@ -458,14 +467,15 @@ func v2ActivitySummaryTable(activity v2ActivityConfig, summaryGrid *sheetGrid, s
 	comment, author := v2SummaryActivityComment(summaryGrid, summaryRowIdx, activity)
 	card := makeCard("nota", "Nota", score, comment, author, nil)
 	card.DisplayValue = formatScoreForWeight(score, activity.Weight)
-	card.Tone = scoreToneForMaximum(score, activity.Weight)
+	status := v2ActivityStatusFromScore(score)
+	card.Tone = activityCardTone(status, scoreToneForMaximum(score, activity.Weight))
 	return TableResult{
 		Key:           activity.Key,
 		Label:         activity.Label,
 		SheetName:     activity.SheetName,
 		Kind:          "activity",
 		Complete:      !isPendingValue(score),
-		Status:        v2ActivityStatusFromScore(score),
+		Status:        status,
 		SchemaStatus:  activity.SchemaStatus,
 		SpreadsheetID: activity.SpreadsheetID,
 		Cards:         []CardResult{card},
@@ -487,7 +497,7 @@ func v2ActivityRow(grid *sheetGrid, groupValue string, user SessionUser) int {
 func v2ActivityItems(grid *sheetGrid, maxRowIdx int, studentRowIdx int, weight float64) []activityItem {
 	items := make([]activityItem, 0, len(grid.headers))
 	criterionColumns := v2CriterionColumns(grid, maxRowIdx, studentRowIdx)
-	useOfficialWeights := v2UsesOfficialQuestionWeights(grid, criterionColumns)
+	useOfficialWeights := v2UsesOfficialQuestionWeights(grid, maxRowIdx, criterionColumns)
 	sourceMaxima := make(map[int]float64, len(criterionColumns))
 	maxima := make(map[int]float64, len(criterionColumns))
 	totalMaximum := 0.0
@@ -495,7 +505,7 @@ func v2ActivityItems(grid *sheetGrid, maxRowIdx int, studentRowIdx int, weight f
 		sourceMaximum := v2CriterionSourceMaximum(grid, maxRowIdx, colIdx)
 		maximum := sourceMaximum
 		if useOfficialWeights {
-			maximum = canonicalCriterionMaximum(valueAt(grid.headers, colIdx), maximum)
+			maximum = v2OfficialCriterionMaximum(grid, maxRowIdx, colIdx, maximum)
 		}
 		sourceMaxima[colIdx] = sourceMaximum
 		maxima[colIdx] = maximum
@@ -531,12 +541,29 @@ func v2ActivityItems(grid *sheetGrid, maxRowIdx int, studentRowIdx int, weight f
 	return items
 }
 
-func v2UsesOfficialQuestionWeights(grid *sheetGrid, columns []int) bool {
-	labels := make([]string, 0, len(columns))
+func v2UsesOfficialQuestionWeights(grid *sheetGrid, maxRowIdx int, columns []int) bool {
+	labels := make([]string, 0, len(columns)*2)
 	for _, colIdx := range columns {
-		labels = append(labels, valueAt(grid.headers, colIdx))
+		labels = append(labels, v2CriterionWeightLabels(grid, maxRowIdx, colIdx)...)
 	}
 	return usesOfficialQuestionWeights(labels)
+}
+
+func v2OfficialCriterionMaximum(grid *sheetGrid, maxRowIdx int, colIdx int, fallback float64) float64 {
+	for _, label := range v2CriterionWeightLabels(grid, maxRowIdx, colIdx) {
+		if maximum := inferMaxForLabel(label); maximum > 0 {
+			return maximum
+		}
+	}
+	return fallback
+}
+
+func v2CriterionWeightLabels(grid *sheetGrid, maxRowIdx int, colIdx int) []string {
+	labels := []string{valueAt(grid.headers, colIdx)}
+	if maxRowIdx > 0 {
+		labels = append(labels, valueAt(grid.rows[maxRowIdx-1], colIdx))
+	}
+	return labels
 }
 
 func v2CriterionColumns(grid *sheetGrid, maxRowIdx int, studentRowIdx int) []int {

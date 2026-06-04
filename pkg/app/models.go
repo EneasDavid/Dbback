@@ -6,6 +6,7 @@ type GradeResult struct {
 	Exam          string         `json:"exam"`
 	Matricula     string         `json:"matricula"`
 	Name          string         `json:"name"`
+	Active        *bool          `json:"active,omitempty"`
 	SchemaStatus  string         `json:"schemaStatus,omitempty"`
 	SpreadsheetID string         `json:"spreadsheetId,omitempty"`
 	Tables        []TableResult  `json:"tables"`

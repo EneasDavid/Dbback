@@ -37,6 +37,28 @@ func TestV2ABStateTreatsZeroStatusAsInactive(t *testing.T) {
 	}
 }
 
+func TestGradeForV2MarksInactiveAB(t *testing.T) {
+	client := &SheetsClient{
+		cache: map[string]cachedGrid{
+			v2ABsSheet: {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"AB", "Status"},
+					rows:    [][]string{{"AB1", "0"}},
+				},
+			},
+		},
+	}
+
+	result, err := client.gradeForV2(t.Context(), "ab1", SessionUser{Matricula: "123", Name: "Alice"})
+	if err != nil {
+		t.Fatalf("gradeForV2() error = %v", err)
+	}
+	if result.Active == nil || *result.Active {
+		t.Fatalf("gradeForV2().Active = %#v, want false", result.Active)
+	}
+}
+
 func TestV2ABStateTreatsBlankStatusAsInactiveWhenStatusColumnExists(t *testing.T) {
 	grid := &sheetGrid{
 		headers: []string{"AB", "Status"},
@@ -246,6 +268,26 @@ func TestV2ActivityItemsUsesMaximoPossivelRowForQuestionWeights(t *testing.T) {
 	if len(items) != 8 {
 		t.Fatalf("items len = %d, want 8 criteria without group/final grade: %#v", len(items), items)
 	}
+	wantMaxima := []string{"0,03", "0,05", "0,05", "0,07", "0,03", "0,05", "0,03", "0,02"}
+	for idx, want := range wantMaxima {
+		if items[idx].NotaMaxima != want {
+			t.Fatalf("items[%d].NotaMaxima = %q, want %q: %#v", idx, items[idx].NotaMaxima, want, items[idx])
+		}
+	}
+}
+
+func TestV2ActivityItemsUsesSubtopicRowForOfficialWeights(t *testing.T) {
+	grid := &sheetGrid{
+		headers: []string{"grupo", "Critério 1", "Critério 2", "Critério 3", "Critério 4", "Critério 5", "Critério 6", "Critério 7", "Critério 8"},
+		rows: [][]string{
+			{"subtópico", "Questão 1", "Questão 2", "Questão 3", "Questão 4", "Questão 5", "Questão 6", "Adequação", "Organização"},
+			{"maximo possivel", "10", "10", "10", "10", "10", "10", "10", "10"},
+			{"Grupo A", "10", "10", "10", "10", "10", "10", "10", "10"},
+		},
+	}
+
+	items := v2ActivityItems(grid, 1, 2, 0.33)
+
 	wantMaxima := []string{"0,03", "0,05", "0,05", "0,07", "0,03", "0,05", "0,03", "0,02"}
 	for idx, want := range wantMaxima {
 		if items[idx].NotaMaxima != want {
@@ -498,6 +540,102 @@ func TestGradesForRuntimeV2ReturnsNoExamsWhenNoABStatusIsOne(t *testing.T) {
 	}
 }
 
+func TestConfiguredRuntimeV2DoesNotFallbackInactiveABToLegacy(t *testing.T) {
+	client := v2InactiveClientWithLegacyGrades()
+
+	result, err := client.gradeForConfiguredRuntime(t.Context(), "ab1", SessionUser{Matricula: "123", Name: "Alice"})
+	if err != nil {
+		t.Fatalf("gradeForConfiguredRuntime() error = %v", err)
+	}
+	if result.Active == nil || *result.Active || len(result.Tables) != 0 {
+		t.Fatalf("gradeForConfiguredRuntime() = %#v, want inactive empty v2 result", result)
+	}
+}
+
+func TestConfiguredRuntimeV2DoesNotFallbackInactiveABsToLegacy(t *testing.T) {
+	client := v2InactiveClientWithLegacyGrades()
+
+	results, err := client.gradesForConfiguredRuntime(t.Context(), []string{"ab1", "ab2"}, SessionUser{Matricula: "123", Name: "Alice"})
+	if err != nil {
+		t.Fatalf("gradesForConfiguredRuntime() error = %v", err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("gradesForConfiguredRuntime() = %#v, want no inactive v2 exams", results)
+	}
+}
+
+func TestGradeForStopsAtInactiveV2Spreadsheet(t *testing.T) {
+	client := v2InactiveClientWithLegacyGrades()
+	user := SessionUser{Matricula: "123", Name: "Alice", SpreadsheetID: "v2-sheet", SchemaStatus: "v2"}
+
+	result, err := client.GradeFor(t.Context(), "ab1", user)
+	if err != nil {
+		t.Fatalf("GradeFor() error = %v", err)
+	}
+	if result.Active == nil || *result.Active || len(result.Tables) != 0 {
+		t.Fatalf("GradeFor() = %#v, want authoritative inactive v2 result", result)
+	}
+}
+
+func TestGradesForStopsAtInactiveV2Spreadsheet(t *testing.T) {
+	client := v2InactiveClientWithLegacyGrades()
+	user := SessionUser{Matricula: "123", Name: "Alice", SpreadsheetID: "v2-sheet", SchemaStatus: "v2"}
+
+	results, err := client.GradesFor(t.Context(), []string{"ab1", "ab2"}, user)
+	if err != nil {
+		t.Fatalf("GradesFor() error = %v", err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("GradesFor() = %#v, want no inactive v2 exams", results)
+	}
+}
+
+func v2InactiveClientWithLegacyGrades() *SheetsClient {
+	return &SheetsClient{
+		cfg: Config{
+			SpreadsheetIDs:       []string{"v2-sheet", "legacy-sheet"},
+			LegacySpreadsheetIDs: []string{"legacy-sheet"},
+			V2SpreadsheetIDs:     []string{"v2-sheet"},
+			RuntimeVersion:       "v2",
+			LoginSheet:           "Base de dados",
+			AB1Tables:            []TableConfig{{Key: "legacy-ab1", Label: "Legacy AB1", SheetName: "Legacy AB1", Kind: "activity"}},
+			AB2Tables:            []TableConfig{{Key: "legacy-ab2", Label: "Legacy AB2", SheetName: "Legacy AB2", Kind: "activity"}},
+		},
+		cache: map[string]cachedGrid{
+			"Base de dados": {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers:    []string{"Matricula", "Nome"},
+					rows:       [][]string{{"123", "Alice"}},
+					rowSources: []string{"legacy-sheet"},
+					rowSchemas: []string{"legacy"},
+				},
+			},
+			v2ABsSheet: {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"AB", "status"},
+					rows:    [][]string{{"AB1", "0"}, {"AB2", "0"}},
+				},
+			},
+			"Legacy AB1": {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"Grupo", "Critério"},
+					rows:    [][]string{{"Nota máxima", "1"}, {"Alice", "1"}},
+				},
+			},
+			"Legacy AB2": {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"Grupo", "Critério"},
+					rows:    [][]string{{"Nota máxima", "1"}, {"Alice", "1"}},
+				},
+			},
+		},
+	}
+}
+
 func TestGradeForV2ReturnsEmptyWhenSummarySheetDoesNotExist(t *testing.T) {
 	client := &SheetsClient{
 		cfg: Config{RuntimeVersion: "v2"},
@@ -524,6 +662,9 @@ func TestGradeForV2ReturnsEmptyWhenSummarySheetDoesNotExist(t *testing.T) {
 	}
 	if result.Exam != "AB2" || len(result.Tables) != 0 {
 		t.Fatalf("gradeForV2() = %#v, want empty AB2 result", result)
+	}
+	if result.Active == nil || !*result.Active {
+		t.Fatalf("gradeForV2().Active = %#v, want true", result.Active)
 	}
 }
 
@@ -692,6 +833,9 @@ func TestV2ActivityTableKeepsCriteriaWithoutHeaderCommentsWhenNoSimilarGroup(t *
 	}
 	if card.Details[1].Comment != "" || card.Details[1].CommentAuthor != "" {
 		t.Fatalf("second detail comment = %q/%q, want empty header comment ignored", card.Details[1].Comment, card.Details[1].CommentAuthor)
+	}
+	if result.Tables[0].Status != "Não encerrado" || card.Tone != "score-pending" {
+		t.Fatalf("pending table/card = %q/%q, want Não encerrado/score-pending", result.Tables[0].Status, card.Tone)
 	}
 }
 

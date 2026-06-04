@@ -44,6 +44,7 @@ export type GradeResult = {
   exam: string;
   matricula: string;
   name: string;
+  active?: boolean;
   schemaStatus?: string;
   tables: GradeTable[];
   studentStatus?: StudentStatus;

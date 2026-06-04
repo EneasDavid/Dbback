@@ -34,7 +34,7 @@ func (c *SheetsClient) GradeFor(ctx context.Context, exam string, user SessionUs
 		}
 		result, err := scoped.gradeForConfiguredRuntime(ctx, exam, candidateUser)
 		if err == nil {
-			if hasTables(result) {
+			if result.Active != nil || hasTables(result) {
 				return result, nil
 			}
 			emptyResult = &result
@@ -61,7 +61,7 @@ func (c *SheetsClient) gradeForConfiguredRuntime(ctx context.Context, exam strin
 	switch runtimeForUser(c.cfg, user) {
 	case "v2":
 		result, err := c.gradeForV2(ctx, exam, user)
-		if err == nil && hasTables(result) {
+		if err == nil {
 			return result, nil
 		}
 		if err != nil && !canFallbackToLegacy(err) {
@@ -128,7 +128,7 @@ func (c *SheetsClient) GradesFor(ctx context.Context, exams []string, user Sessi
 		}
 		results, err := scoped.gradesForConfiguredRuntime(ctx, exams, candidateUser)
 		if err == nil {
-			if hasAnyGradeTables(results) {
+			if hasV2GradeState(results) || runtimeForUser(scoped.cfg, candidateUser) == "v2" || hasAnyGradeTables(results) {
 				return results, nil
 			}
 			emptyResults = results
@@ -155,7 +155,7 @@ func (c *SheetsClient) gradesForConfiguredRuntime(ctx context.Context, exams []s
 	switch runtimeForUser(c.cfg, user) {
 	case "v2":
 		results, err := c.gradesForRuntimeV2(ctx, exams, user)
-		if err == nil && hasAnyGradeTables(results) {
+		if err == nil {
 			return results, nil
 		}
 		if err != nil && !canFallbackToLegacy(err) {
@@ -292,6 +292,15 @@ func hasTables(result GradeResult) bool {
 func hasAnyGradeTables(results GradeResults) bool {
 	for _, result := range results {
 		if hasTables(result) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasV2GradeState(results GradeResults) bool {
+	for _, result := range results {
+		if result.Active != nil {
 			return true
 		}
 	}

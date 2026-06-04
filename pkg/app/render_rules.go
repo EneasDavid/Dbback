@@ -249,6 +249,13 @@ func scoreToneFromRatio(ratio float64, pending bool) string {
 	return "score-success"
 }
 
+func activityCardTone(status string, tone string) string {
+	if normalizeHeader(status) != "encerrado" {
+		return "score-pending"
+	}
+	return tone
+}
+
 func summaryCardLabel(header string) string {
 	label := normalizeHeader(header)
 	switch {
