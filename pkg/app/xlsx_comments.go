@@ -95,7 +95,7 @@ func (c *SheetsClient) workbookCommentsForSpreadsheet(ctx context.Context, sprea
 		if owner.workbookComments == nil {
 			owner.workbookComments = map[string]cachedWorkbookComments{}
 		}
-		owner.workbookComments[spreadsheetID] = cachedWorkbookComments{expires: time.Now().Add(c.cfg.CacheTTL), comments: comments}
+		owner.workbookComments[spreadsheetID] = cachedWorkbookComments{expires: time.Now().Add(c.commentsCacheTTL()), comments: comments}
 		owner.mu.Unlock()
 		return comments, nil
 	})

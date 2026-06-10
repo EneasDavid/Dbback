@@ -11,16 +11,44 @@ import (
 	"google.golang.org/api/sheets/v4"
 )
 
-func TestSheetCacheTTLRefreshesV2ControlSheetsQuickly(t *testing.T) {
-	client := &SheetsClient{cfg: Config{CacheTTL: 7 * time.Hour}}
+func TestSheetCacheTTLRefreshesV2GradeSheetsQuickly(t *testing.T) {
+	client := &SheetsClient{cfg: Config{
+		CacheTTL:       7 * time.Hour,
+		LoginSheet:     "Base de dados",
+		RuntimeVersion: "v2",
+	}}
 
-	for _, sheetName := range []string{v2ABsSheet, v2ActivitiesSheet, "nota ab2"} {
-		if got := client.sheetCacheTTL(sheetName); got != v2ControlSheetCacheTTL {
-			t.Fatalf("sheetCacheTTL(%q) = %s, want %s", sheetName, got, v2ControlSheetCacheTTL)
+	for _, sheetName := range []string{v2ABsSheet, v2ActivitiesSheet, "nota ab2", "Pré entrega"} {
+		if got := client.sheetCacheTTL(sheetName); got != v2GradeSheetCacheTTL {
+			t.Fatalf("sheetCacheTTL(%q) = %s, want %s", sheetName, got, v2GradeSheetCacheTTL)
 		}
 	}
+	if got := client.sheetCacheTTL("Base de dados"); got != 7*time.Hour {
+		t.Fatalf("sheetCacheTTL(login) = %s, want 7h", got)
+	}
+}
+
+func TestSheetCacheTTLKeepsLegacyActivityCache(t *testing.T) {
+	client := &SheetsClient{cfg: Config{
+		CacheTTL:       7 * time.Hour,
+		LoginSheet:     "Base de dados",
+		RuntimeVersion: "legacy",
+	}}
+
 	if got := client.sheetCacheTTL("Pré entrega"); got != 7*time.Hour {
-		t.Fatalf("sheetCacheTTL(activity) = %s, want 7h", got)
+		t.Fatalf("sheetCacheTTL(legacy activity) = %s, want 7h", got)
+	}
+}
+
+func TestCommentsCacheTTLRefreshesV2CommentsQuickly(t *testing.T) {
+	v2Client := &SheetsClient{cfg: Config{CacheTTL: 7 * time.Hour, RuntimeVersion: "v2"}}
+	if got := v2Client.commentsCacheTTL(); got != v2CommentsCacheTTL {
+		t.Fatalf("commentsCacheTTL(v2) = %s, want %s", got, v2CommentsCacheTTL)
+	}
+
+	legacyClient := &SheetsClient{cfg: Config{CacheTTL: 7 * time.Hour, RuntimeVersion: "legacy"}}
+	if got := legacyClient.commentsCacheTTL(); got != 7*time.Hour {
+		t.Fatalf("commentsCacheTTL(legacy) = %s, want 7h", got)
 	}
 }
 

@@ -20,7 +20,10 @@ import (
 	"google.golang.org/api/sheets/v4"
 )
 
-const v2ControlSheetCacheTTL = 30 * time.Second
+const (
+	v2GradeSheetCacheTTL = 30 * time.Second
+	v2CommentsCacheTTL   = time.Minute
+)
 
 type SheetsClient struct {
 	cfg              Config
@@ -191,10 +194,30 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 func (c *SheetsClient) sheetCacheTTL(sheetName string) time.Duration {
 	ttl := c.cfg.CacheTTL
 	normalized := normalizeHeader(sheetName)
-	if normalized == v2ABsSheet || normalized == v2ActivitiesSheet || strings.HasPrefix(normalized, "nota ") {
-		if ttl <= 0 || ttl > v2ControlSheetCacheTTL {
-			return v2ControlSheetCacheTTL
-		}
+	isControlSheet := normalized == v2ABsSheet ||
+		normalized == v2ActivitiesSheet ||
+		strings.HasPrefix(normalized, "nota ")
+	isV2GradeSheet := c.isV2Runtime() && normalized != normalizeHeader(c.cfg.LoginSheet)
+	if isControlSheet || isV2GradeSheet {
+		return cappedCacheTTL(ttl, v2GradeSheetCacheTTL)
+	}
+	return ttl
+}
+
+func (c *SheetsClient) commentsCacheTTL() time.Duration {
+	if c.isV2Runtime() {
+		return cappedCacheTTL(c.cfg.CacheTTL, v2CommentsCacheTTL)
+	}
+	return c.cfg.CacheTTL
+}
+
+func (c *SheetsClient) isV2Runtime() bool {
+	return strings.EqualFold(strings.TrimSpace(c.cfg.RuntimeVersion), "v2")
+}
+
+func cappedCacheTTL(ttl time.Duration, maximum time.Duration) time.Duration {
+	if ttl <= 0 || ttl > maximum {
+		return maximum
 	}
 	return ttl
 }
@@ -620,7 +643,7 @@ func (c *SheetsClient) driveCommentsForSpreadsheet(ctx context.Context, spreadsh
 		if owner.driveComments == nil {
 			owner.driveComments = map[string]cachedDriveComments{}
 		}
-		owner.driveComments[spreadsheetID] = cachedDriveComments{expires: time.Now().Add(c.cfg.CacheTTL), comments: comments}
+		owner.driveComments[spreadsheetID] = cachedDriveComments{expires: time.Now().Add(c.commentsCacheTTL()), comments: comments}
 		owner.mu.Unlock()
 		return comments, nil
 	})
