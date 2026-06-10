@@ -201,16 +201,6 @@ go test ./...
 npm run lint
 npm run build
 ```
-
-Diagnostico de comentarios:
-
-```bash
-go run ./cmd/comments
-go run ./cmd/comments -matricula 2024001339 -exam ab1
-go run ./cmd/comments -raw-drive
-GOOGLE_SERVICE_ACCOUNT_FILE=./service-account.local.json PORT=3000 bash test-comments.sh
-```
-
 ## Deploy
 
 No Vercel, nao use `GOOGLE_SERVICE_ACCOUNT_FILE`. Gere a credencial em base64:
