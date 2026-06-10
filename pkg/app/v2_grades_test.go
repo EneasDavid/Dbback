@@ -200,6 +200,29 @@ func TestV2ActivitiesForABKeepsActivitiesWhenStatusColumnIsAbsent(t *testing.T) 
 	}
 }
 
+func TestV2ActivitiesForABPreservesMissingWeight(t *testing.T) {
+	grid := &sheetGrid{
+		headers: []string{"atividade", "peso", "ab"},
+		rows: [][]string{
+			{"sem peso", "", "Ab. 1"},
+			{"peso zero", "0", "Ab. 1"},
+			{"com peso", "2", "Ab. 1"},
+		},
+	}
+
+	activities := v2ActivitiesForAB(grid, "ab1")
+
+	if len(activities) != 3 {
+		t.Fatalf("activities len = %d, want 3: %#v", len(activities), activities)
+	}
+	if activities[0].HasWeight || activities[0].Weight != 0 || activities[1].HasWeight || activities[1].Weight != 0 {
+		t.Fatalf("missing/zero weights should stay scoreless: %#v", activities)
+	}
+	if !activities[2].HasWeight || activities[2].Weight != 2 {
+		t.Fatalf("weighted activity = %#v, want weight 2", activities[2])
+	}
+}
+
 func TestV2ActivitiesForABOnlyKeepsStatusOneWhenStatusColumnExists(t *testing.T) {
 	grid := &sheetGrid{
 		headers: []string{"Atividade", "AB", "Status"},
@@ -373,34 +396,172 @@ func TestV2ActivityItemsIncludesGenericCriteriaWithoutMaxRow(t *testing.T) {
 	}
 }
 
-func TestV2ActivityLaunchedSkipsNotLaunchedText(t *testing.T) {
-	activity := v2ActivityConfig{SummaryCol: 1}
-	row := []string{"123", "Essa atividade não foi lançada"}
-
-	if v2ActivityLaunched(row, activity) {
-		t.Fatal("v2ActivityLaunched() = true, want false")
-	}
-}
-
 func TestV2ActivitiesCompleteRequiresEveryActivityToEnd(t *testing.T) {
 	activities := []v2ActivityConfig{
-		{Key: "at1", SummaryCol: 1},
-		{Key: "at2", SummaryCol: 2},
+		{Key: "at1", HasWeight: true, SummaryCol: 1},
+		{Key: "at2", HasWeight: true, SummaryCol: 2},
 	}
-	summaryRow := []string{"123", "1", "2"}
 	tables := []TableResult{
 		{Key: "at1", Kind: "activity", Complete: true, Status: "Encerrado"},
 		{Key: "at2", Kind: "activity", Complete: false, Status: "Não encerrado"},
 	}
 
-	if v2ActivitiesComplete(activities, summaryRow, tables) {
+	if v2ActivitiesComplete(activities, tables) {
 		t.Fatal("v2ActivitiesComplete() = true with a pending activity")
 	}
 
 	tables[1].Complete = true
 	tables[1].Status = "Encerrado"
-	if !v2ActivitiesComplete(activities, summaryRow, tables) {
+	if !v2ActivitiesComplete(activities, tables) {
 		t.Fatal("v2ActivitiesComplete() = false after every activity ended")
+	}
+}
+
+func TestV2ActivitiesCompleteIgnoresScorelessActivities(t *testing.T) {
+	activities := []v2ActivityConfig{
+		{Key: "weighted", HasWeight: true},
+		{Key: "scoreless", HasWeight: false},
+	}
+	tables := []TableResult{
+		{Key: "weighted", Kind: "activity", Complete: true, Status: "Encerrado"},
+		{Key: "scoreless", Kind: "activity", Complete: false, Scoreless: true, Status: "Não pontua"},
+	}
+
+	if !v2ActivitiesComplete(activities, tables) {
+		t.Fatal("v2ActivitiesComplete() = false, scoreless activity should not block the average")
+	}
+}
+
+func TestGradeForV2RendersScorelessActivityAsPercentagesWithoutGrade(t *testing.T) {
+	client := &SheetsClient{
+		cfg: Config{RuntimeVersion: "v2"},
+		cache: map[string]cachedGrid{
+			v2ABsSheet: {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"AB", "status"},
+					rows:    [][]string{{"AB2", "1"}},
+				},
+			},
+			v2ActivitiesSheet: {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"Atividade", "AB", "Peso", "Aba", "Status"},
+					rows:    [][]string{{"Pré entrega", "AB2", "", "Pré entrega", "1"}},
+				},
+			},
+			"nota ab2": {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"Matrícula"},
+					rows:    [][]string{{"123"}},
+				},
+			},
+			"Pré entrega": {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"Matrícula", "Critério A", "Critério B", "Critério C"},
+					rows: [][]string{
+						{"Nota máxima", "2", "4", "1"},
+						{"123", "1", "4", "0"},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := client.gradeForV2(t.Context(), "ab2", SessionUser{Matricula: "123", Name: "Student"})
+	if err != nil {
+		t.Fatalf("gradeForV2() error = %v", err)
+	}
+	if len(result.Tables) != 1 {
+		t.Fatalf("tables = %#v, want scoreless activity only", result.Tables)
+	}
+	table := result.Tables[0]
+	if !table.Scoreless || table.Complete || table.Status != "Não pontua" {
+		t.Fatalf("table = %#v, want always scoreless/Não pontua", table)
+	}
+	if len(table.Cards) != 1 || table.Cards[0].Label != "Critérios avaliados" || table.Cards[0].Value != "" || table.Cards[0].DisplayValue != "" {
+		t.Fatalf("cards = %#v, want criteria transport without grade", table.Cards)
+	}
+	details := table.Cards[0].Details
+	if len(details) != 3 {
+		t.Fatalf("details = %#v, want 3 criteria", details)
+	}
+	want := []string{"50%", "100%", "0%"}
+	for idx := range want {
+		if !details[idx].Percentage || details[idx].DisplayScore != want[idx] || details[idx].Ratio < 0 || details[idx].Ratio > 100 {
+			t.Fatalf("details[%d] = %#v, want percentage %s", idx, details[idx], want[idx])
+		}
+	}
+}
+
+func TestNotLaunchedActivityValueIsPending(t *testing.T) {
+	value := "Essa atividade não foi lançada"
+
+	if !isPendingValue(value) {
+		t.Fatalf("isPendingValue(%q) = false, want true", value)
+	}
+	if got := v2ActivityStatusFromScore(value); got != "Não encerrado" {
+		t.Fatalf("v2ActivityStatusFromScore(%q) = %q, want Não encerrado", value, got)
+	}
+}
+
+func TestGradeForV2IncludesEveryActiveRegisteredActivity(t *testing.T) {
+	client := &SheetsClient{
+		cfg: Config{RuntimeVersion: "v2"},
+		cache: map[string]cachedGrid{
+			v2ABsSheet: {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"AB", "status"},
+					rows:    [][]string{{"AB2", "1"}},
+				},
+			},
+			v2ActivitiesSheet: {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"Atividade", "AB", "Peso", "Aba", "Status"},
+					rows: [][]string{
+						{"Atividade 1", "AB2", "1", "AT. 1", "1"},
+						{"Pré entrega", "AB2", "1", "Pré entrega", "1"},
+						{"Removida", "AB2", "1", "Removida", "0"},
+					},
+				},
+			},
+			"nota ab2": {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"Matrícula", "Atividade 1"},
+					rows:    [][]string{{"123", "1"}},
+				},
+			},
+			"AT. 1": {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"Matrícula", "Critério"},
+					rows:    [][]string{{"Nota máxima", "1"}, {"123", "1"}},
+				},
+			},
+			"Pré entrega": {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"Matrícula", "Critério"},
+					rows:    [][]string{{"Nota máxima", "1"}, {"123", ""}},
+				},
+			},
+		},
+	}
+
+	result, err := client.gradeForV2(t.Context(), "ab2", SessionUser{Matricula: "123", Name: "Student"})
+	if err != nil {
+		t.Fatalf("gradeForV2() error = %v", err)
+	}
+	if len(result.Tables) != 2 {
+		t.Fatalf("gradeForV2() tables = %#v, want every active registered activity", result.Tables)
+	}
+	if result.Tables[1].Label != "Pré entrega" || result.Tables[1].Status != "Não encerrado" {
+		t.Fatalf("second table = %#v, want pending Pré entrega", result.Tables[1])
 	}
 }
 
@@ -414,8 +575,8 @@ func TestV2ActivityStatusWaitsForTopScore(t *testing.T) {
 
 func TestV2BindSummaryColumnsDoesNotUseFinalGradeForMultipleActivities(t *testing.T) {
 	activities := []v2ActivityConfig{
-		{Label: "Atividade 1", SheetName: "AT. 1"},
-		{Label: "Atividade 2", SheetName: "AT. 2"},
+		{Label: "Atividade 1", SheetName: "AT. 1", HasWeight: true},
+		{Label: "Atividade 2", SheetName: "AT. 2", HasWeight: true},
 	}
 
 	v2BindSummaryColumns([]string{"Matrícula", "nota final"}, activities)
@@ -426,7 +587,7 @@ func TestV2BindSummaryColumnsDoesNotUseFinalGradeForMultipleActivities(t *testin
 }
 
 func TestV2BindSummaryColumnsAllowsFinalGradeForSingleActivity(t *testing.T) {
-	activities := []v2ActivityConfig{{Label: "Projeto", SheetName: "Projeto"}}
+	activities := []v2ActivityConfig{{Label: "Projeto", SheetName: "Projeto", HasWeight: true}}
 
 	v2BindSummaryColumns([]string{"Matrícula", "nota final"}, activities)
 

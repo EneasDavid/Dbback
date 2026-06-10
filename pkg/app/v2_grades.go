@@ -10,7 +10,6 @@ import (
 const (
 	v2ABsSheet        = "abs"
 	v2ActivitiesSheet = "atividades"
-	v2NotLaunchedText = "essa atividade nao foi lancada"
 )
 
 type v2ActivityConfig struct {
@@ -19,6 +18,7 @@ type v2ActivityConfig struct {
 	AB            string
 	SheetName     string
 	Weight        float64
+	HasWeight     bool
 	SummaryCol    int
 	Order         int
 	SchemaStatus  string
@@ -160,9 +160,7 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 
 	var activitySheets []string
 	for _, activity := range activities {
-		if v2ActivityLaunched(summaryRow, activity) {
-			activitySheets = append(activitySheets, activity.SheetName)
-		}
+		activitySheets = append(activitySheets, activity.SheetName)
 	}
 	if len(activitySheets) > 0 {
 		if err := c.loadSheets(ctx, activitySheets); err != nil {
@@ -179,9 +177,6 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 	result.SpreadsheetID = mergeSourceValue(mergeSourceValue(abGrid.spreadsheetID, activitiesGrid.spreadsheetID), summaryGrid.spreadsheetID)
 
 	for _, activity := range activities {
-		if !v2ActivityLaunched(summaryRow, activity) {
-			continue
-		}
 		table, found, err := c.v2ActivityTable(ctx, activity, summaryGrid, summaryRowIdx, groupValue, user)
 		if err != nil {
 			if canFallbackToLegacy(err) {
@@ -197,7 +192,7 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 		result.SpreadsheetID = mergeSourceValue(result.SpreadsheetID, table.SpreadsheetID)
 	}
 
-	if v2ActivitiesComplete(activities, summaryRow, result.Tables) {
+	if v2ActivitiesComplete(activities, result.Tables) {
 		if average := v2AverageCard(summaryGrid, summaryRow); average != nil {
 			result.Tables = append(result.Tables, TableResult{
 				Key:           "media-" + exam,
@@ -382,8 +377,9 @@ func v2ActivitiesForAB(grid *sheetGrid, exam string) []v2ActivityConfig {
 			sheetName = label
 		}
 		weight, ok := parseNumber(valueAt(row, weightIdx))
-		if !ok || weight <= 0 {
-			weight = 1
+		hasWeight := ok && weight > 0
+		if !hasWeight {
+			weight = 0
 		}
 		activities = append(activities, v2ActivityConfig{
 			Key:           fmt.Sprintf("v2-at-%d", rowIdx+1),
@@ -391,6 +387,7 @@ func v2ActivitiesForAB(grid *sheetGrid, exam string) []v2ActivityConfig {
 			AB:            strings.ToUpper(exam),
 			SheetName:     sheetName,
 			Weight:        weight,
+			HasWeight:     hasWeight,
 			Order:         rowIdx,
 			SchemaStatus:  grid.schemaStatus,
 			SpreadsheetID: grid.spreadsheetID,
@@ -405,19 +402,15 @@ func v2ActivitiesForAB(grid *sheetGrid, exam string) []v2ActivityConfig {
 func v2BindSummaryColumns(headers []string, activities []v2ActivityConfig) {
 	allowFinalGradeFallback := len(activities) == 1
 	for idx := range activities {
+		activities[idx].SummaryCol = -1
+		if !activities[idx].HasWeight {
+			continue
+		}
 		activities[idx].SummaryCol = matchingHeaderIndex(headers, activities[idx].Label, activities[idx].SheetName)
 		if activities[idx].SummaryCol < 0 && allowFinalGradeFallback {
 			activities[idx].SummaryCol = v2FinalGradeColumn(headers)
 		}
 	}
-}
-
-func v2ActivityLaunched(summaryRow []string, activity v2ActivityConfig) bool {
-	if activity.SummaryCol < 0 {
-		return false
-	}
-	value := valueAt(summaryRow, activity.SummaryCol)
-	return normalizeHeader(value) != "" && !strings.Contains(normalizeHeader(value), v2NotLaunchedText)
 }
 
 func (c *SheetsClient) v2ActivityTable(ctx context.Context, activity v2ActivityConfig, summaryGrid *sheetGrid, summaryRowIdx int, groupValue string, user SessionUser) (TableResult, bool, error) {
@@ -435,6 +428,24 @@ func (c *SheetsClient) v2ActivityTable(ctx context.Context, activity v2ActivityC
 	items := v2ActivityItems(grid, maxRowIdx, rowIdx, activity.Weight)
 	if len(items) == 0 {
 		return v2ActivitySummaryTable(activity, summaryGrid, summaryRowIdx), true, nil
+	}
+	if !activity.HasWeight {
+		return TableResult{
+			Key:           activity.Key,
+			Label:         activity.Label,
+			SheetName:     activity.SheetName,
+			Kind:          "activity",
+			Complete:      false,
+			Scoreless:     true,
+			Status:        "Não pontua",
+			SchemaStatus:  mergeSchemaStatus(activity.SchemaStatus, grid.schemaStatus),
+			SpreadsheetID: mergeSourceValue(activity.SpreadsheetID, grid.spreadsheetID),
+			Cards: []CardResult{{
+				Key:     "criterios",
+				Label:   "Critérios avaliados",
+				Details: percentageActivityDetails(items),
+			}},
+		}, true, nil
 	}
 	details := activityDetails(items)
 	score := valueAt(summaryRow, activity.SummaryCol)
@@ -462,6 +473,23 @@ func v2SummaryActivityComment(summaryGrid *sheetGrid, summaryRowIdx int, activit
 }
 
 func v2ActivitySummaryTable(activity v2ActivityConfig, summaryGrid *sheetGrid, summaryRowIdx int) TableResult {
+	if !activity.HasWeight {
+		return TableResult{
+			Key:           activity.Key,
+			Label:         activity.Label,
+			SheetName:     activity.SheetName,
+			Kind:          "activity",
+			Complete:      false,
+			Scoreless:     true,
+			Status:        "Não pontua",
+			SchemaStatus:  activity.SchemaStatus,
+			SpreadsheetID: activity.SpreadsheetID,
+			Cards: []CardResult{{
+				Key:   "criterios",
+				Label: "Critérios avaliados",
+			}},
+		}
+	}
 	summaryRow := summaryGrid.rows[summaryRowIdx]
 	score := valueAt(summaryRow, activity.SummaryCol)
 	comment, author := v2SummaryActivityComment(summaryGrid, summaryRowIdx, activity)
@@ -474,7 +502,7 @@ func v2ActivitySummaryTable(activity v2ActivityConfig, summaryGrid *sheetGrid, s
 		Label:         activity.Label,
 		SheetName:     activity.SheetName,
 		Kind:          "activity",
-		Complete:      !isPendingValue(score),
+		Complete:      status == "Encerrado",
 		Status:        status,
 		SchemaStatus:  activity.SchemaStatus,
 		SpreadsheetID: activity.SpreadsheetID,
@@ -702,7 +730,7 @@ func v2ActivityStatus(items []activityItem, score string) string {
 	return "Encerrado"
 }
 
-func v2ActivitiesComplete(activities []v2ActivityConfig, summaryRow []string, tables []TableResult) bool {
+func v2ActivitiesComplete(activities []v2ActivityConfig, tables []TableResult) bool {
 	if len(activities) == 0 {
 		return false
 	}
@@ -710,13 +738,18 @@ func v2ActivitiesComplete(activities []v2ActivityConfig, summaryRow []string, ta
 	for _, table := range tables {
 		tablesByKey[table.Key] = table
 	}
+	hasWeightedActivity := false
 	for _, activity := range activities {
+		if !activity.HasWeight {
+			continue
+		}
+		hasWeightedActivity = true
 		table, found := tablesByKey[activity.Key]
-		if !v2ActivityLaunched(summaryRow, activity) || !found || !activityTableComplete(table) {
+		if !found || !activityTableComplete(table) {
 			return false
 		}
 	}
-	return true
+	return hasWeightedActivity
 }
 
 func normalizeABKey(value string) string {

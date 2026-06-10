@@ -695,6 +695,49 @@ input:focus-visible {
   overflow: visible;
 }
 
+.scoreless-activity-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 0 0 14px;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.scoreless-activity-trigger > div {
+  min-width: 0;
+}
+
+.scoreless-activity-trigger svg {
+  flex: 0 0 auto;
+  color: var(--muted-strong);
+  transition: transform 160ms ease, color 160ms ease;
+}
+
+.scoreless-activity-trigger:hover svg,
+.scoreless-activity-trigger:focus-visible svg {
+  color: var(--brand);
+}
+
+.scoreless-activity-trigger .rotated {
+  transform: rotate(90deg);
+}
+
+.scoreless-activity:not(.activity-open) .scoreless-activity-trigger {
+  padding-bottom: 0;
+  border-bottom-color: transparent;
+}
+
+.scoreless-activity .detail-panel {
+  margin-bottom: 0;
+}
+
 .activity-sticky-block {
   margin: -16px -16px 8px;
   padding: 16px 16px 8px;
@@ -792,8 +835,9 @@ input:focus-visible {
   overflow-wrap: anywhere;
 }
 
-.summary-score p {
-  display: flex;
+.summary-comment {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
   align-items: flex-start;
   gap: 8px;
   color: var(--muted);
@@ -801,13 +845,7 @@ input:focus-visible {
   line-height: 1.42;
 }
 
-.summary-score p span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.summary-score p strong,
-.row-comment strong {
+.markdown-comment-author {
   display: block;
   margin-bottom: 2px;
   color: var(--muted-strong);
@@ -885,6 +923,7 @@ input:focus-visible {
   gap: 8px;
   margin: 0;
   padding: 12px 2px 14px;
+  border-top: 1px solid var(--border-soft);
   color: var(--muted);
   font-size: 0.95rem;
   line-height: 1.55;
@@ -893,11 +932,6 @@ input:focus-visible {
 .row-comment svg {
   color: var(--brand);
   margin-top: 2px;
-}
-
-.row-comment span {
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .grade-row.expanded {
@@ -979,24 +1013,6 @@ input:focus-visible {
   color: var(--pending-text);
   border-color: var(--pending-border);
   background: var(--pending-bg);
-}
-
-.grade-row p {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 12px 0 0;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-soft);
-  color: var(--muted);
-  font-size: 0.92rem;
-  line-height: 1.42;
-}
-
-.grade-row p svg {
-  flex: 0 0 auto;
-  margin-top: 2px;
-  color: var(--brand);
 }
 
 .detail-panel {
@@ -1086,14 +1102,18 @@ input:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 16px;
+  flex-wrap: nowrap;
+  gap: 10px;
   min-width: 0;
 }
 
 .detail-item-row > div {
-  flex: 1 1 10rem;
+  flex: 1 1 auto;
   min-width: 0;
+}
+
+.detail-item-row .badge {
+  flex: 0 0 auto;
 }
 
 .detail-item-row strong {
@@ -1121,19 +1141,6 @@ input:focus-visible {
 .detail-item-comment svg {
   color: var(--brand);
   margin-top: 2px;
-}
-
-.detail-item-comment strong {
-  display: block;
-  margin-bottom: 2px;
-  color: var(--muted-strong);
-  font-size: 0.78rem;
-  font-weight: 850;
-}
-
-.detail-item-comment span {
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .badge {
@@ -1243,8 +1250,8 @@ input:focus-visible {
   font-weight: 800;
 }
 
-.comment-bubble p {
-  margin: 0 0 8px;
+.comment-bubble .markdown-comment {
+  margin-bottom: 8px;
   color: var(--text);
 }
 
@@ -1252,6 +1259,105 @@ input:focus-visible {
   display: block;
   color: var(--muted);
   font-size: 0.82rem;
+}
+
+.comment-bubble > div:last-child {
+  min-width: 0;
+}
+
+.markdown-comment {
+  min-width: 0;
+  max-width: 100%;
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+
+.markdown-comment > :first-child {
+  margin-top: 0;
+}
+
+.markdown-comment > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-comment p,
+.markdown-comment ul,
+.markdown-comment ol,
+.markdown-comment blockquote,
+.markdown-comment pre,
+.markdown-comment table {
+  margin: 0.55em 0;
+}
+
+.markdown-comment ul,
+.markdown-comment ol {
+  padding-left: 1.25rem;
+}
+
+.markdown-comment li + li {
+  margin-top: 0.25em;
+}
+
+.markdown-comment blockquote {
+  padding: 0.15em 0 0.15em 0.8em;
+  border-left: 3px solid color-mix(in srgb, var(--brand) 45%, var(--border));
+  color: var(--muted-strong);
+}
+
+.markdown-comment h1,
+.markdown-comment h2,
+.markdown-comment h3,
+.markdown-comment h4,
+.markdown-comment h5,
+.markdown-comment h6 {
+  margin: 0.75em 0 0.3em;
+  color: var(--text);
+  font-size: 1em;
+  line-height: 1.3;
+}
+
+.markdown-comment a {
+  color: var(--brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-comment code {
+  padding: 0.1em 0.32em;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel-soft) 78%, transparent);
+  font-size: 0.88em;
+}
+
+.markdown-comment pre,
+.markdown-comment table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.markdown-comment pre {
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel-soft) 86%, transparent);
+}
+
+.markdown-comment pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.markdown-comment th,
+.markdown-comment td {
+  padding: 5px 8px;
+  border: 1px solid var(--border-soft);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.reader-feedback {
+  margin-top: 6px;
 }
 
 .summary-score svg {

@@ -20,6 +20,8 @@ import (
 	"google.golang.org/api/sheets/v4"
 )
 
+const v2ControlSheetCacheTTL = 30 * time.Second
+
 type SheetsClient struct {
 	cfg              Config
 	service          *sheets.Service
@@ -176,7 +178,7 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 				}
 				return nil, NewHTTPError(404, "aba nao encontrada: "+sheetName)
 			}
-			owner.cache[c.sheetCacheKey(sheetName)] = cachedGrid{expires: now.Add(c.cfg.CacheTTL), grid: grid}
+			owner.cache[c.sheetCacheKey(sheetName)] = cachedGrid{expires: now.Add(c.sheetCacheTTL(sheetName)), grid: grid}
 		}
 		return nil, nil
 	})
@@ -184,6 +186,17 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 		return err
 	}
 	return nil
+}
+
+func (c *SheetsClient) sheetCacheTTL(sheetName string) time.Duration {
+	ttl := c.cfg.CacheTTL
+	normalized := normalizeHeader(sheetName)
+	if normalized == v2ABsSheet || normalized == v2ActivitiesSheet || strings.HasPrefix(normalized, "nota ") {
+		if ttl <= 0 || ttl > v2ControlSheetCacheTTL {
+			return v2ControlSheetCacheTTL
+		}
+	}
+	return ttl
 }
 
 func (c *SheetsClient) optionalDriveComments(ctx context.Context, spreadsheetID string, sheetNames []string) []driveCellComment {

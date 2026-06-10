@@ -21,6 +21,7 @@ type TableResult struct {
 	SheetName     string       `json:"sheetName"`
 	Kind          string       `json:"kind"`
 	Complete      bool         `json:"complete"`
+	Scoreless     bool         `json:"scoreless,omitempty"`
 	Status        string       `json:"status,omitempty"`
 	SchemaStatus  string       `json:"schemaStatus,omitempty"`
 	SpreadsheetID string       `json:"spreadsheetId,omitempty"`
@@ -46,6 +47,7 @@ type DetailResult struct {
 	DisplayScore  string  `json:"displayScore"`
 	Ratio         float64 `json:"ratio"`
 	Pending       bool    `json:"pending"`
+	Percentage    bool    `json:"percentage,omitempty"`
 	Tone          string  `json:"tone,omitempty"`
 	Comment       string  `json:"comment,omitempty"`
 	CommentAuthor string  `json:"commentAuthor,omitempty"`

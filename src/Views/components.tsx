@@ -1,6 +1,8 @@
 import { AlertCircle, BookOpenCheck, ChevronLeft, ChevronRight, ChevronUp, LogOut, MessageSquareText, Moon, Search, Sun } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import type { CSSProperties, FormEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
+import remarkGfm from 'remark-gfm';
 import { cardsFor, isMediaTable } from '../Models/gradeModel';
 import type { GradeCard as GradeCardData, GradeDetail, GradeTable, SessionUser } from '../Models/types';
 
@@ -213,6 +215,31 @@ export function GradeCard({
   const activeKey = activeDetail?.tableKey === table.key ? activeDetail.cardKey : null;
   const cards = cardsFor(table);
   const activeCard = cards.find((card) => card.key === activeKey);
+  const scorelessCard = table.scoreless ? cards.find((card) => card.details?.length) || cards[0] : undefined;
+  if (scorelessCard) {
+    const expanded = activeKey === scorelessCard.key;
+    return (
+      <article className={`grade-table ${table.kind} scoreless-activity ${expanded ? 'activity-open' : ''}`}>
+        <button
+          type="button"
+          className="scoreless-activity-trigger"
+          onClick={() => onToggleDetail(table.key, scorelessCard.key)}
+          onMouseEnter={onPrefetch}
+          onFocus={onPrefetch}
+          aria-controls={detailPanelId(table.key, scorelessCard.key)}
+          aria-expanded={expanded}
+          aria-label={`${expanded ? 'Fechar' : 'Abrir'} critérios de ${table.label}`}
+        >
+          <div>
+            <h2>{table.label}</h2>
+            {table.status && <span className="table-status">{table.status}</span>}
+          </div>
+          <ChevronRight size={20} className={expanded ? 'rotated' : ''} />
+        </button>
+        {expanded && <GradeDetailPanel tableKey={table.key} card={scorelessCard} autoScroll={false} />}
+      </article>
+    );
+  }
   return (
     <article className={`grade-table ${table.kind} ${activeCard ? 'activity-open' : ''}`}>
       {activeCard ? (
@@ -337,11 +364,13 @@ export function ReaderGradeDocument({
           <ul>
             {cards.map((card) => (
               <li key={`reader-${table.key}-${card.key}`}>
-                <h3>{card.label}: {card.displayValue}</h3>
+                <h3>{table.scoreless ? card.label : `${card.label}: ${card.displayValue}`}</h3>
                 {card.comment && (
-                  <p>
-                    Feedback{card.commentAuthor ? ` de ${card.commentAuthor}` : ''}: {card.comment}
-                  </p>
+                  <MarkdownComment
+                    text={card.comment}
+                    authorLabel={`Feedback${card.commentAuthor ? ` de ${card.commentAuthor}` : ''}`}
+                    className="reader-feedback"
+                  />
                 )}
                 {card.details && card.details.length > 0 && (
                   <ul>
@@ -352,9 +381,11 @@ export function ReaderGradeDocument({
                         </p>
                         <p>Progresso: {formatReaderPercent(detail.ratio)}</p>
                         {detail.comment && (
-                          <p>
-                            Feedback{detail.commentAuthor ? ` de ${detail.commentAuthor}` : ''}: {detail.comment}
-                          </p>
+                          <MarkdownComment
+                            text={detail.comment}
+                            authorLabel={`Feedback${detail.commentAuthor ? ` de ${detail.commentAuthor}` : ''}`}
+                            className="reader-feedback"
+                          />
                         )}
                       </li>
                     ))}
@@ -377,13 +408,10 @@ function SummaryScoreCard({ card, fallbackLabel }: { card: GradeCardData; fallba
       </div>
       <strong>{card.displayValue}</strong>
       {card.comment && (
-        <p>
+        <div className="summary-comment">
           <MessageSquareText size={15} />
-          <span>
-            {card.commentAuthor && <strong>{card.commentAuthor}</strong>}
-            {card.comment}
-          </span>
-        </p>
+          <MarkdownComment text={card.comment} authorLabel={card.commentAuthor} />
+        </div>
       )}
     </section>
   );
@@ -517,24 +545,21 @@ function GradeRow({ tableKey, card, expanded, onToggle, onPrefetch }: { tableKey
         {clickable && <ChevronRight size={18} className={expanded ? 'rotated' : ''} />}
       </button>
       {card.comment && (
-        <p className="row-comment">
+        <div className="row-comment">
           <MessageSquareText size={15} />
-          <span>
-            {card.commentAuthor && <strong>{card.commentAuthor}</strong>}
-            {card.comment}
-          </span>
-        </p>
+          <MarkdownComment text={card.comment} authorLabel={card.commentAuthor} />
+        </div>
       )}
     </section>
   );
 }
 
-function GradeDetailPanel({ tableKey, card }: { tableKey: string; card: GradeCardData }) {
+function GradeDetailPanel({ tableKey, card, autoScroll = true }: { tableKey: string; card: GradeCardData; autoScroll?: boolean }) {
   const details = card.details ?? [];
   const panelRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    if (details.length === 0) return;
+    if (!autoScroll || details.length === 0) return;
 
     const frame = window.requestAnimationFrame(() => {
       const panel = panelRef.current;
@@ -546,7 +571,7 @@ function GradeDetailPanel({ tableKey, card }: { tableKey: string; card: GradeCar
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [tableKey, card.key, details.length]);
+  }, [tableKey, card.key, details.length, autoScroll]);
 
   return (
     <section className="detail-panel" id={detailPanelId(tableKey, card.key)} ref={panelRef}>
@@ -560,7 +585,7 @@ function GradeDetailPanel({ tableKey, card }: { tableKey: string; card: GradeCar
         <div className="comment-bubble">
           <div className="comment-avatar">P</div>
           <div>
-            <p>{card.comment}</p>
+            <MarkdownComment text={card.comment} />
             <span>{card.commentAuthor || 'Comentário geral'}</span>
           </div>
         </div>
@@ -590,13 +615,10 @@ function DetailItem({ item }: { item: GradeDetail }) {
       </div>
       <ProgressBar value={item.ratio} />
       {item.comment ? (
-        <p className="detail-item-comment">
+        <div className="detail-item-comment">
           <MessageSquareText size={14} />
-          <span>
-            {item.commentAuthor && <strong>{item.commentAuthor}</strong>}
-            {item.comment}
-          </span>
-        </p>
+          <MarkdownComment text={item.comment} authorLabel={item.commentAuthor} />
+        </div>
       ) : null}
     </article>
   );
@@ -607,6 +629,23 @@ function ProgressBar({ value }: { value: number }) {
   return (
     <div className="progress-bar" aria-hidden="true" style={{ '--progress-value': `${progress}%` } as CSSProperties}>
       <div className="progress-fill" />
+    </div>
+  );
+}
+
+function MarkdownComment({ text, authorLabel, className = '' }: { text: string; authorLabel?: string; className?: string }) {
+  return (
+    <div className={`markdown-comment ${className}`.trim()}>
+      {authorLabel && <strong className="markdown-comment-author">{authorLabel}</strong>}
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          img: () => null,
+          a: ({ children, ...props }) => <a {...props} target="_blank" rel="noreferrer noopener">{children}</a>,
+        }}
+      >
+        {text}
+      </ReactMarkdown>
     </div>
   );
 }

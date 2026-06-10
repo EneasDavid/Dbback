@@ -155,7 +155,7 @@ func scoreDetail(key string, label string, value string, maximum float64) Detail
 	pending := strings.TrimSpace(value) == ""
 	ratio := 0.0
 	if !pending && hasObtained && maximum > 0 {
-		ratio = math.Min((obtained/maximum)*100, 100)
+		ratio = math.Min(math.Max((obtained/maximum)*100, 0), 100)
 	}
 	return DetailResult{
 		Key:          key,
@@ -167,6 +167,17 @@ func scoreDetail(key string, label string, value string, maximum float64) Detail
 		Pending:      pending,
 		Tone:         scoreToneFromRatio(ratio, pending),
 	}
+}
+
+func percentageActivityDetails(items []activityItem) []DetailResult {
+	details := activityDetails(items)
+	for idx := range details {
+		details[idx].Percentage = true
+		if !details[idx].Pending {
+			details[idx].DisplayScore = formatNumber(details[idx].Ratio) + "%"
+		}
+	}
+	return details
 }
 
 func normalizedScore(value string, sourceMaximum float64, targetMaximum float64) string {
@@ -216,7 +227,10 @@ func displayValue(label string, value string) string {
 
 func isPendingValue(value string) bool {
 	text := normalizeHeader(value)
-	return text == "" || strings.Contains(text, "nao corrigid") || strings.Contains(text, "em correcao")
+	return text == "" ||
+		strings.Contains(text, "nao corrigid") ||
+		strings.Contains(text, "em correcao") ||
+		strings.Contains(text, "nao foi lancad")
 }
 
 func scoreTone(label string, value string) string {

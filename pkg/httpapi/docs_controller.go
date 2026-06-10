@@ -141,7 +141,7 @@ func docsPayload() map[string]any {
 		"gradeOrganization": map[string]any{
 			"identitySource": "Base de dados",
 			"rowSelection":   "A matrícula resolve uma identidade e fixa a planilha internamente na sessão assinada. O spreadsheetId não é exposto nas respostas públicas.",
-			"feedbackSource": "Comentários vêm de cell notes, workbook/XLSX comments e Drive comments quando a service account consegue enxergar e mapear célula. Na v2, comentários de critério entram em Detail.comment; comentários da célula da nota final/atividade entram no card.",
+			"feedbackSource": "Comentários vêm de cell notes, workbook/XLSX comments e Drive comments quando a service account consegue enxergar e mapear célula. Na v2, comentários de critério entram em Detail.comment; comentários da célula da nota final/atividade entram no card. O frontend renderiza comentários como Markdown seguro, sem HTML bruto nem imagens remotas.",
 			"rendering":      "O backend monta cards/detalhes render-ready. Critérios v2 usam a escala da rubrica; a nota da atividade vem da aba nota <ab> e médias são limitadas a 10.",
 			"versioning":     "SHEETS_RUNTIME_VERSION=v2/auto usa a aba abs e developer metadata. Em /api/grades/all, só ABs com status ativo=1 são retornadas na v2.",
 		},
@@ -383,6 +383,7 @@ func gradeResponseSchema() map[string]any {
 				"sheetName":    "string",
 				"kind":         "string",
 				"complete":     "boolean",
+				"scoreless":    "boolean optional; true quando a atividade nao possui peso, recebe status Nao pontua e exibe apenas criterios percentuais",
 				"status":       "string optional",
 				"schemaStatus": "legacy|v2 optional",
 				"cards": []map[string]any{
@@ -403,6 +404,7 @@ func gradeResponseSchema() map[string]any {
 								"displayScore":  "string",
 								"ratio":         "number",
 								"pending":       "boolean",
+								"percentage":    "boolean optional; true quando displayScore deve ser exibido de 0% a 100%",
 								"tone":          "string optional",
 								"comment":       "string optional",
 								"commentAuthor": "string optional",

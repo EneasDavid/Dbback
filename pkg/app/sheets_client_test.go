@@ -5,10 +5,24 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/sheets/v4"
 )
+
+func TestSheetCacheTTLRefreshesV2ControlSheetsQuickly(t *testing.T) {
+	client := &SheetsClient{cfg: Config{CacheTTL: 7 * time.Hour}}
+
+	for _, sheetName := range []string{v2ABsSheet, v2ActivitiesSheet, "nota ab2"} {
+		if got := client.sheetCacheTTL(sheetName); got != v2ControlSheetCacheTTL {
+			t.Fatalf("sheetCacheTTL(%q) = %s, want %s", sheetName, got, v2ControlSheetCacheTTL)
+		}
+	}
+	if got := client.sheetCacheTTL("Pré entrega"); got != 7*time.Hour {
+		t.Fatalf("sheetCacheTTL(activity) = %s, want 7h", got)
+	}
+}
 
 func TestOptionalDriveCommentsDoesNotBlockSheetsAccess(t *testing.T) {
 	client := &SheetsClient{

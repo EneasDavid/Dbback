@@ -104,7 +104,7 @@ export default function AppController() {
     allGradesLoadingRef.current = true;
     setGradesRefreshing(true);
 
-    void apiSWR<GradeCache>(ALL_GRADES_PATH)
+    void apiSWR<GradeCache>(ALL_GRADES_PATH, force ? { cache: 'reload' } : undefined)
       .then((maybeResults) => {
         if (!maybeResults) return;
         activateGradeResults(maybeResults, cacheKey, 'replace');
@@ -123,6 +123,13 @@ export default function AppController() {
         setGradesRefreshing(false);
       });
   }, [activateGradeResults]);
+
+  useEffect(() => {
+    if (!session) return;
+    const cacheKey = gradeCacheKey(session.matricula);
+    const timer = window.setInterval(() => prefetchAllGrades(cacheKey, true), GRADES_REVALIDATE_MS);
+    return () => window.clearInterval(timer);
+  }, [prefetchAllGrades, session]);
 
   useEffect(() => {
     if (!error) return;

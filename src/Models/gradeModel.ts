@@ -193,9 +193,11 @@ function normalizeGradeDetails(details?: GradeDetail[]) {
       label,
       value,
       max,
-      displayScore: pending || max > 0
-        ? detailDisplayScore(value, max, pending)
-        : asText(detail.displayScore) || detailDisplayScore(value, max, pending),
+      displayScore: detail.percentage
+        ? percentageDisplayScore(ratio, pending)
+        : pending || max > 0
+          ? detailDisplayScore(value, max, pending)
+          : asText(detail.displayScore) || detailDisplayScore(value, max, pending),
       ratio,
       pending,
       tone: detail.tone || scoreToneFromRatio(ratio, pending),
@@ -323,6 +325,12 @@ function detailDisplayScore(value: string, max: number, pending: boolean) {
   return value.trim();
 }
 
+function percentageDisplayScore(ratio: number, pending: boolean) {
+  if (pending) return 'Em correção';
+  const percentage = Math.min(Math.max(Number.isFinite(ratio) ? ratio : 0, 0), 100);
+  return `${percentage.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`;
+}
+
 function scoreTone(label: string, value: string, display = '') {
   const displayScore = parseDisplayScore(display);
   if (displayScore && displayScore.max > 0) {
@@ -412,7 +420,7 @@ function hideAverageUntilActivitiesComplete(tables: GradeTable[]) {
 }
 
 function scoredActivityTable(table: GradeTable) {
-  return table.kind === 'activity' || table.kind === 'project';
+  return !table.scoreless && (table.kind === 'activity' || table.kind === 'project');
 }
 
 function activityTableComplete(table: GradeTable) {

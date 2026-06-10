@@ -6,6 +6,7 @@ export type GradeDetail = {
   displayScore: string;
   ratio: number;
   pending: boolean;
+  percentage?: boolean;
   tone?: string;
   comment?: string;
   commentAuthor?: string;
@@ -28,6 +29,7 @@ export type GradeTable = {
   sheetName: string;
   kind: string;
   complete: boolean;
+  scoreless?: boolean;
   status?: string;
   schemaStatus?: string;
   cards?: GradeCard[];
