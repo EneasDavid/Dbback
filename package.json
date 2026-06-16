@@ -1,6 +1,6 @@
 {
   "name": "@eneasdavid/dbback",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "description": "Consulta autenticada de notas e feedbacks com Go, React e Google Sheets.",
   "private": false,
   "type": "module",

@@ -140,7 +140,7 @@ input:focus-visible {
   width: min(100%, 600px);
   min-height: 100vh;
   margin: 0 auto;
-  padding: 16px 14px 32px;
+  padding: 16px max(14px, env(safe-area-inset-right)) 32px max(14px, env(safe-area-inset-left));
   background: linear-gradient(180deg, color-mix(in srgb, var(--shell) 90%, transparent), color-mix(in srgb, var(--shell) 72%, transparent));
   backdrop-filter: blur(22px) saturate(150%);
   -webkit-backdrop-filter: blur(22px) saturate(150%);
@@ -381,7 +381,7 @@ input:focus-visible {
 
 .scroll-top-button {
   position: fixed;
-  right: calc(50vw - min(50vw, 300px) + max(16px, env(safe-area-inset-right)));
+  right: max(16px, env(safe-area-inset-right));
   bottom: calc(max(22px, env(safe-area-inset-bottom)) + 2px);
   z-index: 1000;
   display: grid;
@@ -575,6 +575,8 @@ input:focus-visible {
   margin-top: 18px;
   display: grid;
   gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
 }
 
 .reader-document {
@@ -681,6 +683,7 @@ input:focus-visible {
 }
 
 .grade-table {
+  min-width: 0;
   overflow: hidden;
   padding: 16px;
   border: 1px solid var(--border-soft);
@@ -1421,13 +1424,141 @@ input:focus-visible {
 
 }
 
+@media (min-width: 600px) {
+  :root[data-screen="app"] .shell {
+    width: min(calc(100% - 24px), 680px);
+    min-height: calc(100svh - 24px);
+    margin-top: 12px;
+    margin-bottom: 12px;
+    padding: 18px;
+    border: 1px solid var(--border-soft);
+    border-radius: 30px;
+    box-shadow: var(--shadow);
+  }
+
+  :root[data-screen="app"] .grade-list {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+    gap: 16px;
+  }
+
+  :root[data-screen="app"] .grade-table.summary,
+  :root[data-screen="app"] .empty-state,
+  :root[data-screen="app"] .loading,
+  :root[data-screen="app"] .inline-error {
+    grid-column: 1 / -1;
+  }
+
+  .scroll-top-button {
+    right: calc((100vw - min(calc(100vw - 24px), 680px)) / 2 + 18px);
+  }
+}
+
 @media (min-width: 720px) {
-  .shell {
+  :root[data-screen="app"] .shell {
+    width: min(calc(100% - 32px), 960px);
     margin-top: 28px;
     margin-bottom: 28px;
     min-height: calc(100vh - 56px);
-    border: 1px solid var(--border-soft);
     border-radius: 34px;
-    box-shadow: var(--shadow);
+    padding: 20px;
+  }
+
+  :root[data-screen="app"] .topbar {
+    min-height: 78px;
+    padding: 14px 16px;
+  }
+
+  :root[data-screen="app"] .exam-switch {
+    margin-top: 16px;
+  }
+
+  :root[data-screen="app"] .grade-list {
+    margin-top: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr));
+    gap: 18px;
+  }
+
+  :root[data-screen="app"] .grade-table {
+    padding: 18px;
+  }
+
+  :root[data-screen="app"] .activity-sticky-block {
+    margin: -18px -18px 8px;
+    padding: 18px 18px 8px;
+  }
+
+  :root[data-screen="app"] .summary-grid {
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  }
+
+  .scroll-top-button {
+    right: calc((100vw - min(calc(100vw - 32px), 960px)) / 2 + 20px);
+  }
+}
+
+@media (min-width: 1080px) {
+  :root[data-screen="app"] .shell {
+    width: min(calc(100% - 64px), 1180px);
+    padding: 24px;
+  }
+
+  :root[data-screen="app"] .grade-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+  }
+
+  :root[data-screen="app"] .grade-table {
+    padding: 20px;
+  }
+
+  :root[data-screen="app"] .activity-sticky-block {
+    margin: -20px -20px 10px;
+    padding: 20px 20px 10px;
+  }
+
+  :root[data-screen="app"] .detail-panel {
+    padding: 16px;
+  }
+
+  .scroll-top-button {
+    right: calc((100vw - min(calc(100vw - 64px), 1180px)) / 2 + 24px);
+  }
+}
+
+@media (min-width: 1280px) {
+  :root[data-screen="app"] .shell {
+    width: min(calc(100% - 80px), 1240px);
+  }
+
+  .scroll-top-button {
+    right: calc((100vw - min(calc(100vw - 80px), 1240px)) / 2 + 24px);
+  }
+}
+
+@media (horizontal-viewport-segments: 2) {
+  :root[data-screen="app"] .shell {
+    width: 100vw;
+    max-width: none;
+    min-height: 100svh;
+    margin: 0;
+    padding: 18px max(18px, env(safe-area-inset-right)) 32px max(18px, env(safe-area-inset-left));
+    border: 0;
+    border-radius: 0;
+  }
+
+  :root[data-screen="app"] .grade-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: max(20px, calc(env(viewport-segment-left 1 0) - env(viewport-segment-right 0 0) + 20px));
+  }
+
+  :root[data-screen="app"] .grade-table.summary,
+  :root[data-screen="app"] .empty-state,
+  :root[data-screen="app"] .loading,
+  :root[data-screen="app"] .inline-error {
+    grid-column: 1 / -1;
+  }
+
+  .scroll-top-button {
+    right: max(18px, env(safe-area-inset-right));
   }
 }
