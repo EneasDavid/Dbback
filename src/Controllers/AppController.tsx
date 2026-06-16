@@ -18,6 +18,7 @@ import {
 } from '../Models/gradeModel';
 import type { GradeCache, GradeResult, SessionUser } from '../Models/types';
 import { api, apiSWR, clearApiValidators } from './apiController';
+import { isPasskeyAbort, loginWithSavedPasskey, registerPasskey, supportsPasskeys } from './passkeyController';
 
 const EMPTY_STATE_MS = 5_000;
 const GRADES_REVALIDATE_MS = 30_000;
@@ -27,6 +28,7 @@ const LAST_MATRICULA_KEY = 'dbback-last-matricula';
 const THEME_QUERY = '(prefers-color-scheme: dark)';
 const MULTI_DETAIL_QUERY = '(min-width: 768px), (horizontal-viewport-segments: 2)';
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim() ?? '';
+const PASSKEY_SAVED_KEY = 'dbback-passkey-saved';
 
 type Theme = 'light' | 'dark';
 type Exam = string;
@@ -88,6 +90,8 @@ export default function AppController() {
   const gradesRef = useRef<GradeCache>({});
   const gradesFetchedAtRef = useRef(0);
   const allGradesLoadingRef = useRef(false);
+  const passkeyLoginRef = useRef(false);
+  const passkeyPromptRef = useRef(false);
   const [activeDetails, setActiveDetails] = useState<ActiveDetails>({});
   const [multiDetailMode, setMultiDetailMode] = useState(() => initialMultiDetailMode());
   const [turnstileToken, setTurnstileToken] = useState('');
@@ -336,6 +340,81 @@ export default function AppController() {
   const hasRenderableTables = renderableTables.length > 0;
   const currentExamLabel = examLabels[exam] || exam.toUpperCase();
 
+  const activateSession = useCallback((result: SessionUser, fallbackMatricula = '') => {
+    const previousMatricula = window.localStorage.getItem(LAST_MATRICULA_KEY) || '';
+    const resolvedMatricula = result.matricula || fallbackMatricula;
+    if (matriculasDiffer(previousMatricula, resolvedMatricula)) {
+      clearGradeCache();
+      clearGradeValidators();
+    }
+    if (resolvedMatricula) {
+      window.localStorage.setItem(LAST_MATRICULA_KEY, resolvedMatricula);
+    }
+    gradesFetchedAtRef.current = 0;
+    allGradesLoadingRef.current = false;
+    gradesRef.current = {};
+    setGrades({});
+    setExamOrder([]);
+    setActiveDetails({});
+    setTurnstileToken('');
+    setTurnstileResetKey((current) => current + 1);
+    setExam(DEFAULT_EXAM);
+    setSession(result);
+    setMatricula('');
+  }, []);
+
+  const maybeOfferPasskeySave = useCallback((result: SessionUser) => {
+    if (!supportsPasskeys() || passkeyPromptRef.current || !result.matricula) return;
+
+    const savedKey = `${PASSKEY_SAVED_KEY}:${result.matricula}`;
+    if (window.localStorage.getItem(savedKey) === '1') return;
+
+    passkeyPromptRef.current = true;
+    window.setTimeout(() => {
+      const wantsPasskey = window.confirm('Salvar este login como chave de acesso neste dispositivo?');
+      if (!wantsPasskey) {
+        passkeyPromptRef.current = false;
+        return;
+      }
+      void registerPasskey()
+        .then(() => window.localStorage.setItem(savedKey, '1'))
+        .catch((err) => {
+          if (isPasskeyAbort(err)) return;
+          setError(err instanceof Error ? err.message : 'Nao foi possivel salvar a chave de acesso.');
+        })
+        .finally(() => {
+          passkeyPromptRef.current = false;
+        });
+    }, 350);
+  }, []);
+
+  useEffect(() => {
+    if (session || passkeyLoginRef.current || !supportsPasskeys()) return;
+
+    let cancelled = false;
+    const controller = new AbortController();
+    passkeyLoginRef.current = true;
+
+    void loginWithSavedPasskey(controller.signal)
+      .then((result) => {
+        if (!result || cancelled) return;
+        activateSession(result, result.matricula);
+      })
+      .catch((err) => {
+        if (!isPasskeyAbort(err)) {
+          console.info('Chave de acesso indisponivel', err);
+        }
+      })
+      .finally(() => {
+        passkeyLoginRef.current = false;
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [activateSession, session]);
+
   useLayoutEffect(() => {
     const container = gradeListRef.current;
     if (!container) return;
@@ -432,24 +511,8 @@ export default function AppController() {
           ...(TURNSTILE_SITE_KEY ? { turnstileToken } : {}),
         }),
       });
-      const previousMatricula = window.localStorage.getItem(LAST_MATRICULA_KEY) || '';
-      const resolvedMatricula = result.matricula || normalizedMatricula;
-      if (matriculasDiffer(previousMatricula, resolvedMatricula)) {
-        clearGradeCache();
-        clearGradeValidators();
-      }
-      window.localStorage.setItem(LAST_MATRICULA_KEY, resolvedMatricula);
-      gradesFetchedAtRef.current = 0;
-      allGradesLoadingRef.current = false;
-      gradesRef.current = {};
-      setGrades({});
-      setExamOrder([]);
-      setActiveDetails({});
-      setTurnstileToken('');
-      setTurnstileResetKey((current) => current + 1);
-      setExam(DEFAULT_EXAM);
-      setSession(result);
-      setMatricula('');
+      activateSession(result, normalizedMatricula);
+      maybeOfferPasskeySave(result);
     } catch (err) {
       setTurnstileToken('');
       setTurnstileResetKey((current) => current + 1);

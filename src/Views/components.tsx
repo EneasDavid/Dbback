@@ -1,7 +1,7 @@
 import { AlertCircle, BookOpenCheck, ChevronLeft, ChevronRight, ChevronUp, LogOut, MessageSquareText, Moon, Search, Sun } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import type { CSSProperties, FormEvent } from 'react';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import remarkGfm from 'remark-gfm';
 import { cardsFor, isMediaTable } from '../Models/gradeModel';
 import type { GradeCard as GradeCardData, GradeDetail, GradeTable, SessionUser } from '../Models/types';
@@ -53,7 +53,7 @@ export function LoginView({
               name="username"
               type="text"
               inputMode="numeric"
-              autoComplete="username"
+              autoComplete="username webauthn"
               autoCapitalize="none"
               spellCheck={false}
               enterKeyHint="go"
@@ -736,6 +736,15 @@ function GradeDetailPanel({ tableKey, card, autoScroll = true }: { tableKey: str
 
 function DetailList({ details }: { details: GradeDetail[] }) {
   const listRef = useRef<HTMLDivElement>(null);
+  const desktopOrder = useMemo(() => {
+    const ranked = details.map((detail, index) => ({
+      key: detail.key,
+      index,
+      weight: detailCommentWeight(detail),
+    }));
+    ranked.sort((left, right) => right.weight - left.weight || left.index - right.index);
+    return new Map(ranked.map((detail, index) => [detail.key, index + 1]));
+  }, [details]);
 
   useLayoutEffect(() => {
     const container = listRef.current;
@@ -790,7 +799,7 @@ function DetailList({ details }: { details: GradeDetail[] }) {
   return (
     <div className="detail-items" ref={listRef}>
       {details.map((item) => (
-        <DetailItem item={item} key={item.key} />
+        <DetailItem item={item} desktopOrder={desktopOrder.get(item.key) ?? 0} key={item.key} />
       ))}
     </div>
   );
@@ -800,9 +809,16 @@ function detailItemElements(container: HTMLElement) {
   return Array.from(container.children).filter((child): child is HTMLElement => child instanceof HTMLElement);
 }
 
-function DetailItem({ item }: { item: GradeDetail }) {
+function detailCommentWeight(item: GradeDetail) {
+  const comment = item.comment?.trim() ?? '';
+  if (!comment) return 0;
+  const lineWeight = comment.split(/\r?\n/).length * 80;
+  return comment.length + lineWeight;
+}
+
+function DetailItem({ item, desktopOrder }: { item: GradeDetail; desktopOrder: number }) {
   return (
-    <article className={`detail-item ${item.tone || ''}`}>
+    <article className={`detail-item ${item.tone || ''}`} style={{ '--desktop-detail-order': desktopOrder } as CSSProperties}>
       <div className="detail-item-row">
         <div>
           <strong>{item.label}</strong>

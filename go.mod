@@ -3,6 +3,7 @@ module feedback
 go 1.25.11
 
 require (
+	github.com/fxamacker/cbor/v2 v2.9.2
 	github.com/joho/godotenv v1.5.1
 	golang.org/x/oauth2 v0.30.0
 	golang.org/x/sync v0.20.0
@@ -20,6 +21,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.2 // indirect
+	github.com/x448/float16 v0.8.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.60.0 // indirect
 	go.opentelemetry.io/otel v1.35.0 // indirect

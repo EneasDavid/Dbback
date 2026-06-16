@@ -323,6 +323,14 @@ func canFallbackToNextBase(err error) bool {
 	return httpErr.Status == 401 || httpErr.Status == 404 || httpErr.Status == 400
 }
 
+func isServiceUnavailable(err error) bool {
+	var httpErr HTTPError
+	if !errors.As(err, &httpErr) {
+		return false
+	}
+	return httpErr.Status == 503
+}
+
 func (c *SheetsClient) candidateSpreadsheetIDs(user SessionUser) []string {
 	var ids []string
 	seen := map[string]bool{}
@@ -352,6 +360,9 @@ func (c *SheetsClient) userForSpreadsheet(ctx context.Context, user SessionUser)
 	}
 	identity, err := c.LoginIdentity(ctx, user.Matricula)
 	if err != nil {
+		if user.hasResolvedIdentity() && isServiceUnavailable(err) {
+			return user, true, nil
+		}
 		if canFallbackToNextBase(err) {
 			return SessionUser{}, false, nil
 		}
@@ -366,6 +377,10 @@ func (c *SheetsClient) trustsSessionSpreadsheet(user SessionUser) bool {
 		return false
 	}
 	return len(c.cfg.SpreadsheetIDs) == 1 && c.cfg.SpreadsheetIDs[0] == spreadsheetID
+}
+
+func (user SessionUser) hasResolvedIdentity() bool {
+	return strings.TrimSpace(user.Matricula) != "" && strings.TrimSpace(user.Name) != ""
 }
 
 func (c *SheetsClient) scopedToSpreadsheet(spreadsheetID string) *SheetsClient {

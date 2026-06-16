@@ -9,16 +9,18 @@ import (
 )
 
 type Router struct {
-	Auth   AuthController
-	Grades GradesController
-	Docs   DocsController
+	Auth    AuthController
+	Passkey PasskeyController
+	Grades  GradesController
+	Docs    DocsController
 }
 
 func NewRouter() Router {
 	return Router{
-		Auth:   AuthController{},
-		Grades: GradesController{},
-		Docs:   DocsController{},
+		Auth:    AuthController{},
+		Passkey: PasskeyController{},
+		Grades:  GradesController{},
+		Docs:    DocsController{},
 	}
 }
 
@@ -35,6 +37,14 @@ func (router Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		router.Auth.Logout(w, r)
 	case path == "/api/me":
 		router.Auth.Me(w, r)
+	case path == "/api/passkey/register/options":
+		router.Passkey.RegisterOptions(w, r)
+	case path == "/api/passkey/register":
+		router.Passkey.Register(w, r)
+	case path == "/api/passkey/login/options":
+		router.Passkey.LoginOptions(w, r)
+	case path == "/api/passkey/login":
+		router.Passkey.Login(w, r)
 	case path == "/api/grades/all":
 		router.Grades.All(w, r)
 	case path == "/api/grades" || strings.HasPrefix(path, "/api/grades/"):
