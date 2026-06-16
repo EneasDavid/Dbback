@@ -120,9 +120,30 @@ SHEET_AB2_PROJETO=Projeto AB2
 SESSION_SECRET=<chave-aleatoria-com-32-bytes-ou-mais>
 COOKIE_SECURE=true
 GOOGLE_SERVICE_ACCOUNT_JSON_BASE64=<credencial-json-em-base64>
+TURNSTILE_SECRET_KEY=<secret-key-do-cloudflare-turnstile>
+VITE_TURNSTILE_SITE_KEY=<site-key-publica-do-cloudflare-turnstile>
 ```
 
 Tambem configure no ambiente as credenciais de Basic Auth da documentacao da API. O projeto nao aceita credenciais padrao para essa rota.
+
+O "nao sou um robo" do login e obrigatorio. Configure as duas variaveis do Cloudflare Turnstile: a `VITE_TURNSTILE_SITE_KEY` e publica e renderiza o widget no navegador; a `TURNSTILE_SECRET_KEY` fica somente no backend e faz o `POST /api/login` validar o token antes de acessar Google Sheets. Sem uma das duas chaves, o login fica bloqueado por configuracao incompleta.
+
+Para testar localmente sem criar chaves reais, substitua as duas variaveis pelas chaves de teste oficiais da Cloudflare:
+
+```env
+VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+```
+
+Em producao, substitua por chaves reais do widget e restrinja os hostnames no painel da Cloudflare. Se usar chaves reais no desenvolvimento local, adicione `localhost` e `127.0.0.1` ao widget no painel da Cloudflare.
+
+Ativacao:
+
+1. Acesse Cloudflare Dashboard > Turnstile e crie um widget para o login.
+2. Adicione os hostnames usados pelo app, por exemplo `localhost`, `127.0.0.1` e o dominio de producao.
+3. Copie a site key para `VITE_TURNSTILE_SITE_KEY`.
+4. Copie a secret key para `TURNSTILE_SECRET_KEY`.
+5. Reinicie `npm run dev:full` ou redeploye a aplicacao.
 
 Credenciais Google aceitas:
 
@@ -192,6 +213,10 @@ go mod download
 npm run dev:full
 ```
 
+O servidor local completo sobe em `http://localhost:3000` e serve frontend + API no mesmo host. Use essa URL para testar login.
+
+`npm run dev` abre somente o Vite para desenvolvimento do frontend; nesse modo, `/api` e encaminhado para um servidor Go ja rodando em `http://localhost:3000`.
+
 O servidor local usa `PORT` e, quando a variavel nao e definida, sobe na porta `3000`.
 
 Comandos de qualidade:
@@ -217,6 +242,8 @@ GOOGLE_SHEET_ID=<id>
 LOGIN_SHEET_NAME=Base de dados
 SESSION_SECRET=<chave-forte>
 COOKIE_SECURE=true
+TURNSTILE_SECRET_KEY=<secret-key-do-turnstile>
+VITE_TURNSTILE_SITE_KEY=<site-key-publica-do-turnstile>
 ```
 
 Mantenha `VITE_API_BASE` vazio quando frontend e `/api/*` estiverem no mesmo projeto.

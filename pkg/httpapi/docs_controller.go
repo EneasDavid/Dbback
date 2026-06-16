@@ -50,7 +50,7 @@ func docsPayload() map[string]any {
 				"method": "POST",
 				"path":   "/api/login",
 				"auth":   false,
-				"body":   map[string]string{"matricula": "string"},
+				"body":   map[string]string{"matricula": "string", "turnstileToken": "string obrigatoria gerada pelo Cloudflare Turnstile"},
 				"response": map[string]string{
 					"matricula":    "string",
 					"name":         "string",
@@ -148,7 +148,7 @@ func docsPayload() map[string]any {
 		"security": map[string]any{
 			"readOnlySheets": "A service account é criada com escopos somente leitura para Sheets e Drive; não há chamada de update, append ou batchUpdate.",
 			"publicPayload":  "Respostas removem spreadsheetId e nunca expõem linhas completas: só a linha do aluno autenticado e cards/detalhes tipados.",
-			"inputControl":   "POST aceita apenas login/logout, valida origem, limita body de login a 1 KiB e aceita matrícula numérica.",
+			"inputControl":   "POST aceita apenas login/logout, valida origem, limita body de login a 4 KiB, aceita matrícula numérica e exige validação Cloudflare Turnstile antes de acessar a planilha.",
 			"sqlInjection":   "A aplicação não usa banco SQL nem monta queries SQL; entradas são normalizadas antes de escolher rotas/abas permitidas.",
 			"integrity":      "Sessões são HMAC-SHA256 e respostas JSON incluem digest SHA-256 para verificação tamper-evident, inspirado em cadeias de hash.",
 		},
@@ -174,6 +174,7 @@ func docsPayload() map[string]any {
 		"dataFlowGraph": map[string]any{
 			"nodes": []string{
 				"Browser LoginView",
+				"Cloudflare Turnstile Siteverify",
 				"AppController",
 				"AuthController",
 				"GradesController",
@@ -184,6 +185,7 @@ func docsPayload() map[string]any {
 			},
 			"edges": []string{
 				"Browser LoginView -> AuthController: POST /api/login",
+				"AuthController -> Cloudflare Turnstile Siteverify: valida token anti-robo obrigatório",
 				"AuthController -> SheetsClient: LoginIdentity(Base de dados)",
 				"AuthController -> SheetsClient: warm-up assíncrono de GradesFor",
 				"AppController -> GradesController: GET /api/grades/all com If-None-Match",

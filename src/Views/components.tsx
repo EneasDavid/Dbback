@@ -1,7 +1,7 @@
 import { AlertCircle, BookOpenCheck, ChevronLeft, ChevronRight, ChevronUp, LogOut, MessageSquareText, Moon, Search, Sun } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import type { CSSProperties, FormEvent } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import remarkGfm from 'remark-gfm';
 import { cardsFor, isMediaTable } from '../Models/gradeModel';
 import type { GradeCard as GradeCardData, GradeDetail, GradeTable, SessionUser } from '../Models/types';
@@ -14,6 +14,12 @@ export function LoginView({
   theme,
   setTheme,
   onSubmit,
+  turnstileSiteKey,
+  turnstileVerified,
+  turnstileResetKey,
+  onTurnstileToken,
+  onTurnstileExpire,
+  onTurnstileError,
 }: {
   matricula: string;
   setMatricula: (value: string) => void;
@@ -22,6 +28,12 @@ export function LoginView({
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  turnstileSiteKey: string;
+  turnstileVerified: boolean;
+  turnstileResetKey: number;
+  onTurnstileToken: (token: string) => void;
+  onTurnstileExpire: () => void;
+  onTurnstileError: () => void;
 }) {
   return (
     <main className="shell login-shell">
@@ -51,14 +63,123 @@ export function LoginView({
               onChange={(event) => setMatricula(event.target.value)}
             />
           </div>
+          {turnstileSiteKey && (
+            <TurnstileWidget
+              siteKey={turnstileSiteKey}
+              theme={theme}
+              resetKey={turnstileResetKey}
+              onToken={onTurnstileToken}
+              onExpire={onTurnstileExpire}
+              onError={onTurnstileError}
+            />
+          )}
           {error && <InlineError message={error} />}
-          <button className="primary-button" type="submit" disabled={loading} aria-busy={loading}>
+          <button className="primary-button" type="submit" disabled={loading || !turnstileVerified} aria-busy={loading}>
             {loading ? 'Entrando...' : 'Entrar'}
             <ChevronRight size={18} />
           </button>
         </form>
       </section>
     </main>
+  );
+}
+
+type TurnstileWidgetAPI = {
+  render: (container: HTMLElement, options: Record<string, unknown>) => string;
+  remove: (widgetId: string) => void;
+};
+
+declare global {
+  interface Window {
+    turnstile?: TurnstileWidgetAPI;
+  }
+}
+
+let turnstileScriptPromise: Promise<void> | null = null;
+
+function loadTurnstileScript() {
+  if (window.turnstile) return Promise.resolve();
+  if (turnstileScriptPromise) return turnstileScriptPromise;
+
+  turnstileScriptPromise = new Promise((resolve, reject) => {
+    const existingScript = document.getElementById('cf-turnstile-api') as HTMLScriptElement | null;
+    const script = existingScript ?? document.createElement('script');
+    const onLoad = () => resolve();
+    const onError = () => {
+      turnstileScriptPromise = null;
+      reject(new Error('turnstile script failed'));
+    };
+
+    script.addEventListener('load', onLoad, { once: true });
+    script.addEventListener('error', onError, { once: true });
+
+    if (!existingScript) {
+      script.id = 'cf-turnstile-api';
+      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
+    }
+  });
+
+  return turnstileScriptPromise;
+}
+
+function TurnstileWidget({
+  siteKey,
+  theme,
+  resetKey,
+  onToken,
+  onExpire,
+  onError,
+}: {
+  siteKey: string;
+  theme: 'light' | 'dark';
+  resetKey: number;
+  onToken: (token: string) => void;
+  onExpire: () => void;
+  onError: () => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const callbacksRef = useRef({ onToken, onExpire, onError });
+
+  useEffect(() => {
+    callbacksRef.current = { onToken, onExpire, onError };
+  }, [onToken, onExpire, onError]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let widgetId = '';
+    const container = containerRef.current;
+    if (!container) return;
+
+    loadTurnstileScript()
+      .then(() => {
+        if (cancelled || !window.turnstile) return;
+        widgetId = window.turnstile.render(container, {
+          sitekey: siteKey,
+          theme,
+          size: 'flexible',
+          callback: (token: string) => callbacksRef.current.onToken(token),
+          'expired-callback': () => callbacksRef.current.onExpire(),
+          'error-callback': () => callbacksRef.current.onError(),
+        });
+      })
+      .catch(() => callbacksRef.current.onError());
+
+    return () => {
+      cancelled = true;
+      if (widgetId && window.turnstile) {
+        window.turnstile.remove(widgetId);
+      }
+      container.replaceChildren();
+    };
+  }, [siteKey, theme, resetKey]);
+
+  return (
+    <div className="turnstile-panel">
+      <div className="turnstile-widget" ref={containerRef} />
+    </div>
   );
 }
 
@@ -595,13 +716,69 @@ function GradeDetailPanel({ tableKey, card, autoScroll = true }: { tableKey: str
 }
 
 function DetailList({ details }: { details: GradeDetail[] }) {
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const container = listRef.current;
+    if (!container) return;
+
+    let frame = 0;
+
+    const resetItems = () => {
+      detailItemElements(container).forEach((item) => {
+        item.style.gridRowEnd = '';
+      });
+    };
+
+    const updateRows = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const styles = window.getComputedStyle(container);
+        const columns = styles.gridTemplateColumns.split(' ').filter(Boolean).length;
+        if (columns <= 1) {
+          resetItems();
+          return;
+        }
+
+        const rowHeight = parseFloat(styles.getPropertyValue('--masonry-row-height')) || 8;
+        const rowGap = parseFloat(styles.rowGap) || 0;
+        const rowSize = rowHeight + rowGap;
+
+        detailItemElements(container).forEach((item) => {
+          item.style.gridRowEnd = '';
+          const height = item.getBoundingClientRect().height;
+          const rows = Math.max(1, Math.ceil((height + rowGap) / rowSize));
+          item.style.gridRowEnd = `span ${rows}`;
+        });
+      });
+    };
+
+    updateRows();
+    window.addEventListener('resize', updateRows);
+
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateRows);
+    observer?.observe(container);
+    detailItemElements(container).forEach((item) => observer?.observe(item));
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', updateRows);
+      observer?.disconnect();
+      resetItems();
+    };
+  }, [details]);
+
   return (
-    <div className="detail-items">
+    <div className="detail-items" ref={listRef}>
       {details.map((item) => (
         <DetailItem item={item} key={item.key} />
       ))}
     </div>
   );
+}
+
+function detailItemElements(container: HTMLElement) {
+  return Array.from(container.children).filter((child): child is HTMLElement => child instanceof HTMLElement);
 }
 
 function DetailItem({ item }: { item: GradeDetail }) {

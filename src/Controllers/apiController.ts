@@ -2,6 +2,15 @@ const API_BASE = import.meta.env.VITE_API_BASE || '';
 const ETAG_PREFIX = 'dbback-etag:';
 const swrRequests = new Map<string, Promise<unknown>>();
 
+type ApiPayload = {
+  error?: string;
+};
+
+type ParsedResponse = {
+  json: boolean;
+  payload: ApiPayload;
+};
+
 function etagStorageKey(path: string) {
   return `${ETAG_PREFIX}${path}`;
 }
@@ -31,9 +40,9 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     credentials: 'include',
     headers,
   });
-  const payload = await response.json().catch(() => ({}));
+  const { json, payload } = await parseResponse(response);
   if (!response.ok) {
-    throw new Error(payload.error || 'Nao foi possivel concluir a operacao.');
+    throw new Error(responseErrorMessage(response, payload, json));
   }
   return payload as T;
 }
@@ -73,9 +82,9 @@ async function fetchSWR<T>(path: string, init?: RequestInit): Promise<T | undefi
     return undefined;
   }
 
-  const payload = await response.json().catch(() => ({}));
+  const { json, payload } = await parseResponse(response);
   if (!response.ok) {
-    throw new Error(payload.error || 'Nao foi possivel concluir a operacao.');
+    throw new Error(responseErrorMessage(response, payload, json));
   }
 
   const etag = response.headers.get('ETag');
@@ -97,4 +106,25 @@ function swrRequestKey(path: string, init?: RequestInit) {
   const method = (init?.method || 'GET').toUpperCase();
   if (method !== 'GET' || init?.signal || init?.cache === 'reload') return '';
   return path;
+}
+
+async function parseResponse(response: Response): Promise<ParsedResponse> {
+  const contentType = response.headers.get('Content-Type') || '';
+  if (!contentType.includes('application/json')) {
+    return { json: false, payload: {} };
+  }
+  const payload = await response.json().catch(() => ({}));
+  return { json: true, payload: isApiPayload(payload) ? payload : {} };
+}
+
+function responseErrorMessage(response: Response, payload: ApiPayload, json: boolean) {
+  if (payload.error) return payload.error;
+  if (import.meta.env.DEV && (!json || response.status === 404)) {
+    return 'API local nao respondeu. Abra http://localhost:3000 ou rode npm run dev:full.';
+  }
+  return 'Nao foi possivel concluir a operacao.';
+}
+
+function isApiPayload(payload: unknown): payload is ApiPayload {
+  return Boolean(payload) && typeof payload === 'object';
 }

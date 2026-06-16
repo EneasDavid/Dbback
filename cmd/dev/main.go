@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"strings"
 
 	handler "feedback/api"
@@ -28,6 +29,10 @@ func main() {
 		w.Header().Set("Cache-Control", "no-store")
 		if _, err := os.Stat("dist" + r.URL.Path); err == nil && r.URL.Path != "/" {
 			static.ServeHTTP(w, r)
+			return
+		}
+		if path.Ext(r.URL.Path) != "" {
+			http.NotFound(w, r)
 			return
 		}
 		http.ServeFile(w, r, "dist/index.html")

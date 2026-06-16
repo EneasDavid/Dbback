@@ -151,3 +151,14 @@ func TestLoadConfigDocsCredentials(t *testing.T) {
 		t.Fatalf("docs credentials = %q/%q, want docs/senha", cfg.DocsUsername, cfg.DocsPassword)
 	}
 }
+
+func TestLoadConfigTurnstileSecret(t *testing.T) {
+	t.Setenv("TURNSTILE_SECRET_KEY", "turnstile-secret")
+	t.Setenv("CF_TURNSTILE_SECRET_KEY", "fallback-secret")
+
+	cfg := LoadConfig()
+
+	if cfg.TurnstileSecret != "turnstile-secret" {
+		t.Fatalf("TurnstileSecret = %q, want TURNSTILE_SECRET_KEY", cfg.TurnstileSecret)
+	}
+}

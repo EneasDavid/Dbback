@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -12,21 +13,18 @@ import (
 
 type AuthController struct{}
 
-const maxLoginBodyBytes = 1024
+const maxLoginBodyBytes = 4096
 
 type loginRequest struct {
-	Matricula string `json:"matricula"`
+	Matricula      string `json:"matricula"`
+	TurnstileToken string `json:"turnstileToken"`
 }
 
 func (AuthController) Login(w http.ResponseWriter, r *http.Request) {
 	if !app.Method(w, r, http.MethodPost) {
 		return
 	}
-	_, sessions, sheetsClient, err := app.Bootstrap(r)
-	if err != nil {
-		app.Error(w, err)
-		return
-	}
+	cfg := app.LoadConfig()
 	defer r.Body.Close()
 	var req loginRequest
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxLoginBodyBytes))
@@ -38,6 +36,15 @@ func (AuthController) Login(w http.ResponseWriter, r *http.Request) {
 	matricula, ok := normalizeMatricula(req.Matricula)
 	if !ok {
 		app.Error(w, app.NewHTTPError(400, "informe a matricula"))
+		return
+	}
+	if err := app.ValidateTurnstile(r.Context(), cfg.TurnstileSecret, req.TurnstileToken, turnstileRemoteIP(r)); err != nil {
+		app.Error(w, err)
+		return
+	}
+	_, sessions, sheetsClient, err := app.Bootstrap(r)
+	if err != nil {
+		app.Error(w, err)
 		return
 	}
 	identity, err := sheetsClient.LoginIdentity(r.Context(), matricula)
@@ -84,6 +91,20 @@ func normalizeMatricula(value string) (string, bool) {
 		}
 	}
 	return value, true
+}
+
+func turnstileRemoteIP(r *http.Request) string {
+	if ip := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); ip != "" {
+		return ip
+	}
+	if forwardedFor := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); forwardedFor != "" {
+		firstIP, _, _ := strings.Cut(forwardedFor, ",")
+		return strings.TrimSpace(firstIP)
+	}
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
+	}
+	return strings.TrimSpace(r.RemoteAddr)
 }
 
 func warmGradesAfterLogin(sheetsClient *app.SheetsClient, user app.SessionUser) {

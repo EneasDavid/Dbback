@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { EmptyState, ExamSwitch, GradeCard, InlineError, LoginView, ReaderGradeDocument, ScrollTopButton, SummaryTable, Topbar } from '../Views/components';
 import {
@@ -8,7 +8,6 @@ import {
   gradeKeys,
   gradeLabels,
   hasRenderableGrade,
-  isMediaTable,
   isSessionExpired,
   isSummaryTable,
   matriculasDiffer,
@@ -26,10 +25,14 @@ const DEFAULT_EXAM = 'ab1';
 const ALL_GRADES_PATH = '/api/grades/all';
 const LAST_MATRICULA_KEY = 'dbback-last-matricula';
 const THEME_QUERY = '(prefers-color-scheme: dark)';
+const MULTI_DETAIL_QUERY = '(min-width: 768px), (horizontal-viewport-segments: 2)';
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim() ?? '';
+const TURNSTILE_CONFIG_MESSAGE = 'VITE_TURNSTILE_SITE_KEY nao configurada. Configure o Cloudflare Turnstile para liberar o login.';
 
 type Theme = 'light' | 'dark';
 type Exam = string;
 type GradeActivationMode = 'replace' | 'store';
+type ActiveDetails = Record<string, string>;
 
 function systemTheme(): Theme {
   return window.matchMedia?.(THEME_QUERY).matches ? 'dark' : 'light';
@@ -37,6 +40,10 @@ function systemTheme(): Theme {
 
 function initialTheme(): Theme {
   return systemTheme();
+}
+
+function initialMultiDetailMode() {
+  return window.matchMedia?.(MULTI_DETAIL_QUERY).matches ?? false;
 }
 
 function gradePath(exam: Exam) {
@@ -61,15 +68,44 @@ export default function AppController() {
   const gradesRef = useRef<GradeCache>({});
   const gradesFetchedAtRef = useRef(0);
   const allGradesLoadingRef = useRef(false);
-  const [activeDetail, setActiveDetail] = useState<{ tableKey: string; cardKey: string } | null>(null);
+  const [activeDetails, setActiveDetails] = useState<ActiveDetails>({});
+  const [multiDetailMode, setMultiDetailMode] = useState(() => initialMultiDetailMode());
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const [gradesRefreshing, setGradesRefreshing] = useState(false);
   const [showEmptyState, setShowEmptyState] = useState(false);
   const [error, setError] = useState('');
+  const gradeListRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     gradesRef.current = grades;
   }, [grades]);
+
+  useEffect(() => {
+    const media = window.matchMedia?.(MULTI_DETAIL_QUERY);
+    if (!media) return;
+
+    const syncMultiDetailMode = () => {
+      setMultiDetailMode(media.matches);
+      if (!media.matches) {
+        setActiveDetails((current) => {
+          const openDetails = Object.entries(current);
+          const lastOpenDetail = openDetails[openDetails.length - 1];
+          return lastOpenDetail ? { [lastOpenDetail[0]]: lastOpenDetail[1] } : {};
+        });
+      }
+    };
+
+    syncMultiDetailMode();
+
+    if (media.addEventListener) {
+      media.addEventListener('change', syncMultiDetailMode);
+      return () => media.removeEventListener('change', syncMultiDetailMode);
+    }
+    media.addListener(syncMultiDetailMode);
+    return () => media.removeListener(syncMultiDetailMode);
+  }, []);
 
   const activateGradeResults = useCallback((incoming: GradeCache, cacheKey: string, mode: GradeActivationMode = 'replace') => {
     const allResults = normalizeGradeCache(incoming);
@@ -276,11 +312,59 @@ export default function AppController() {
     [availableExams, grades],
   );
 
-  const activityTables = useMemo(() => visibleTables.filter((table) => !isSummaryTable(table.kind) && cardsFor(table).length > 0), [visibleTables]);
-  const summaryTables = useMemo(() => visibleTables.filter((table) => isSummaryTable(table.kind) && !isMediaTable(table) && cardsFor(table).length > 0), [visibleTables]);
-  const mediaTables = useMemo(() => visibleTables.filter((table) => isMediaTable(table) && cardsFor(table).length > 0), [visibleTables]);
-  const hasRenderableTables = activityTables.length + summaryTables.length + mediaTables.length > 0;
+  const renderableTables = useMemo(() => visibleTables.filter((table) => cardsFor(table).length > 0), [visibleTables]);
+  const hasRenderableTables = renderableTables.length > 0;
   const currentExamLabel = examLabels[exam] || exam.toUpperCase();
+
+  useLayoutEffect(() => {
+    const container = gradeListRef.current;
+    if (!container) return;
+
+    let frame = 0;
+
+    const resetItems = () => {
+      masonryElements(container).forEach((item) => {
+        item.style.gridRowEnd = '';
+      });
+    };
+
+    const updateRows = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const styles = window.getComputedStyle(container);
+        const columns = styles.gridTemplateColumns.split(' ').filter(Boolean).length;
+        if (columns <= 1) {
+          resetItems();
+          return;
+        }
+
+        const rowHeight = parseFloat(styles.getPropertyValue('--masonry-row-height')) || 8;
+        const rowGap = parseFloat(styles.rowGap) || 0;
+        const rowSize = rowHeight + rowGap;
+
+        masonryElements(container).forEach((item) => {
+          item.style.gridRowEnd = '';
+          const height = item.getBoundingClientRect().height;
+          const rows = Math.max(1, Math.ceil((height + rowGap) / rowSize));
+          item.style.gridRowEnd = `span ${rows}`;
+        });
+      });
+    };
+
+    updateRows();
+    window.addEventListener('resize', updateRows);
+
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateRows);
+    observer?.observe(container);
+    masonryElements(container).forEach((item) => observer?.observe(item));
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', updateRows);
+      observer?.disconnect();
+      resetItems();
+    };
+  }, [activeDetails, exam, renderableTables]);
 
   useEffect(() => {
     if (!session || loading || hasRenderableTables) {
@@ -293,25 +377,41 @@ export default function AppController() {
   }, [session, loading, hasRenderableTables, exam]);
 
   const handleToggleDetail = (tableKey: string, cardKey: string) => {
-    setActiveDetail((current) =>
-      current?.tableKey === tableKey && current.cardKey === cardKey ? null : { tableKey, cardKey }
-    );
+    setActiveDetails((current) => {
+      if (current[tableKey] === cardKey) {
+        const next = { ...current };
+        delete next[tableKey];
+        return next;
+      }
+      if (!multiDetailMode) {
+        return { [tableKey]: cardKey };
+      }
+      return { ...current, [tableKey]: cardKey };
+    });
   };
 
   function handleExamChange(nextExam: Exam) {
     setExam(nextExam);
-    setActiveDetail(null);
+    setActiveDetails({});
   }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalizedMatricula = matricula.trim();
+    if (!TURNSTILE_SITE_KEY) {
+      setError(TURNSTILE_CONFIG_MESSAGE);
+      return;
+    }
+    if (TURNSTILE_SITE_KEY && !turnstileToken) {
+      setError('Confirme que voce nao e um robo.');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
       const result = await api<SessionUser>('/api/login', {
         method: 'POST',
-        body: JSON.stringify({ matricula: normalizedMatricula }),
+        body: JSON.stringify({ matricula: normalizedMatricula, turnstileToken }),
       });
       const previousMatricula = window.localStorage.getItem(LAST_MATRICULA_KEY) || '';
       const resolvedMatricula = result.matricula || normalizedMatricula;
@@ -325,11 +425,15 @@ export default function AppController() {
       gradesRef.current = {};
       setGrades({});
       setExamOrder([]);
-      setActiveDetail(null);
+      setActiveDetails({});
+      setTurnstileToken('');
+      setTurnstileResetKey((current) => current + 1);
       setExam(DEFAULT_EXAM);
       setSession(result);
       setMatricula('');
     } catch (err) {
+      setTurnstileToken('');
+      setTurnstileResetKey((current) => current + 1);
       setError(err instanceof Error ? err.message : 'Erro ao entrar.');
     } finally {
       setLoading(false);
@@ -345,6 +449,9 @@ export default function AppController() {
     setSession(null);
     setGrades({});
     setExamOrder([]);
+    setActiveDetails({});
+    setTurnstileToken('');
+    setTurnstileResetKey((current) => current + 1);
     setError('');
   }
 
@@ -358,10 +465,19 @@ export default function AppController() {
         matricula={matricula}
         setMatricula={setMatricula}
         loading={loading}
-        error={error}
+        error={error || (!TURNSTILE_SITE_KEY ? TURNSTILE_CONFIG_MESSAGE : '')}
         theme={theme}
         setTheme={handleThemeChange}
         onSubmit={handleLogin}
+        turnstileSiteKey={TURNSTILE_SITE_KEY}
+        turnstileVerified={Boolean(TURNSTILE_SITE_KEY && turnstileToken)}
+        turnstileResetKey={turnstileResetKey}
+        onTurnstileToken={setTurnstileToken}
+        onTurnstileExpire={() => setTurnstileToken('')}
+        onTurnstileError={() => {
+          setTurnstileToken('');
+          setError('Nao foi possivel confirmar a verificacao anti-robo. Tente novamente.');
+        }}
       />
     );
   }
@@ -377,18 +493,22 @@ export default function AppController() {
 
         {hasRenderableTables ? (
           <>
-            <section className="grade-list" id="grades" aria-live="polite">
-              {activityTables.map((table) => (
-                <GradeCard table={table} key={table.key} activeDetail={activeDetail} onToggleDetail={handleToggleDetail} onPrefetch={prefetchGrades} />
-              ))}
-              {summaryTables.map((table) => (
-                <SummaryTable table={table} key={table.key} />
-              ))}
-              {mediaTables.map((table) => (
-                <SummaryTable table={table} key={table.key} />
-              ))}
+            <section className="grade-list" id="grades" aria-live="polite" ref={gradeListRef}>
+              {renderableTables.map((table) =>
+                isSummaryTable(table.kind) ? (
+                  <SummaryTable table={table} key={table.key} />
+                ) : (
+                  <GradeCard
+                    table={table}
+                    key={table.key}
+                    activeDetail={activeDetails[table.key] ? { tableKey: table.key, cardKey: activeDetails[table.key] } : null}
+                    onToggleDetail={handleToggleDetail}
+                    onPrefetch={prefetchGrades}
+                  />
+                )
+              )}
             </section>
-            <ReaderGradeDocument session={session} examLabel={currentExamLabel} tables={[...activityTables, ...summaryTables, ...mediaTables]} />
+            <ReaderGradeDocument session={session} examLabel={currentExamLabel} tables={renderableTables} />
           </>
         ) : (
           !loading && showEmptyState && <EmptyState exam={exam} />
@@ -397,4 +517,8 @@ export default function AppController() {
       <ScrollTopButton />
     </>
   );
+}
+
+function masonryElements(container: HTMLElement) {
+  return Array.from(container.children).filter((child): child is HTMLElement => child instanceof HTMLElement);
 }

@@ -23,6 +23,7 @@ type Config struct {
 	CookieSecure         bool
 	DocsUsername         string
 	DocsPassword         string
+	TurnstileSecret      string
 	ServiceJSON          string
 	ServiceFile          string
 	CacheTTL             time.Duration
@@ -63,9 +64,13 @@ func LoadConfig() Config {
 		CookieSecure:  strings.EqualFold(firstNonEmpty(os.Getenv("COOKIE_SECURE"), "true"), "true"),
 		DocsUsername:  firstNonEmpty(os.Getenv("DOCS_USERNAME"), os.Getenv("DOCS_USER")),
 		DocsPassword:  firstNonEmpty(os.Getenv("DOCS_PASSWORD"), os.Getenv("DOCS_PASS")),
-		ServiceJSON:   serviceAccountJSON(),
-		ServiceFile:   os.Getenv("GOOGLE_SERVICE_ACCOUNT_FILE"),
-		CacheTTL:      7 * time.Hour,
+		TurnstileSecret: firstNonEmpty(
+			os.Getenv("TURNSTILE_SECRET_KEY"),
+			os.Getenv("CF_TURNSTILE_SECRET_KEY"),
+		),
+		ServiceJSON: serviceAccountJSON(),
+		ServiceFile: os.Getenv("GOOGLE_SERVICE_ACCOUNT_FILE"),
+		CacheTTL:    7 * time.Hour,
 	}
 }
 

@@ -12,9 +12,15 @@ LOGIN_SHEET_NAME=Base de dados
 SESSION_SECRET=<chave-forte>
 COOKIE_SECURE=true
 GOOGLE_SERVICE_ACCOUNT_JSON_BASE64=<json-em-base64>
+TURNSTILE_SECRET_KEY=<secret-key-do-turnstile>
+VITE_TURNSTILE_SITE_KEY=<site-key-publica-do-turnstile>
 ```
 
 Use `GOOGLE_SHEET_LEGACY_IDS` e `GOOGLE_SHEET_V2_IDS` quando planilhas antigas e novas existirem ao mesmo tempo.
+
+O "nao sou um robo" do login e obrigatorio. Configure Cloudflare Turnstile com as duas variaveis. A chave `VITE_TURNSTILE_SITE_KEY` aparece no navegador; `TURNSTILE_SECRET_KEY` fica privada no backend e valida o token antes de qualquer consulta a planilha. Sem uma das duas chaves, o login fica bloqueado por configuracao incompleta.
+
+Para usar chaves reais no `localhost`, adicione `localhost` e `127.0.0.1` ao widget no painel da Cloudflare. Para teste local sem widget real, substitua as duas variaveis pelas chaves dummy oficiais da Cloudflare.
 
 ## Credenciais Google
 
