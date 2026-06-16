@@ -33,7 +33,7 @@ export function LoginView({
   turnstileResetKey: number;
   onTurnstileToken: (token: string) => void;
   onTurnstileExpire: () => void;
-  onTurnstileError: () => void;
+  onTurnstileError: (errorCode?: string) => void;
 }) {
   return (
     <main className="shell login-shell">
@@ -138,7 +138,7 @@ function TurnstileWidget({
   resetKey: number;
   onToken: (token: string) => void;
   onExpire: () => void;
-  onError: () => void;
+  onError: (errorCode?: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const callbacksRef = useRef({ onToken, onExpire, onError });
@@ -162,7 +162,10 @@ function TurnstileWidget({
           size: 'flexible',
           callback: (token: string) => callbacksRef.current.onToken(token),
           'expired-callback': () => callbacksRef.current.onExpire(),
-          'error-callback': () => callbacksRef.current.onError(),
+          'error-callback': (errorCode?: string) => {
+            callbacksRef.current.onError(errorCode);
+            return true;
+          },
         });
       })
       .catch(() => callbacksRef.current.onError());

@@ -34,6 +34,27 @@ type Exam = string;
 type GradeActivationMode = 'replace' | 'store';
 type ActiveDetails = Record<string, string>;
 
+function turnstileErrorMessage(errorCode?: string) {
+  const code = String(errorCode ?? '').trim();
+  const hostname = window.location.hostname || 'este dominio';
+  switch (code) {
+    case '110100':
+    case '110110':
+    case '400020':
+      return `Site key do Turnstile invalida ou nao encontrada (${code}). Confira VITE_TURNSTILE_SITE_KEY no Vercel e no painel da Cloudflare.`;
+    case '110200':
+      return `Turnstile nao autorizado para ${hostname} (${code}). Adicione este hostname no Cloudflare Turnstile > Hostname Management.`;
+    case '400070':
+      return `A site key do Turnstile esta desativada (${code}). Reative o widget no painel da Cloudflare ou troque as chaves no Vercel.`;
+    case '200500':
+      return `O navegador nao conseguiu carregar o iframe do Turnstile (${code}). Verifique bloqueadores/extensoes ou acesso a challenges.cloudflare.com.`;
+    default:
+      return code
+        ? `Nao foi possivel confirmar a verificacao anti-robo. Codigo Turnstile: ${code}.`
+        : 'Nao foi possivel confirmar a verificacao anti-robo. Tente novamente.';
+  }
+}
+
 function systemTheme(): Theme {
   return window.matchMedia?.(THEME_QUERY).matches ? 'dark' : 'light';
 }
@@ -474,9 +495,9 @@ export default function AppController() {
         turnstileResetKey={turnstileResetKey}
         onTurnstileToken={setTurnstileToken}
         onTurnstileExpire={() => setTurnstileToken('')}
-        onTurnstileError={() => {
+        onTurnstileError={(errorCode) => {
           setTurnstileToken('');
-          setError('Nao foi possivel confirmar a verificacao anti-robo. Tente novamente.');
+          setError(turnstileErrorMessage(errorCode));
         }}
       />
     );
