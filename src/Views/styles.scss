@@ -726,6 +726,10 @@ input:focus-visible {
   overflow: visible;
 }
 
+.scoreless-activity {
+  scroll-margin-top: calc(var(--tabs-sticky-offset) + var(--tabs-sticky-height) + 14px);
+}
+
 .scoreless-activity-trigger {
   display: flex;
   align-items: center;

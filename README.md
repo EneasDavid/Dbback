@@ -126,7 +126,7 @@ VITE_TURNSTILE_SITE_KEY=<site-key-publica-do-cloudflare-turnstile>
 
 Tambem configure no ambiente as credenciais de Basic Auth da documentacao da API. O projeto nao aceita credenciais padrao para essa rota.
 
-O "nao sou um robo" do login e obrigatorio. Configure as duas variaveis do Cloudflare Turnstile: a `VITE_TURNSTILE_SITE_KEY` e publica e renderiza o widget no navegador; a `TURNSTILE_SECRET_KEY` fica somente no backend e faz o `POST /api/login` validar o token antes de acessar Google Sheets. Sem uma das duas chaves, o login fica bloqueado por configuracao incompleta.
+O "nao sou um robo" do login e ativado quando as variaveis do Cloudflare Turnstile estao configuradas. A `VITE_TURNSTILE_SITE_KEY` e publica e renderiza o widget no navegador; a `TURNSTILE_SECRET_KEY` fica somente no backend e faz o `POST /api/login` validar o token antes de acessar Google Sheets. Sem essas chaves, o app nao renderiza o widget e o backend pula a validacao, o que facilita desenvolvimento local.
 
 Para testar localmente sem criar chaves reais, substitua as duas variaveis pelas chaves de teste oficiais da Cloudflare:
 
@@ -135,7 +135,7 @@ VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA
 TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
 ```
 
-Em producao, substitua por chaves reais do widget e restrinja os hostnames no painel da Cloudflare. Se usar chaves reais no desenvolvimento local, adicione `localhost` e `127.0.0.1` ao widget no painel da Cloudflare.
+Em producao, configure chaves reais do widget e restrinja os hostnames no painel da Cloudflare. Se usar chaves reais no desenvolvimento local, adicione `localhost` e `127.0.0.1` ao widget no painel da Cloudflare.
 
 Ativacao:
 

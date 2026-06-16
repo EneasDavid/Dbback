@@ -30,7 +30,7 @@ type turnstileVerifyResponse struct {
 func ValidateTurnstile(ctx context.Context, secret string, token string, remoteIP string) error {
 	secret = strings.TrimSpace(secret)
 	if secret == "" {
-		return NewHTTPError(http.StatusInternalServerError, "TURNSTILE_SECRET_KEY nao configurado")
+		return nil
 	}
 
 	token = strings.TrimSpace(token)

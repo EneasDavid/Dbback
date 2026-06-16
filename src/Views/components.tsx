@@ -340,10 +340,26 @@ export function GradeCard({
   const cards = cardsFor(table);
   const activeCard = cards.find((card) => card.key === activeKey);
   const scorelessCard = table.scoreless ? cards.find((card) => card.details?.length) || cards[0] : undefined;
+  const scorelessExpanded = Boolean(scorelessCard && activeKey === scorelessCard.key);
+  const scorelessArticleRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!scorelessExpanded) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const article = scorelessArticleRef.current;
+      if (!article) return;
+
+      const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      article.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'start' });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [scorelessExpanded, scorelessCard?.key, table.key]);
+
   if (scorelessCard) {
-    const expanded = activeKey === scorelessCard.key;
     return (
-      <article className={`grade-table ${table.kind} scoreless-activity ${expanded ? 'activity-open' : ''}`}>
+      <article className={`grade-table ${table.kind} scoreless-activity ${scorelessExpanded ? 'activity-open' : ''}`} ref={scorelessArticleRef}>
         <button
           type="button"
           className="scoreless-activity-trigger"
@@ -351,16 +367,16 @@ export function GradeCard({
           onMouseEnter={onPrefetch}
           onFocus={onPrefetch}
           aria-controls={detailPanelId(table.key, scorelessCard.key)}
-          aria-expanded={expanded}
-          aria-label={`${expanded ? 'Fechar' : 'Abrir'} critérios de ${table.label}`}
+          aria-expanded={scorelessExpanded}
+          aria-label={`${scorelessExpanded ? 'Fechar' : 'Abrir'} critérios de ${table.label}`}
         >
           <div>
             <h2>{table.label}</h2>
             {table.status && <span className="table-status">{table.status}</span>}
           </div>
-          <ChevronRight size={20} className={expanded ? 'rotated' : ''} />
+          <ChevronRight size={20} className={scorelessExpanded ? 'rotated' : ''} />
         </button>
-        {expanded && <GradeDetailPanel tableKey={table.key} card={scorelessCard} autoScroll={false} />}
+        {scorelessExpanded && <GradeDetailPanel tableKey={table.key} card={scorelessCard} autoScroll={false} />}
       </article>
     );
   }

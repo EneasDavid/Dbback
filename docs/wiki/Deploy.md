@@ -22,7 +22,7 @@ Mantenha `VITE_API_BASE` vazio quando frontend e `/api/*` estiverem no mesmo pro
 - Google Drive API habilitada se comentarios ricos forem necessarios.
 - Planilha compartilhada com o `client_email`.
 - `SESSION_SECRET` forte configurado.
-- Cloudflare Turnstile obrigatorio configurado com site key publica e secret key privada.
+- Cloudflare Turnstile configurado em producao com site key publica e secret key privada.
 - Credenciais de Basic Auth para `/api/docs` configuradas.
 - `COOKIE_SECURE=true` em producao.
 

@@ -27,7 +27,6 @@ const LAST_MATRICULA_KEY = 'dbback-last-matricula';
 const THEME_QUERY = '(prefers-color-scheme: dark)';
 const MULTI_DETAIL_QUERY = '(min-width: 768px), (horizontal-viewport-segments: 2)';
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim() ?? '';
-const TURNSTILE_CONFIG_MESSAGE = 'VITE_TURNSTILE_SITE_KEY nao configurada. Configure o Cloudflare Turnstile para liberar o login.';
 
 type Theme = 'light' | 'dark';
 type Exam = string;
@@ -419,10 +418,6 @@ export default function AppController() {
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalizedMatricula = matricula.trim();
-    if (!TURNSTILE_SITE_KEY) {
-      setError(TURNSTILE_CONFIG_MESSAGE);
-      return;
-    }
     if (TURNSTILE_SITE_KEY && !turnstileToken) {
       setError('Confirme que voce nao e um robo.');
       return;
@@ -432,7 +427,10 @@ export default function AppController() {
     try {
       const result = await api<SessionUser>('/api/login', {
         method: 'POST',
-        body: JSON.stringify({ matricula: normalizedMatricula, turnstileToken }),
+        body: JSON.stringify({
+          matricula: normalizedMatricula,
+          ...(TURNSTILE_SITE_KEY ? { turnstileToken } : {}),
+        }),
       });
       const previousMatricula = window.localStorage.getItem(LAST_MATRICULA_KEY) || '';
       const resolvedMatricula = result.matricula || normalizedMatricula;
@@ -486,12 +484,12 @@ export default function AppController() {
         matricula={matricula}
         setMatricula={setMatricula}
         loading={loading}
-        error={error || (!TURNSTILE_SITE_KEY ? TURNSTILE_CONFIG_MESSAGE : '')}
+        error={error}
         theme={theme}
         setTheme={handleThemeChange}
         onSubmit={handleLogin}
         turnstileSiteKey={TURNSTILE_SITE_KEY}
-        turnstileVerified={Boolean(TURNSTILE_SITE_KEY && turnstileToken)}
+        turnstileVerified={Boolean(!TURNSTILE_SITE_KEY || turnstileToken)}
         turnstileResetKey={turnstileResetKey}
         onTurnstileToken={setTurnstileToken}
         onTurnstileExpire={() => setTurnstileToken('')}

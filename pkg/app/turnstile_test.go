@@ -9,15 +9,10 @@ import (
 	"testing"
 )
 
-func TestValidateTurnstileRequiresConfiguredSecret(t *testing.T) {
+func TestValidateTurnstileSkipsWhenSecretIsNotConfigured(t *testing.T) {
 	err := ValidateTurnstile(context.Background(), "", "", "")
-	if err == nil {
-		t.Fatal("ValidateTurnstile() error = nil, want missing secret error")
-	}
-
-	var httpErr HTTPError
-	if !errors.As(err, &httpErr) || httpErr.Status != http.StatusInternalServerError {
-		t.Fatalf("ValidateTurnstile() error = %#v, want 500 HTTPError", err)
+	if err != nil {
+		t.Fatalf("ValidateTurnstile() error = %v, want nil when secret is not configured", err)
 	}
 }
 
