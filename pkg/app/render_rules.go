@@ -283,6 +283,8 @@ func summaryCardLabel(header string) string {
 		return "Total"
 	case strings.Contains(label, "projeto"):
 		return "Projeto"
+	case strings.Contains(label, "trabalho"):
+		return "Trabalho"
 	default:
 		return humanizeLabel(header)
 	}
@@ -433,8 +435,11 @@ func projectMainColumn(header string) bool {
 		label == "total" ||
 		strings.Contains(label, "media") ||
 		label == "projeto" ||
+		label == "trabalho" ||
 		strings.HasPrefix(label, "projeto ab") ||
-		strings.HasPrefix(label, "nota projeto")
+		strings.HasPrefix(label, "nota projeto") ||
+		strings.HasPrefix(label, "trabalho ab") ||
+		strings.HasPrefix(label, "nota trabalho")
 }
 
 func projectDetailColumn(header string) bool {
@@ -476,6 +481,7 @@ func isGradeLabel(label string) bool {
 		normalized == "total" ||
 		strings.Contains(normalized, "media") ||
 		strings.Contains(normalized, "projeto") ||
+		strings.Contains(normalized, "trabalho") ||
 		isActivityColumn(label)
 }
 

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -337,13 +338,82 @@ func matchingSheetName(values []string, target string) (string, bool) {
 			return value, true
 		}
 	}
-	normalizedTarget := normalizeHeader(target)
 	for _, value := range values {
-		if normalizeHeader(value) == normalizedTarget {
+		if sheetNameMatches(value, target) {
 			return value, true
 		}
 	}
 	return "", false
+}
+
+func sheetNameMatches(configured string, actual string) bool {
+	configured = strings.TrimSpace(configured)
+	actual = strings.TrimSpace(actual)
+	if configured == "" || actual == "" {
+		return false
+	}
+	normalizedConfigured := normalizeHeader(configured)
+	normalizedActual := normalizeHeader(actual)
+	if normalizedConfigured == normalizedActual {
+		return true
+	}
+	if hasSheetNamePrefix(normalizedActual, normalizedConfigured) {
+		return true
+	}
+	if hasSheetNameInfix(normalizedActual, normalizedConfigured) {
+		return true
+	}
+	return hasSheetNamePrefix(compactSheetName(normalizedActual), compactSheetName(normalizedConfigured))
+}
+
+func hasSheetNamePrefix(actual string, configured string) bool {
+	if configured == "" || !strings.HasPrefix(actual, configured) {
+		return false
+	}
+	if len(actual) == len(configured) {
+		return true
+	}
+	next := []rune(actual[len(configured):])
+	if len(next) == 0 {
+		return true
+	}
+	return !unicode.IsLetter(next[0]) && !unicode.IsDigit(next[0])
+}
+
+func hasSheetNameInfix(actual string, configured string) bool {
+	if configured == "" {
+		return false
+	}
+	searchStart := 0
+	for {
+		idx := strings.Index(actual[searchStart:], configured)
+		if idx < 0 {
+			return false
+		}
+		start := searchStart + idx
+		end := start + len(configured)
+		if sheetNameBoundary(actual, start-1) && sheetNameBoundary(actual, end) {
+			return true
+		}
+		searchStart = start + 1
+	}
+}
+
+func sheetNameBoundary(value string, idx int) bool {
+	if idx < 0 || idx >= len(value) {
+		return true
+	}
+	runes := []rune(value[idx:])
+	return len(runes) == 0 || (!unicode.IsLetter(runes[0]) && !unicode.IsDigit(runes[0]))
+}
+
+func compactSheetName(value string) string {
+	return strings.Map(func(char rune) rune {
+		if unicode.IsSpace(char) {
+			return -1
+		}
+		return char
+	}, value)
 }
 
 func (c *SheetsClient) spreadsheetResponses(ctx context.Context, spreadsheetID string, ranges []string) ([]*sheets.Spreadsheet, error) {
@@ -382,7 +452,7 @@ func (c *SheetsClient) spreadsheetResponses(ctx context.Context, spreadsheetID s
 }
 
 func (c *SheetsClient) spreadsheetByLooseRange(ctx context.Context, spreadsheetID string, rangeName string) (*sheets.Spreadsheet, error) {
-	target := normalizeHeader(unquoteSheetRange(rangeName))
+	target := unquoteSheetRange(rangeName)
 	if target == "" {
 		return nil, NewHTTPError(404, "aba nao encontrada")
 	}
@@ -398,7 +468,7 @@ func (c *SheetsClient) spreadsheetByLooseRange(ctx context.Context, spreadsheetI
 			continue
 		}
 		title := strings.TrimSpace(sheet.Properties.Title)
-		if normalizeHeader(title) != target {
+		if !sheetNameMatches(target, title) {
 			continue
 		}
 		return c.service.Spreadsheets.Get(spreadsheetID).

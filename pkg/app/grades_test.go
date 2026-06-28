@@ -153,3 +153,32 @@ func TestAddScoreAverageWaitsForEveryActivityToEnd(t *testing.T) {
 		}
 	}
 }
+
+func TestConfiguredActivitiesCompleteIgnoresMissingOptionalActivity(t *testing.T) {
+	tables := []TableResult{
+		{Key: "at4", Kind: "activity", Complete: true},
+	}
+	configured := []TableConfig{
+		{Key: "at4", Kind: "activity"},
+		{Key: "at5", Kind: "activity", Optional: true},
+	}
+
+	if !configuredActivitiesComplete(configured, tables) {
+		t.Fatal("missing optional activity should not block score average")
+	}
+}
+
+func TestConfiguredActivitiesCompleteWaitsForPresentOptionalActivity(t *testing.T) {
+	tables := []TableResult{
+		{Key: "at4", Kind: "activity", Complete: true},
+		{Key: "at5", Kind: "activity", Complete: false, Status: "Não encerrado"},
+	}
+	configured := []TableConfig{
+		{Key: "at4", Kind: "activity"},
+		{Key: "at5", Kind: "activity", Optional: true},
+	}
+
+	if configuredActivitiesComplete(configured, tables) {
+		t.Fatal("present optional activity should block score average until it is complete")
+	}
+}

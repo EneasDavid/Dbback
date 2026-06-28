@@ -497,6 +497,43 @@ func TestSummaryPayloadHidesActivityColumns(t *testing.T) {
 	}
 }
 
+func TestAB2SummaryPayloadKeepsAB2GradeColumns(t *testing.T) {
+	grid := &sheetGrid{
+		headers: []string{"Nome", "Matricula", "AT. 4", "Projeto AB2", "Trabalho AB2", "Total"},
+		rows: [][]string{
+			{"Alice", "123", "0,8", "3", "2", "5,8"},
+		},
+		rowNotes: [][]string{
+			{"", "", "", "", "", ""},
+		},
+		rowNoteAuthors: [][]string{
+			{"", "", "", "", "", ""},
+		},
+	}
+
+	table, found, err := parseStudentTable(grid, TableConfig{
+		Key:       "notas-ab2",
+		Label:     "Notas AB2",
+		SheetName: "Notas AB2",
+		Kind:      "ab2summary",
+	}, SessionUser{Name: "Alice", Matricula: "123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("student row was not found")
+	}
+	if len(table.Cards) != 4 {
+		t.Fatalf("cards len = %d, want 4: %#v", len(table.Cards), table.Cards)
+	}
+	wantLabels := []string{"Atividade 4", "Projeto", "Trabalho", "Total"}
+	for idx, want := range wantLabels {
+		if table.Cards[idx].Label != want {
+			t.Fatalf("cards[%d].Label = %q, want %q: %#v", idx, table.Cards[idx].Label, want, table.Cards)
+		}
+	}
+}
+
 func TestSummaryPayloadHidesGeneralFormulaComment(t *testing.T) {
 	grid := &sheetGrid{
 		headers:     []string{"Nome", "Matricula", "Prova"},

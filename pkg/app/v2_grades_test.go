@@ -616,11 +616,88 @@ func TestRuntimeForUserPreservesLegacySessionWithV2Config(t *testing.T) {
 	}
 }
 
+func TestRuntimeForUserPreservesLegacySessionWithAutoConfig(t *testing.T) {
+	got := runtimeForUser(Config{RuntimeVersion: "auto"}, SessionUser{SchemaStatus: "legacy"})
+
+	if got != "legacy" {
+		t.Fatalf("runtimeForUser() = %q, want legacy", got)
+	}
+}
+
 func TestRuntimeForUserUsesForcedV2Config(t *testing.T) {
 	got := runtimeForUser(Config{RuntimeVersion: "v2"}, SessionUser{})
 
 	if got != "v2" {
 		t.Fatalf("runtimeForUser() = %q, want v2", got)
+	}
+}
+
+func TestConfiguredRuntimeKeepsExplicitLegacyUserOnLegacyTables(t *testing.T) {
+	client := autoClientWithEmptyV2AndLegacyGrade()
+
+	result, err := client.gradeForConfiguredRuntime(t.Context(), "ab1", SessionUser{Matricula: "123", Name: "Alice", SchemaStatus: "legacy"})
+	if err != nil {
+		t.Fatalf("gradeForConfiguredRuntime() error = %v", err)
+	}
+	if len(result.Tables) == 0 || result.Tables[0].Key != "legacy-ab1" {
+		t.Fatalf("gradeForConfiguredRuntime() = %#v, want legacy table", result)
+	}
+}
+
+func TestConfiguredRuntimeFallsBackToLegacyWhenAutoV2IsEmpty(t *testing.T) {
+	client := autoClientWithEmptyV2AndLegacyGrade()
+
+	result, err := client.gradeForConfiguredRuntime(t.Context(), "ab1", SessionUser{Matricula: "123", Name: "Alice"})
+	if err != nil {
+		t.Fatalf("gradeForConfiguredRuntime() error = %v", err)
+	}
+	if len(result.Tables) == 0 || result.Tables[0].Key != "legacy-ab1" {
+		t.Fatalf("gradeForConfiguredRuntime() = %#v, want legacy table", result)
+	}
+}
+
+func TestConfiguredRuntimeAllFallsBackToLegacyWhenAutoV2IsEmpty(t *testing.T) {
+	client := autoClientWithEmptyV2AndLegacyGrade()
+
+	results, err := client.gradesForConfiguredRuntime(t.Context(), []string{"ab1", "ab2"}, SessionUser{Matricula: "123", Name: "Alice"})
+	if err != nil {
+		t.Fatalf("gradesForConfiguredRuntime() error = %v", err)
+	}
+	if len(results["ab1"].Tables) == 0 || results["ab1"].Tables[0].Key != "legacy-ab1" {
+		t.Fatalf("gradesForConfiguredRuntime() = %#v, want legacy ab1 table", results)
+	}
+}
+
+func autoClientWithEmptyV2AndLegacyGrade() *SheetsClient {
+	return &SheetsClient{
+		cfg: Config{
+			RuntimeVersion: "auto",
+			AB1Tables:      []TableConfig{{Key: "legacy-ab1", Label: "Legacy AB1", SheetName: "Legacy AB1", Kind: "activity"}},
+		},
+		cache: map[string]cachedGrid{
+			v2ABsSheet: {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"AB", "status"},
+					rows:    [][]string{{"AB1", "1"}},
+				},
+			},
+			v2ActivitiesSheet: {
+				expires: time.Now().Add(time.Hour),
+				grid:    &sheetGrid{headers: []string{"atividade", "AB"}, rows: [][]string{{"Pesquisa", "AB1"}}},
+			},
+			"nota ab1": {
+				expires: time.Now().Add(time.Hour),
+				grid:    &sheetGrid{headers: []string{"Matrícula", "Pesquisa"}, rows: [][]string{}},
+			},
+			"Legacy AB1": {
+				expires: time.Now().Add(time.Hour),
+				grid: &sheetGrid{
+					headers: []string{"Grupo", "Critério"},
+					rows:    [][]string{{"Nota máxima", "1"}, {"Alice", "1"}},
+				},
+			},
+		},
 	}
 }
 

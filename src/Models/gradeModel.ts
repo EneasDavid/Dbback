@@ -154,7 +154,7 @@ function normalizeGradeTable(table: LegacyGradeTable): GradeTable {
       .filter(Boolean)
       .map((card, index) => normalizeGradeCard(card, index))
       .filter((card) => !isPendingAverageCard(table, card))
-      .filter((card) => !isSummaryTable(table.kind) || isMediaTable(table) || isVisibleSummaryCard(card)),
+      .filter((card) => !isSummaryTable(table.kind) || isMediaTable(table) || isVisibleSummaryCard(table, card)),
   };
 }
 
@@ -283,8 +283,20 @@ function isPendingAverageCard(table: GradeTable, card: { label?: string; display
   return (label.includes('média') || label.includes('media')) && (value.includes('não corrigida') || value.includes('em correção') || value.includes('em correcao'));
 }
 
-function isVisibleSummaryCard(card: { label?: string }) {
+function isVisibleSummaryCard(table: GradeTable, card: { label?: string }) {
   const label = normalized(card.label || '');
+  if (table.kind === 'ab2summary') {
+    return label.includes('prova') ||
+      label.includes('media') ||
+      label.includes('somatorio') ||
+      label.includes('atividade') ||
+      label.startsWith('at.') ||
+      label.startsWith('at ') ||
+      label.includes('projeto') ||
+      label.includes('trabalho') ||
+      label === 'total' ||
+      label.includes('nota');
+  }
   return label.includes('prova') || label.includes('media') || label.includes('somatorio');
 }
 
@@ -378,6 +390,7 @@ function isGradeLabel(label: string) {
     value === 'total' ||
     value.includes('media') ||
     value.includes('projeto') ||
+    value.includes('trabalho') ||
     value.startsWith('at.') ||
     value.startsWith('at ') ||
     value.includes('atividade');

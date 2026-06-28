@@ -76,9 +76,6 @@ func (c *SheetsClient) gradeForConfiguredRuntime(ctx context.Context, exam strin
 		}
 		return result, nil
 	case "legacy":
-		if c.detectsSpreadsheetSchema() && c.hasV2Schema(ctx) {
-			return c.gradeForV2(ctx, exam, user)
-		}
 		return c.gradeForLegacy(ctx, exam, user)
 	}
 	if c.detectsSpreadsheetSchema() {
@@ -87,6 +84,10 @@ func (c *SheetsClient) gradeForConfiguredRuntime(ctx context.Context, exam strin
 			return result, nil
 		}
 		if err == nil && c.hasV2Schema(ctx) {
+			legacy, legacyErr := c.gradeForLegacy(ctx, exam, user)
+			if legacyErr == nil && hasTables(legacy) {
+				return legacy, nil
+			}
 			return result, nil
 		}
 		if err != nil && c.hasV2Schema(ctx) {
@@ -107,7 +108,7 @@ func (c *SheetsClient) gradeForLegacy(ctx context.Context, exam string, user Ses
 	if err != nil {
 		return GradeResult{}, err
 	}
-	if err := c.loadSheets(ctx, sheetNamesForTables(tables)); err != nil {
+	if err := c.loadSheets(ctx, requiredSheetNamesForTables(tables)); err != nil {
 		return GradeResult{}, err
 	}
 	return c.gradeForTables(ctx, exam, tables, user)
@@ -170,13 +171,21 @@ func (c *SheetsClient) gradesForConfiguredRuntime(ctx context.Context, exams []s
 		}
 		return results, nil
 	case "legacy":
-		if c.detectsSpreadsheetSchema() && c.hasV2Schema(ctx) {
-			return c.gradesForRuntimeV2(ctx, exams, user)
-		}
 		return c.gradesForLegacy(ctx, exams, user)
 	}
 	if c.detectsSpreadsheetSchema() {
-		return c.gradesForRuntimeV2(ctx, exams, user)
+		results, err := c.gradesForRuntimeV2(ctx, exams, user)
+		if err != nil {
+			return nil, err
+		}
+		if hasAnyGradeTables(results) {
+			return results, nil
+		}
+		legacy, legacyErr := c.gradesForLegacy(ctx, exams, user)
+		if legacyErr == nil && hasAnyGradeTables(legacy) {
+			return legacy, nil
+		}
+		return results, nil
 	}
 	return c.gradesForLegacy(ctx, exams, user)
 }
@@ -240,9 +249,6 @@ func runtimeForUser(cfg Config, user SessionUser) string {
 	case "v2":
 		return "v2"
 	case "legacy":
-		if cfgRuntime == "auto" {
-			return ""
-		}
 		return "legacy"
 	}
 	if cfgRuntime == "v1" || cfgRuntime == "legacy" {
@@ -264,7 +270,7 @@ func (c *SheetsClient) gradesForLegacy(ctx context.Context, exams []string, user
 			return nil, err
 		}
 		tablesByExam[exam] = tables
-		allSheetNames = append(allSheetNames, sheetNamesForTables(tables)...)
+		allSheetNames = append(allSheetNames, requiredSheetNamesForTables(tables)...)
 	}
 	if err := c.loadSheets(ctx, allSheetNames); err != nil {
 		return nil, err
@@ -442,6 +448,9 @@ func (c *SheetsClient) gradeForTables(ctx context.Context, exam string, tables [
 			defer func() { <-sem }()
 			tableResult, found, err := c.gradeTableFor(ctx, table, user)
 			if err != nil {
+				if table.Optional && isNotFound(err) {
+					return
+				}
 				select {
 				case errCh <- err:
 				default:
@@ -602,9 +611,20 @@ func applyRowCommentToCards(cards []CardResult, comment string, author string) {
 }
 
 func sheetNamesForTables(tables []TableConfig) []string {
+	return configuredSheetNamesForTables(tables, false)
+}
+
+func requiredSheetNamesForTables(tables []TableConfig) []string {
+	return configuredSheetNamesForTables(tables, true)
+}
+
+func configuredSheetNamesForTables(tables []TableConfig, requiredOnly bool) []string {
 	names := make([]string, 0, len(tables))
 	seen := map[string]bool{}
 	for _, table := range tables {
+		if requiredOnly && table.Optional {
+			continue
+		}
 		name := strings.TrimSpace(table.SheetName)
 		if name == "" || seen[name] {
 			continue
@@ -619,7 +639,7 @@ func cardsForStudentCells(table TableConfig, cells []studentCell) []CardResult {
 	if table.Kind == "summary" || table.Kind == "ab2summary" {
 		cards := make([]CardResult, 0, len(cells))
 		for _, cell := range cells {
-			if !shouldShowSummaryCard(cell) {
+			if !shouldShowSummaryCard(table.Kind, cell) {
 				continue
 			}
 			if isAverageColumn(cell.Header) && isPendingValue(cell.Value) {
@@ -666,7 +686,10 @@ func projectCards(table TableConfig, cells []studentCell) []CardResult {
 	return nil
 }
 
-func shouldShowSummaryCard(cell studentCell) bool {
+func shouldShowSummaryCard(tableKind string, cell studentCell) bool {
+	if tableKind == "ab2summary" {
+		return shouldShowColumn(cell.Header) && hasVisibleCellData(cell)
+	}
 	return shouldShowColumn(cell.Header) &&
 		hasVisibleCellData(cell) &&
 		(isProofColumn(cell.Header) || isAverageColumn(cell.Header))
@@ -696,10 +719,16 @@ func summaryCardOrder(label string) int {
 		return 1
 	case strings.Contains(normalized, "media"):
 		return 2
-	case strings.Contains(normalized, "at."):
+	case strings.Contains(normalized, "at.") || strings.Contains(normalized, "atividade"):
 		return 3
-	default:
+	case strings.Contains(normalized, "projeto"):
 		return 4
+	case strings.Contains(normalized, "trabalho"):
+		return 5
+	case normalized == "total":
+		return 6
+	default:
+		return 7
 	}
 }
 
@@ -796,6 +825,9 @@ func configuredActivitiesComplete(configured []TableConfig, tables []TableResult
 		}
 		hasActivity = true
 		table, found := tablesByKey[config.Key]
+		if !found && config.Optional {
+			continue
+		}
 		if !found || !activityTableComplete(table) {
 			return false
 		}
@@ -888,6 +920,7 @@ func ab2MainScoreCard(card CardResult) bool {
 	return label == "nota" ||
 		label == "total" ||
 		strings.Contains(label, "projeto") ||
+		strings.Contains(label, "trabalho") ||
 		strings.Contains(label, "atividade") ||
 		strings.HasPrefix(label, "at.")
 }

@@ -13,9 +13,12 @@ func includeColumn(kind string, header string) bool {
 		normalized := normalizeHeader(header)
 		return normalized == "atividade" ||
 			normalized == "projeto" ||
+			normalized == "trabalho" ||
 			normalized == "total" ||
 			strings.Contains(normalized, "nota") ||
 			strings.Contains(normalized, "media") ||
+			strings.Contains(normalized, "projeto") ||
+			strings.Contains(normalized, "trabalho") ||
 			isActivityColumn(header)
 	default:
 		return true
@@ -25,8 +28,10 @@ func includeColumn(kind string, header string) bool {
 func tableComplete(grid *sheetGrid, table TableConfig) bool {
 	var idx int
 	switch table.Kind {
-	case "summary", "ab2summary":
+	case "summary":
 		idx = totalABColumn(grid.headers)
+	case "ab2summary":
+		idx = firstExistingColumn(totalABColumn(grid.headers), totalColumn(grid.headers))
 	case "project":
 		idx = totalColumn(grid.headers)
 	default:
@@ -46,6 +51,15 @@ func tableComplete(grid *sheetGrid, table TableConfig) bool {
 		}
 	}
 	return true
+}
+
+func firstExistingColumn(indexes ...int) int {
+	for _, idx := range indexes {
+		if idx >= 0 {
+			return idx
+		}
+	}
+	return -1
 }
 
 func matriculaColumn(headers []string) int {

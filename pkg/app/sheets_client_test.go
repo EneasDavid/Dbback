@@ -75,6 +75,26 @@ func TestRequiresDriveCommentsSkipsControlSheets(t *testing.T) {
 	}
 }
 
+func TestSheetNameMatchesLegacyActivityTabsWithDescriptions(t *testing.T) {
+	cases := []struct {
+		configured string
+		actual     string
+		want       bool
+	}{
+		{"AT. 4", "AT. 4 (Álgebra Relacional)", true},
+		{"AT. 5", "AT.5 (Mapeamento)", true},
+		{"AT. 6", "AT. 6 (SQL)", true},
+		{"Projeto AB2", "Acompanhamento Projeto AB2", true},
+		{"AT. 1", "AT. 10", false},
+	}
+
+	for _, tc := range cases {
+		if got := sheetNameMatches(tc.configured, tc.actual); got != tc.want {
+			t.Fatalf("sheetNameMatches(%q, %q) = %t, want %t", tc.configured, tc.actual, got, tc.want)
+		}
+	}
+}
+
 func TestSheetReadErrorExplainsServiceAccountPermission(t *testing.T) {
 	err := sheetReadError(&googleapi.Error{Code: http.StatusForbidden})
 
