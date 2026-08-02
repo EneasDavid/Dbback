@@ -2,6 +2,18 @@ const API_BASE = import.meta.env.VITE_API_BASE || '';
 const ETAG_PREFIX = 'dbback-etag:';
 const swrRequests = new Map<string, Promise<unknown>>();
 
+// Carrega o status HTTP junto do erro para permitir tratamento diferenciado
+// (ex. 429/503 tratados como falha temporaria, com mensagem amigavel).
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 type ApiPayload = {
   error?: string;
 };
@@ -42,7 +54,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   });
   const { json, payload } = await parseResponse(response);
   if (!response.ok) {
-    throw new Error(responseErrorMessage(response, payload, json));
+    throw new ApiError(responseErrorMessage(response, payload, json), response.status);
   }
   return payload as T;
 }
@@ -84,7 +96,7 @@ async function fetchSWR<T>(path: string, init?: RequestInit): Promise<T | undefi
 
   const { json, payload } = await parseResponse(response);
   if (!response.ok) {
-    throw new Error(responseErrorMessage(response, payload, json));
+    throw new ApiError(responseErrorMessage(response, payload, json), response.status);
   }
 
   const etag = response.headers.get('ETag');

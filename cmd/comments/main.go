@@ -51,7 +51,10 @@ func main() {
 		return
 	}
 
-	sheetNames := configuredGradeSheets(cfg)
+	sheetNames, err := client.V2ConfiguredSheetNames(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
 	comments, err := client.LoadSheetFeedbacks(ctx, sheetNames)
 	if err != nil {
 		log.Fatal(err)
@@ -148,20 +151,6 @@ func printStudentFeedbacks(ctx context.Context, client *app.SheetsClient, matric
 	}
 	fmt.Printf("Comentários renderizados: %d\n", total)
 	return nil
-}
-
-func configuredGradeSheets(cfg app.Config) []string {
-	seen := map[string]bool{}
-	var sheetNames []string
-	for _, table := range append(cfg.AB1Tables, cfg.AB2Tables...) {
-		sheetName := strings.TrimSpace(table.SheetName)
-		if sheetName == "" || seen[sheetName] {
-			continue
-		}
-		seen[sheetName] = true
-		sheetNames = append(sheetNames, sheetName)
-	}
-	return sheetNames
 }
 
 func emptyFallback(value string, fallback string) string {

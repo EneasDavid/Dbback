@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +25,11 @@ import (
 const (
 	v2GradeSheetCacheTTL = 30 * time.Second
 	v2CommentsCacheTTL   = time.Minute
+	// schemaStatusV2 e o unico valor de schema suportado: nao ha mais
+	// deteccao de "legado x v2" por developer metadata, entao toda planilha
+	// lida carrega esse valor fixo (o campo continua na API por
+	// compatibilidade com o frontend/cookie de sessao existentes).
+	schemaStatusV2 = "v2"
 )
 
 type SheetsClient struct {
@@ -150,7 +156,7 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 			driveComments := <-driveCommentsCh
 			workbookComments := <-workbookCommentsCh
 			for _, resp := range responses {
-				schemaStatus := c.schemaStatusForSpreadsheet(resp.DeveloperMetadata)
+				schemaStatus := schemaStatusV2
 				for _, sheet := range resp.Sheets {
 					if sheet == nil || sheet.Properties == nil {
 						continue
@@ -193,27 +199,18 @@ func (c *SheetsClient) loadSheets(ctx context.Context, sheetNames []string) erro
 }
 
 func (c *SheetsClient) sheetCacheTTL(sheetName string) time.Duration {
-	ttl := c.cfg.CacheTTL
 	normalized := normalizeHeader(sheetName)
-	isControlSheet := normalized == v2ABsSheet ||
-		normalized == v2ActivitiesSheet ||
-		strings.HasPrefix(normalized, "nota ")
-	isV2GradeSheet := c.isV2Runtime() && normalized != normalizeHeader(c.cfg.LoginSheet)
-	if isControlSheet || isV2GradeSheet {
-		return cappedCacheTTL(ttl, v2GradeSheetCacheTTL)
+	if normalized == normalizeHeader(c.cfg.LoginSheet) {
+		return c.cfg.CacheTTL
 	}
-	return ttl
+	// Toda aba de notas/controle do modelo v2 (abs, atividades, nota <ab> e
+	// as abas de cada atividade) muda com frequencia - cache curto para
+	// refletir lancamentos novos rapido.
+	return cappedCacheTTL(c.cfg.CacheTTL, v2GradeSheetCacheTTL)
 }
 
 func (c *SheetsClient) commentsCacheTTL() time.Duration {
-	if c.isV2Runtime() {
-		return cappedCacheTTL(c.cfg.CacheTTL, v2CommentsCacheTTL)
-	}
-	return c.cfg.CacheTTL
-}
-
-func (c *SheetsClient) isV2Runtime() bool {
-	return strings.EqualFold(strings.TrimSpace(c.cfg.RuntimeVersion), "v2")
+	return cappedCacheTTL(c.cfg.CacheTTL, v2CommentsCacheTTL)
 }
 
 func cappedCacheTTL(ttl time.Duration, maximum time.Duration) time.Duration {
@@ -417,11 +414,7 @@ func compactSheetName(value string) string {
 }
 
 func (c *SheetsClient) spreadsheetResponses(ctx context.Context, spreadsheetID string, ranges []string) ([]*sheets.Spreadsheet, error) {
-	resp, err := c.service.Spreadsheets.Get(spreadsheetID).
-		Ranges(ranges...).
-		Fields(sheetsGridFields).
-		Context(ctx).
-		Do()
+	resp, err := c.getSpreadsheetWithRetry(ctx, spreadsheetID, ranges)
 	if err == nil {
 		return []*sheets.Spreadsheet{resp}, nil
 	}
@@ -431,11 +424,7 @@ func (c *SheetsClient) spreadsheetResponses(ctx context.Context, spreadsheetID s
 
 	var responses []*sheets.Spreadsheet
 	for _, rangeName := range ranges {
-		resp, err := c.service.Spreadsheets.Get(spreadsheetID).
-			Ranges(rangeName).
-			Fields(sheetsGridFields).
-			Context(ctx).
-			Do()
+		resp, err := c.getSpreadsheetWithRetry(ctx, spreadsheetID, []string{rangeName})
 		if err != nil {
 			if isGoogleBadRequest(err) {
 				resp, looseErr := c.spreadsheetByLooseRange(ctx, spreadsheetID, rangeName)
@@ -449,6 +438,53 @@ func (c *SheetsClient) spreadsheetResponses(ctx context.Context, spreadsheetID s
 		responses = append(responses, resp)
 	}
 	return responses, nil
+}
+
+// getSpreadsheetWithRetry tenta uma unica vez a mais quando o Google retorna
+// HTTP 429 (limite de requisicoes), respeitando o cabecalho Retry-After
+// quando presente, para reduzir a chance de o erro chegar ate o aluno.
+func (c *SheetsClient) getSpreadsheetWithRetry(ctx context.Context, spreadsheetID string, ranges []string) (*sheets.Spreadsheet, error) {
+	resp, err := c.service.Spreadsheets.Get(spreadsheetID).
+		Ranges(ranges...).
+		Fields(sheetsGridFields).
+		Context(ctx).
+		Do()
+	if err == nil || !isRateLimitedError(err) {
+		return resp, err
+	}
+	select {
+	case <-time.After(retryDelayForRateLimit(err)):
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return c.service.Spreadsheets.Get(spreadsheetID).
+		Ranges(ranges...).
+		Fields(sheetsGridFields).
+		Context(ctx).
+		Do()
+}
+
+func isRateLimitedError(err error) bool {
+	var apiErr *googleapi.Error
+	return errors.As(err, &apiErr) && apiErr.Code == http.StatusTooManyRequests
+}
+
+func retryDelayForRateLimit(err error) time.Duration {
+	const maxRetryDelay = 1500 * time.Millisecond
+	const defaultRetryDelay = 400 * time.Millisecond
+	var apiErr *googleapi.Error
+	if errors.As(err, &apiErr) {
+		if raw := strings.TrimSpace(apiErr.Header.Get("Retry-After")); raw != "" {
+			if seconds, parseErr := strconv.Atoi(raw); parseErr == nil && seconds > 0 {
+				delay := time.Duration(seconds) * time.Second
+				if delay > maxRetryDelay {
+					delay = maxRetryDelay
+				}
+				return delay
+			}
+		}
+	}
+	return defaultRetryDelay
 }
 
 func (c *SheetsClient) spreadsheetByLooseRange(ctx context.Context, spreadsheetID string, rangeName string) (*sheets.Spreadsheet, error) {
@@ -503,52 +539,6 @@ func skippableSpreadsheetReadError(err error) bool {
 		apiErr.Code == http.StatusBadRequest
 }
 
-func (c *SheetsClient) schemaStatusForSpreadsheet(metadata []*sheets.DeveloperMetadata) string {
-	if strings.EqualFold(strings.TrimSpace(c.cfg.RuntimeVersion), "legacy") || strings.EqualFold(strings.TrimSpace(c.cfg.RuntimeVersion), "v1") {
-		return "legacy"
-	}
-	if !c.detectsSpreadsheetSchema() {
-		return ""
-	}
-	runtimeVersion := strings.ToLower(strings.TrimSpace(c.cfg.RuntimeVersion))
-	expectedKey := strings.TrimSpace(c.cfg.MetadataKey)
-	expectedValue := strings.TrimSpace(c.cfg.MetadataValue)
-	if expectedKey == "" || expectedValue == "" {
-		if runtimeVersion == "auto" {
-			return ""
-		}
-		return "legacy"
-	}
-	foundMetadataKey := false
-	for _, item := range metadata {
-		if item == nil {
-			continue
-		}
-		if strings.TrimSpace(item.MetadataKey) == expectedKey {
-			foundMetadataKey = true
-			if strings.TrimSpace(item.MetadataValue) == expectedValue {
-				return "v2"
-			}
-		}
-	}
-	if foundMetadataKey {
-		return "legacy"
-	}
-	if runtimeVersion == "auto" {
-		return ""
-	}
-	return ""
-}
-
-func (c *SheetsClient) detectsSpreadsheetSchema() bool {
-	switch strings.ToLower(strings.TrimSpace(c.cfg.RuntimeVersion)) {
-	case "v2", "auto":
-		return true
-	default:
-		return false
-	}
-}
-
 func mergeSheetGrid(base *sheetGrid, next *sheetGrid) *sheetGrid {
 	if next == nil {
 		return base
@@ -567,7 +557,7 @@ func mergeSheetGrid(base *sheetGrid, next *sheetGrid) *sheetGrid {
 	base.rowSources = append(base.rowSources, next.rowSources...)
 	base.rowSchemas = append(base.rowSchemas, next.rowSchemas...)
 	base.spreadsheetID = mergeSourceValue(base.spreadsheetID, next.spreadsheetID)
-	base.schemaStatus = mergeSchemaStatus(base.schemaStatus, next.schemaStatus)
+	base.schemaStatus = schemaStatusV2
 	return base
 }
 
@@ -606,18 +596,6 @@ func mergeSourceValue(left string, right string) string {
 	return left + "," + right
 }
 
-func mergeSchemaStatus(left string, right string) string {
-	left = strings.TrimSpace(left)
-	right = strings.TrimSpace(right)
-	if left == "legacy" || right == "legacy" {
-		return "legacy"
-	}
-	if left == "" {
-		return right
-	}
-	return left
-}
-
 func sheetReadError(err error) error {
 	var apiErr *googleapi.Error
 	if errors.As(err, &apiErr) {
@@ -630,6 +608,8 @@ func sheetReadError(err error) error {
 			return NewHTTPError(http.StatusNotFound, "planilha nao encontrada; confira GOOGLE_SHEET_ID ou GOOGLE_SHEET_IDS")
 		case http.StatusBadRequest:
 			return NewHTTPError(http.StatusBadRequest, "nao conseguiu ler as abas configuradas; confira os nomes das abas no ambiente")
+		case http.StatusTooManyRequests:
+			return NewHTTPError(http.StatusServiceUnavailable, "limite de requisicoes do Google Sheets atingido; tente novamente em instantes")
 		default:
 			return NewHTTPError(http.StatusServiceUnavailable, fmt.Sprintf("nao conseguiu ler dados da planilha: Google API HTTP %d", apiErr.Code))
 		}
@@ -638,7 +618,7 @@ func sheetReadError(err error) error {
 }
 
 var sheetsGridFields = googleapi.Field(
-	"developerMetadata(metadataKey,metadataValue),sheets(properties(title,sheetId),merges(startRowIndex,endRowIndex,startColumnIndex,endColumnIndex),data(startRow,startColumn,rowData(values(formattedValue,note,userEnteredValue))))",
+	"sheets(properties(title,sheetId),merges(startRowIndex,endRowIndex,startColumnIndex,endColumnIndex),data(startRow,startColumn,rowData(values(formattedValue,note,userEnteredValue))))",
 )
 
 const driveReadonlyScope = "https://www.googleapis.com/auth/drive.readonly"

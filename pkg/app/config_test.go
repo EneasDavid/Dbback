@@ -55,7 +55,6 @@ func TestValidateExplainsMissingServiceAccountFileOnVercel(t *testing.T) {
 func TestValidateExplainsMissingSpreadsheetID(t *testing.T) {
 	t.Setenv("GOOGLE_SHEET_ID", "")
 	t.Setenv("GOOGLE_SHEET_IDS", "")
-	t.Setenv("GOOGLE_SHEET_LEGACY_IDS", "")
 	t.Setenv("GOOGLE_SHEET_V2_IDS", "")
 	t.Setenv("SESSION_SECRET", "test-secret")
 	t.Setenv("GOOGLE_SERVICE_ACCOUNT_JSON", testServiceAccountJSON)
@@ -77,100 +76,21 @@ func TestValidateExplainsMissingSpreadsheetID(t *testing.T) {
 }
 
 func TestLoadConfigAcceptsMultipleSpreadsheetIDs(t *testing.T) {
-	t.Setenv("GOOGLE_SHEET_ID", "legacy-id")
+	t.Setenv("GOOGLE_SHEET_ID", "generic-id")
 	t.Setenv("GOOGLE_SHEET_IDS", " sheet-a, sheet-b ;sheet-a\nsheet-c ")
-	t.Setenv("GOOGLE_SHEET_LEGACY_IDS", "legacy-extra")
 	t.Setenv("GOOGLE_SHEET_V2_IDS", "v2-a; sheet-b")
 
 	cfg := LoadConfig()
 
-	want := []string{"legacy-extra", "v2-a", "sheet-b", "legacy-id", "sheet-a", "sheet-c"}
+	want := []string{"v2-a", "sheet-b", "generic-id", "sheet-a", "sheet-c"}
 	if strings.Join(cfg.SpreadsheetIDs, ",") != strings.Join(want, ",") {
-		t.Fatalf("SpreadsheetIDs = %#v, want %#v (order: LEGACY_IDS, V2_IDS, GOOGLE_SHEET_ID, GOOGLE_SHEET_IDS)", cfg.SpreadsheetIDs, want)
+		t.Fatalf("SpreadsheetIDs = %#v, want %#v (order: V2_IDS, GOOGLE_SHEET_ID, GOOGLE_SHEET_IDS)", cfg.SpreadsheetIDs, want)
 	}
-	if cfg.SpreadsheetID != "legacy-extra" {
-		t.Fatalf("SpreadsheetID = %q, want first legacy id", cfg.SpreadsheetID)
-	}
-	if strings.Join(cfg.LegacySpreadsheetIDs, ",") != "legacy-extra" {
-		t.Fatalf("LegacySpreadsheetIDs = %#v", cfg.LegacySpreadsheetIDs)
+	if cfg.SpreadsheetID != "v2-a" {
+		t.Fatalf("SpreadsheetID = %q, want first v2 id", cfg.SpreadsheetID)
 	}
 	if strings.Join(cfg.V2SpreadsheetIDs, ",") != "v2-a,sheet-b" {
 		t.Fatalf("V2SpreadsheetIDs = %#v", cfg.V2SpreadsheetIDs)
-	}
-}
-
-func TestLoadConfigScoreDivisors(t *testing.T) {
-	cfg := LoadConfig()
-
-	for _, table := range cfg.AB1Tables {
-		if table.Kind == "activity" && table.ScoreDivisor != 10 {
-			t.Fatalf("%s ScoreDivisor = %v, want 10", table.Key, table.ScoreDivisor)
-		}
-	}
-	for _, table := range cfg.AB2Tables {
-		switch table.Key {
-		case "at4", "at5", "at6":
-			if table.ScoreDivisor != 10 {
-				t.Fatalf("%s ScoreDivisor = %v, want 10", table.Key, table.ScoreDivisor)
-			}
-		case "projeto", "trabalho", "notas-ab2":
-			if table.ScoreDivisor != 1 {
-				t.Fatalf("%s ScoreDivisor = %v, want 1", table.Key, table.ScoreDivisor)
-			}
-		}
-	}
-}
-
-func TestLoadConfigLegacyAB2DefaultTables(t *testing.T) {
-	cfg := LoadConfig()
-
-	want := map[string]struct {
-		sheet    string
-		kind     string
-		optional bool
-	}{
-		"at4":       {"AT. 4", "activity", false},
-		"at5":       {"AT. 5", "activity", true},
-		"at6":       {"AT. 6", "activity", true},
-		"projeto":   {"Projeto AB2", "project", false},
-		"trabalho":  {"Trabalho AB2", "project", true},
-		"notas-ab2": {"Notas AB2", "ab2summary", true},
-	}
-
-	for _, table := range cfg.AB2Tables {
-		expected, ok := want[table.Key]
-		if !ok {
-			continue
-		}
-		if table.SheetName != expected.sheet || table.Kind != expected.kind || table.Optional != expected.optional {
-			t.Fatalf("%s config = %#v, want sheet %q kind %q optional %t", table.Key, table, expected.sheet, expected.kind, expected.optional)
-		}
-		delete(want, table.Key)
-	}
-	if len(want) > 0 {
-		t.Fatalf("missing AB2 tables: %#v", want)
-	}
-}
-
-func TestLoadConfigActivityLabelsAreUserFacing(t *testing.T) {
-	cfg := LoadConfig()
-	want := map[string]string{
-		"at1": "Atividade 1",
-		"at2": "Atividade 2",
-		"at3": "Atividade 3",
-		"at4": "Atividade 4",
-		"at5": "Atividade 5",
-		"at6": "Atividade 6",
-	}
-
-	for _, table := range append(cfg.AB1Tables, cfg.AB2Tables...) {
-		expected, ok := want[table.Key]
-		if !ok {
-			continue
-		}
-		if table.Label != expected {
-			t.Fatalf("%s label = %q, want %q", table.Key, table.Label, expected)
-		}
 	}
 }
 

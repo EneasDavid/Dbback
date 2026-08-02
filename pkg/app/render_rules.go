@@ -36,15 +36,6 @@ type activityItem struct {
 	CommentAuthor string
 }
 
-type studentCell struct {
-	Key           string
-	Header        string
-	Label         string
-	Value         string
-	Comment       string
-	CommentAuthor string
-}
-
 func makeCard(key string, label string, value string, comment string, commentAuthor string, details []DetailResult) CardResult {
 	return CardResult{
 		Key:           key,
@@ -68,83 +59,6 @@ func activityDetails(items []activityItem) []DetailResult {
 		detail := scoreDetail(item.Key, strings.TrimSpace(item.Subtopic), item.NotaAlcancada, maximum)
 		detail.Comment = item.Comment
 		detail.CommentAuthor = item.CommentAuthor
-		details = append(details, detail)
-	}
-	return details
-}
-
-func activityItemsForWeight(items []activityItem, weight float64) []activityItem {
-	if weight <= 0 {
-		return items
-	}
-	totalMaximum := 0.0
-	for _, item := range items {
-		if normalizeHeader(item.Subtopic) == "total" {
-			continue
-		}
-		if maximum, ok := parseScore(item.NotaMaxima); ok && maximum > 0 {
-			totalMaximum += maximum
-		}
-	}
-
-	normalized := append([]activityItem(nil), items...)
-	for idx, item := range normalized {
-		maximum, ok := parseScore(item.NotaMaxima)
-		if !ok || maximum <= 0 {
-			continue
-		}
-		if normalizeHeader(item.Subtopic) == "total" {
-			normalized[idx].NotaAlcancada = normalizedScore(item.NotaAlcancada, maximum, weight)
-			normalized[idx].NotaMaxima = formatNumber(weight)
-			continue
-		}
-		if totalMaximum <= 0 {
-			continue
-		}
-		value := normalizedScore(item.NotaAlcancada, maximum, maximum)
-		normalized[idx].NotaAlcancada = normalizedScore(value, totalMaximum, weight)
-		normalized[idx].NotaMaxima = formatNumber(normalizedMaximum(maximum, totalMaximum, weight))
-	}
-	return normalized
-}
-
-func activityItemsForDivisor(items []activityItem, divisor float64) []activityItem {
-	if divisor <= 1 {
-		return items
-	}
-	normalized := append([]activityItem(nil), items...)
-	for idx, item := range normalized {
-		maximum, ok := parseScore(item.NotaMaxima)
-		if !ok || maximum <= 0 {
-			continue
-		}
-		normalized[idx].NotaAlcancada = normalizedScore(item.NotaAlcancada, maximum, maximum/divisor)
-		normalized[idx].NotaMaxima = formatNumber(maximum / divisor)
-	}
-	return normalized
-}
-
-func columnDetails(cells []studentCell) []DetailResult {
-	return cellDetails(cells, isDetailOnlyColumn)
-}
-
-func projectDetails(cells []studentCell) []DetailResult {
-	return cellDetails(cells, projectDetailColumn)
-}
-
-func cellDetails(cells []studentCell, include func(string) bool) []DetailResult {
-	details := make([]DetailResult, 0, len(cells))
-	for _, cell := range cells {
-		if !include(cell.Header) {
-			continue
-		}
-		maximum := inferMaxForLabel(cell.Header)
-		if maximum <= 0 {
-			maximum = 1
-		}
-		detail := scoreDetail(cell.Key, cell.Label, cell.Value, maximum)
-		detail.Comment = cell.Comment
-		detail.CommentAuthor = cell.CommentAuthor
 		details = append(details, detail)
 	}
 	return details
@@ -270,52 +184,6 @@ func activityCardTone(status string, tone string) string {
 	return tone
 }
 
-func summaryCardLabel(header string) string {
-	label := normalizeHeader(header)
-	switch {
-	case strings.Contains(label, "prova"):
-		return "Prova AB"
-	case isAverageColumn(header):
-		return "Média AB"
-	case isActivityColumn(header):
-		return activityLabel(header)
-	case label == "total":
-		return "Total"
-	case strings.Contains(label, "projeto"):
-		return "Projeto"
-	case strings.Contains(label, "trabalho"):
-		return "Trabalho"
-	default:
-		return humanizeLabel(header)
-	}
-}
-
-func cardLabel(header string) string {
-	label := normalizeHeader(header)
-	switch {
-	case strings.HasPrefix(label, "semana"):
-		return humanizeLabel(header)
-	case isQuestionLabel(label):
-		return questionLabel(label)
-	case label == "sgbd":
-		return "SGBD"
-	case label == "dataset":
-		return "Dataset"
-	case label == "crud":
-		return "CRUD"
-	case strings.Contains(label, "apresentacao"):
-		return "Apresentação"
-	case strings.Contains(label, "organizacao"):
-		return "Organização"
-	case strings.Contains(label, "referencias"):
-		return "Referências"
-	case strings.Contains(label, "discussao"):
-		return "Discussão em aula"
-	default:
-		return humanizeLabel(header)
-	}
-}
-
 func humanizeLabel(label string) string {
 	words := strings.Fields(strings.TrimSpace(label))
 	for idx, word := range words {
@@ -350,22 +218,6 @@ func humanizeLabel(label string) string {
 		}
 	}
 	return strings.Join(words, " ")
-}
-
-func activityLabel(label string) string {
-	normalized := normalizeHeader(label)
-	switch {
-	case strings.HasPrefix(normalized, "at."):
-		return "Atividade " + strings.TrimSpace(strings.TrimPrefix(normalized, "at."))
-	case strings.HasPrefix(normalized, "at "):
-		return "Atividade " + strings.TrimSpace(strings.TrimPrefix(normalized, "at "))
-	case strings.Contains(normalized, "atividade"):
-		suffix := strings.TrimSpace(strings.TrimPrefix(normalized, "atividade"))
-		if suffix != "" {
-			return "Atividade " + suffix
-		}
-	}
-	return strings.ToUpper(strings.TrimSpace(label))
 }
 
 func questionLabel(label string) string {
@@ -408,68 +260,9 @@ func shouldShowColumn(header string) bool {
 		label != "aluno"
 }
 
-func shouldShowMainCard(header string) bool {
-	if !shouldShowColumn(header) || isDetailOnlyColumn(header) {
-		return false
-	}
-	label := normalizeHeader(header)
-	if strings.Contains(label, "at. 4") || strings.Contains(label, "atividade 4") {
-		return true
-	}
-	return label == "nota" ||
-		strings.Contains(label, "prova") ||
-		label == "total" ||
-		strings.Contains(label, "media") ||
-		isActivityColumn(header) ||
-		strings.Contains(label, "projeto") ||
-		label == "ab1" ||
-		label == "ab2"
-}
-
-func projectMainColumn(header string) bool {
-	if !shouldShowColumn(header) {
-		return false
-	}
-	label := normalizeHeader(header)
-	return label == "nota" ||
-		label == "total" ||
-		strings.Contains(label, "media") ||
-		label == "projeto" ||
-		label == "trabalho" ||
-		strings.HasPrefix(label, "projeto ab") ||
-		strings.HasPrefix(label, "nota projeto") ||
-		strings.HasPrefix(label, "trabalho ab") ||
-		strings.HasPrefix(label, "nota trabalho")
-}
-
-func projectDetailColumn(header string) bool {
-	return shouldShowColumn(header) && !projectMainColumn(header)
-}
-
-func isDetailOnlyColumn(header string) bool {
-	label := normalizeHeader(header)
-	return strings.HasPrefix(label, "semana") ||
-		label == "sgbd" ||
-		label == "dataset" ||
-		label == "crud" ||
-		strings.Contains(label, "apresentacao") ||
-		strings.Contains(label, "organizacao") ||
-		isQuestionLabel(label)
-}
-
 func isActivityColumn(header string) bool {
 	label := normalizeHeader(header)
 	return strings.HasPrefix(label, "at.") || strings.HasPrefix(label, "at ") || strings.Contains(label, "atividade")
-}
-
-func isAverageColumn(header string) bool {
-	label := normalizeHeader(header)
-	return strings.Contains(label, "media")
-}
-
-func isProofColumn(header string) bool {
-	label := normalizeHeader(header)
-	return strings.Contains(label, "prova")
 }
 
 func isGradeLabel(label string) bool {
@@ -510,13 +303,6 @@ func formatGradeNumber(value float64) string {
 
 func scoreComparisonDisplay(obtained float64, maximum float64) string {
 	return formatGradeNumber(obtained) + " de " + formatGradeNumber(maximum)
-}
-
-func canonicalCriterionMaximum(label string, sourceMaximum float64) float64 {
-	if maximum := inferMaxForLabel(label); maximum > 0 {
-		return maximum
-	}
-	return sourceMaximum
 }
 
 func usesOfficialQuestionWeights(labels []string) bool {
@@ -561,8 +347,11 @@ func inferMaxForLabel(label string) float64 {
 	return 0
 }
 
+// compareDetailLabels ordena critérios/questões de forma canônica (Questão 1,
+// 2, 3... em sequência, com os critérios nomeados numa ordem fixa) já que a
+// ordem das colunas na planilha nem sempre segue essa sequência.
 func compareDetailLabels(left string, right string) int {
-	order := []string{"organizacao", "q.1", "q.2", "q.3", "q.4", "q.5", "q.6", "semana 1", "semana 2", "semana 3", "semana 4", "sgbd", "dataset", "crud", "apresentacao", "referencias", "discussao"}
+	order := []string{"organizacao", "adequacao", "q.1", "q.2", "q.3", "q.4", "q.5", "q.6", "semana 1", "semana 2", "semana 3", "semana 4", "sgbd", "dataset", "crud", "apresentacao", "referencias", "discussao"}
 	leftLabel := normalizeHeader(left)
 	rightLabel := normalizeHeader(right)
 	if key := questionScoreKey(leftLabel); key != "" {
@@ -573,6 +362,12 @@ func compareDetailLabels(left string, right string) int {
 	}
 	leftIdx := orderIndex(order, leftLabel)
 	rightIdx := orderIndex(order, rightLabel)
+	if leftIdx == -1 && rightIdx == -1 {
+		// Nenhum dos dois é um critério reconhecido (ex. nome de critério
+		// livre/customizado) - mantém a ordem original das colunas em vez de
+		// reordenar alfabeticamente, que seria arbitrário e imprevisível.
+		return 0
+	}
 	if leftIdx != rightIdx {
 		if leftIdx == -1 {
 			return 1
@@ -580,9 +375,17 @@ func compareDetailLabels(left string, right string) int {
 		if rightIdx == -1 {
 			return -1
 		}
-		return leftIdx - rightIdx
 	}
-	return strings.Compare(leftLabel, rightLabel)
+	return leftIdx - rightIdx
+}
+
+func orderIndex(order []string, label string) int {
+	for idx, item := range order {
+		if strings.Contains(label, item) {
+			return idx
+		}
+	}
+	return -1
 }
 
 func questionScoreKey(label string) string {
@@ -614,13 +417,4 @@ func questionScoreKey(label string) string {
 		return "q." + label
 	}
 	return ""
-}
-
-func orderIndex(order []string, label string) int {
-	for idx, item := range order {
-		if strings.Contains(label, item) {
-			return idx
-		}
-	}
-	return -1
 }

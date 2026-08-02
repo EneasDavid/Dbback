@@ -746,7 +746,12 @@ input:focus-visible {
 }
 
 .scoreless-activity-trigger > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .scoreless-activity-trigger svg {
@@ -767,10 +772,6 @@ input:focus-visible {
 .scoreless-activity:not(.activity-open) .scoreless-activity-trigger {
   padding-bottom: 0;
   border-bottom-color: transparent;
-}
-
-.scoreless-activity .detail-panel {
-  margin-bottom: 0;
 }
 
 .activity-sticky-block {
@@ -805,12 +806,18 @@ input:focus-visible {
   color: var(--text);
   font-size: 1.05rem;
   letter-spacing: 0;
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 
+// A tag de status (ex. "Encerrado") fica sempre no lado oposto ao nome da
+// atividade, na mesma linha: o pai (header / .scoreless-activity-trigger > div)
+// e flex com justify-content: space-between, entao title=inicio, tag=fim.
 .table-status {
   display: inline-flex;
+  flex-shrink: 0;
   width: fit-content;
-  margin-top: 8px;
+  white-space: nowrap;
   padding: 5px 9px;
   border-radius: 999px;
   color: var(--muted-strong);
@@ -1051,15 +1058,20 @@ input:focus-visible {
   background: var(--pending-bg);
 }
 
+// O painel de critérios fica sempre dentro do mesmo cartão da nota (não é uma
+// caixa separada): ele ocupa a borda do .grade-table pai (margem negativa
+// cancelando o padding do card) e herda o fundo/raio do card, em vez de ter
+// sua própria borda/sombra/raio - visualmente é um quadrado só, com o
+// dropdown da nota e os critérios avaliados como seções da mesma superfície.
 .detail-panel {
-  margin: 10px 0 18px;
-  padding: 14px;
-  max-width: 100%;
-  border-radius: 24px;
-  background: color-mix(in srgb, var(--panel-soft) 76%, var(--panel));
-  border: 1px solid var(--border);
+  margin: 0 -16px -16px;
+  padding: 14px 16px 16px;
+  max-width: none;
+  border-radius: 0 0 28px 28px;
+  background: transparent;
+  border: 0;
   overflow: hidden;
-  box-shadow: var(--shadow-soft), var(--inner-highlight);
+  box-shadow: none;
 }
 
 .detail-header {

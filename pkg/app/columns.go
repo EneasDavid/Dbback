@@ -2,66 +2,9 @@ package app
 
 import "strings"
 
-func includeColumn(kind string, header string) bool {
-	if strings.TrimSpace(header) == "" {
-		return false
-	}
-	switch kind {
-	case "summary":
-		return true
-	case "ab2summary":
-		normalized := normalizeHeader(header)
-		return normalized == "atividade" ||
-			normalized == "projeto" ||
-			normalized == "trabalho" ||
-			normalized == "total" ||
-			strings.Contains(normalized, "nota") ||
-			strings.Contains(normalized, "media") ||
-			strings.Contains(normalized, "projeto") ||
-			strings.Contains(normalized, "trabalho") ||
-			isActivityColumn(header)
-	default:
-		return true
-	}
-}
-
-func tableComplete(grid *sheetGrid, table TableConfig) bool {
-	var idx int
-	switch table.Kind {
-	case "summary":
-		idx = totalABColumn(grid.headers)
-	case "ab2summary":
-		idx = firstExistingColumn(totalABColumn(grid.headers), totalColumn(grid.headers))
-	case "project":
-		idx = totalColumn(grid.headers)
-	default:
-		return true
-	}
-	if idx < 0 {
-		return false
-	}
-	nameIdx := nameColumn(grid.headers)
-	matriculaIdx := matriculaColumn(grid.headers)
-	for _, row := range grid.rows {
-		if !studentRow(row, nameIdx, matriculaIdx) {
-			continue
-		}
-		if strings.TrimSpace(valueAt(row, idx)) == "" {
-			return false
-		}
-	}
-	return true
-}
-
-func firstExistingColumn(indexes ...int) int {
-	for _, idx := range indexes {
-		if idx >= 0 {
-			return idx
-		}
-	}
-	return -1
-}
-
+// matriculaColumn e nameColumn usam apenas correspondencia exata contra os
+// nomes aceitos - cabecalhos de login/identificacao do aluno sao obrigatorios
+// e nao devem ser adivinhados por aproximacao de texto.
 func matriculaColumn(headers []string) int {
 	candidates := []string{"matricula", "matrícula", "mat", "registro", "ra"}
 	for idx, header := range headers {
@@ -70,11 +13,6 @@ func matriculaColumn(headers []string) int {
 			if normalized == normalizeHeader(candidate) {
 				return idx
 			}
-		}
-	}
-	for idx, header := range headers {
-		if strings.Contains(normalizeHeader(header), "matric") {
-			return idx
 		}
 	}
 	return -1
@@ -90,12 +28,6 @@ func nameColumn(headers []string) int {
 			}
 		}
 	}
-	for idx, header := range headers {
-		normalized := normalizeHeader(header)
-		if strings.Contains(normalized, "nome") || strings.Contains(normalized, "aluno") {
-			return idx
-		}
-	}
 	return -1
 }
 
@@ -109,28 +41,17 @@ func groupColumn(headers []string) int {
 	return -1
 }
 
-func exactNameColumn(headers []string) int {
-	candidates := []string{"nome", "aluno", "estudante", "discente", "nome completo", "nome do aluno", "nome do aluno(a)"}
-	for idx, header := range headers {
-		normalized := normalizeHeader(header)
-		for _, candidate := range candidates {
-			if normalized == normalizeHeader(candidate) {
-				return idx
-			}
-		}
-	}
-	return -1
-}
-
+// headerScore ajuda parseGrid a localizar a linha de cabecalho real dentro
+// de uma aba (linhas de titulo/instrucoes acima dela pontuam menos) - isso e
+// deteccao de posicao da linha, nao adivinhacao de qual coluna e qual, entao
+// fica fora do escopo de "cabecalho obrigatorio".
 func headerScore(headers []string) int {
 	score := 0
 	if matriculaColumn(headers) >= 0 {
 		score += 3
 	}
-	if exactNameColumn(headers) >= 0 {
+	if nameColumn(headers) >= 0 {
 		score += 4
-	} else if nameColumn(headers) >= 0 {
-		score++
 	}
 	for _, header := range headers {
 		if summaryColumn(header) {
@@ -152,15 +73,6 @@ func totalABColumn(headers []string) int {
 	for idx, header := range headers {
 		normalized := normalizeHeader(header)
 		if strings.Contains(normalized, "nota") && strings.Contains(normalized, "ab") {
-			return idx
-		}
-	}
-	return -1
-}
-
-func totalColumn(headers []string) int {
-	for idx, header := range headers {
-		if normalizeHeader(header) == "total" {
 			return idx
 		}
 	}

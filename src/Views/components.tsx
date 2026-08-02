@@ -560,10 +560,8 @@ function SummaryScoreCard({ card, fallbackLabel }: { card: GradeCardData; fallba
 function GradeTableHeader({ table }: { table: GradeTable }) {
   return (
     <header>
-      <div>
-        <h2>{table.label}</h2>
-        {table.status && <span className="table-status">{table.status}</span>}
-      </div>
+      <h2>{table.label}</h2>
+      {table.status && <span className="table-status">{table.status}</span>}
     </header>
   );
 }

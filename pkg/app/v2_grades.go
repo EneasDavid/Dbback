@@ -57,7 +57,10 @@ func (c *SheetsClient) v2ExamKeys(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	abs := v2ABs(abGrid)
+	abs, err := v2ABs(abGrid)
+	if err != nil {
+		return nil, err
+	}
 	keys := make([]string, 0, len(abs))
 	for _, ab := range abs {
 		if !ab.Active {
@@ -66,14 +69,6 @@ func (c *SheetsClient) v2ExamKeys(ctx context.Context) ([]string, error) {
 		keys = append(keys, ab.Key)
 	}
 	return keys, nil
-}
-
-func (c *SheetsClient) hasV2Schema(ctx context.Context) bool {
-	if err := c.loadSheets(ctx, []string{v2ABsSheet}); err != nil {
-		return false
-	}
-	abGrid, err := c.loadSheet(ctx, v2ABsSheet)
-	return err == nil && len(v2ABs(abGrid)) > 0
 }
 
 func (c *SheetsClient) emptyGradeResultForV2(ctx context.Context, exam string, user SessionUser) GradeResult {
@@ -85,7 +80,7 @@ func (c *SheetsClient) emptyGradeResultForV2(ctx context.Context, exam string, u
 	if err != nil {
 		return result
 	}
-	if ab, found := v2ResolveAB(abGrid, exam); found {
+	if ab, found, err := v2ResolveAB(abGrid, exam); err == nil && found {
 		result.Exam = ab.Label
 		result.Active = v2GradeActive(ab.Active)
 		result.SchemaStatus = abGrid.schemaStatus
@@ -103,7 +98,10 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 	if err != nil {
 		return GradeResult{}, err
 	}
-	ab, found := v2ResolveAB(abGrid, exam)
+	ab, found, err := v2ResolveAB(abGrid, exam)
+	if err != nil {
+		return GradeResult{}, err
+	}
 	if !found {
 		return GradeResult{}, NewHTTPError(400, "avaliacao invalida")
 	}
@@ -130,7 +128,7 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 	}
 
 	if err := c.loadSheets(ctx, []string{v2ActivitiesSheet, v2SummarySheetName(exam)}); err != nil {
-		if isNotFound(err) || canFallbackToLegacy(err) {
+		if isNotFound(err) || isTolerableReadError(err) {
 			return emptyActiveResult(), nil
 		}
 		return GradeResult{}, err
@@ -152,11 +150,14 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 	summaryRow := summaryGrid.rows[summaryRowIdx]
 	groupValue := valueAt(summaryRow, groupColumn(summaryGrid.headers))
 
-	activities := v2ActivitiesForAB(activitiesGrid, exam)
-	v2BindSummaryColumns(summaryGrid.headers, activities)
+	activities, err := v2ActivitiesForAB(activitiesGrid, exam)
+	if err != nil {
+		return GradeResult{}, err
+	}
 	if len(activities) == 0 {
 		return emptyActiveResult(), nil
 	}
+	v2BindSummaryColumns(summaryGrid.headers, activities)
 
 	var activitySheets []string
 	for _, activity := range activities {
@@ -164,7 +165,7 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 	}
 	if len(activitySheets) > 0 {
 		if err := c.loadSheets(ctx, activitySheets); err != nil {
-			if !canFallbackToLegacy(err) {
+			if !isTolerableReadError(err) {
 				return GradeResult{}, err
 			}
 		}
@@ -173,13 +174,13 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 	result := emptyGradeResult(exam, user)
 	result.Exam = abLabel
 	result.Active = v2GradeActive(true)
-	result.SchemaStatus = mergeSchemaStatus(mergeSchemaStatus(abGrid.schemaStatus, activitiesGrid.schemaStatus), summaryGrid.schemaStatus)
+	result.SchemaStatus = schemaStatusV2
 	result.SpreadsheetID = mergeSourceValue(mergeSourceValue(abGrid.spreadsheetID, activitiesGrid.spreadsheetID), summaryGrid.spreadsheetID)
 
 	for _, activity := range activities {
 		table, found, err := c.v2ActivityTable(ctx, activity, summaryGrid, summaryRowIdx, groupValue, user)
 		if err != nil {
-			if canFallbackToLegacy(err) {
+			if isTolerableReadError(err) {
 				continue
 			}
 			return GradeResult{}, err
@@ -188,7 +189,6 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 			continue
 		}
 		result.Tables = append(result.Tables, table)
-		result.SchemaStatus = mergeSchemaStatus(result.SchemaStatus, table.SchemaStatus)
 		result.SpreadsheetID = mergeSourceValue(result.SpreadsheetID, table.SpreadsheetID)
 	}
 
@@ -212,13 +212,60 @@ func (c *SheetsClient) gradeForV2(ctx context.Context, exam string, user Session
 	return result, nil
 }
 
+// V2ConfiguredSheetNames descobre, a partir das abas de controle (abs e
+// atividades), quais abas o modelo v2 usa hoje - util para ferramentas de
+// diagnostico (ex. cmd/comments) que precisavam antes de uma lista fixa
+// vinda de AB1Tables/AB2Tables, que nao existe mais.
+func (c *SheetsClient) V2ConfiguredSheetNames(ctx context.Context) ([]string, error) {
+	if err := c.loadSheets(ctx, []string{v2ABsSheet, v2ActivitiesSheet}); err != nil {
+		return nil, err
+	}
+	abGrid, err := c.loadSheet(ctx, v2ABsSheet)
+	if err != nil {
+		return nil, err
+	}
+	abs, err := v2ABs(abGrid)
+	if err != nil {
+		return nil, err
+	}
+	activitiesGrid, err := c.loadSheet(ctx, v2ActivitiesSheet)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := map[string]bool{v2ABsSheet: true, v2ActivitiesSheet: true}
+	names := []string{v2ABsSheet, v2ActivitiesSheet}
+	add := func(name string) {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			return
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	for _, ab := range abs {
+		if !ab.Active {
+			continue
+		}
+		add(v2SummarySheetName(ab.Key))
+		activities, err := v2ActivitiesForAB(activitiesGrid, ab.Key)
+		if err != nil {
+			continue
+		}
+		for _, activity := range activities {
+			add(activity.SheetName)
+		}
+	}
+	return names, nil
+}
+
 func v2SummarySheetName(exam string) string {
 	return "nota " + normalizeABKey(exam)
 }
 
 func v2ABState(grid *sheetGrid, exam string) (string, bool) {
-	ab, found := v2ResolveAB(grid, exam)
-	if !found {
+	ab, found, err := v2ResolveAB(grid, exam)
+	if err != nil || !found {
 		return strings.ToUpper(strings.TrimSpace(exam)), false
 	}
 	return ab.Label, ab.Active
@@ -234,35 +281,43 @@ func v2GradeActive(active bool) *bool {
 	return &active
 }
 
-func v2ResolveAB(grid *sheetGrid, exam string) (v2ABConfig, bool) {
-	abs := v2ABs(grid)
+func v2ResolveAB(grid *sheetGrid, exam string) (v2ABConfig, bool, error) {
+	abs, err := v2ABs(grid)
+	if err != nil {
+		return v2ABConfig{}, false, err
+	}
 	if len(abs) == 0 {
-		return v2ABConfig{}, false
+		return v2ABConfig{}, false, nil
 	}
 	candidates := v2ABRouteCandidates(exam)
 	if len(candidates) == 0 {
-		return abs[0], true
+		return abs[0], true, nil
 	}
 	for _, candidate := range candidates {
 		for _, ab := range abs {
 			if ab.Key == candidate {
-				return ab, true
+				return ab, true, nil
 			}
 		}
 	}
-	return v2ABConfig{}, false
+	return v2ABConfig{}, false, nil
 }
 
-func v2ABs(grid *sheetGrid) []v2ABConfig {
-	abIdx := firstHeaderIndex(grid.headers, "ab", "avaliacao", "avaliacao bimestral")
-	activeIdx := firstHeaderIndex(grid.headers, "ativo", "ativa", "status", "liberado")
+// v2ABs le a aba "abs". As colunas "ab"/"avaliacao" e "ativo"/"status" sao
+// obrigatorias: sem elas nao ha como saber quais avaliacoes existem ou se
+// estao liberadas, entao um cabecalho ausente vira erro claro em vez de
+// adivinhar (ex. usar a primeira coluna, ou varrer linhas atras de 0/1).
+func v2ABs(grid *sheetGrid) ([]v2ABConfig, error) {
+	abIdx, ok := requiredHeaderIndex(grid.headers, "ab", "avaliacao", "avaliacao bimestral")
+	if !ok {
+		return nil, MissingHeaderError(v2ABsSheet, "ab", "avaliacao")
+	}
+	activeIdx, ok := requiredHeaderIndex(grid.headers, "ativo", "ativa", "status", "liberado")
+	if !ok {
+		return nil, MissingHeaderError(v2ABsSheet, "ativo", "status")
+	}
 	labelIdx := firstHeaderIndex(grid.headers, "nome", "label", "rotulo", "titulo")
-	if abIdx < 0 {
-		abIdx = 0
-	}
-	if activeIdx < 0 {
-		activeIdx = inferABStatusColumn(grid, abIdx)
-	}
+
 	abs := make([]v2ABConfig, 0, len(grid.rows))
 	seen := map[string]bool{}
 	for _, row := range grid.rows {
@@ -273,43 +328,7 @@ func v2ABs(grid *sheetGrid) []v2ABConfig {
 		seen[ab.Key] = true
 		abs = append(abs, ab)
 	}
-	return abs
-}
-
-func inferABStatusColumn(grid *sheetGrid, abIdx int) int {
-	limit := len(grid.headers)
-	for _, row := range grid.rows {
-		if len(row) > limit {
-			limit = len(row)
-		}
-	}
-	for colIdx := 0; colIdx < limit; colIdx++ {
-		if colIdx == abIdx {
-			continue
-		}
-		hasStatusValue := false
-		allStatusValues := true
-		for _, row := range grid.rows {
-			value := valueAt(row, colIdx)
-			if value == "" {
-				continue
-			}
-			if !abStatusLikeValue(value) {
-				allStatusValues = false
-				break
-			}
-			hasStatusValue = true
-		}
-		if hasStatusValue && allStatusValues {
-			return colIdx
-		}
-	}
-	return -1
-}
-
-func abStatusLikeValue(value string) bool {
-	normalized := normalizeHeader(value)
-	return normalized == "0" || normalized == "1"
+	return abs, nil
 }
 
 func v2ABFromRow(row []string, abIdx int, labelIdx int, activeIdx int) v2ABConfig {
@@ -351,18 +370,30 @@ func v2ABRouteCandidates(exam string) []string {
 	return candidates
 }
 
-func v2ActivitiesForAB(grid *sheetGrid, exam string) []v2ActivityConfig {
-	abIdx := firstHeaderIndex(grid.headers, "ab", "avaliacao", "avaliacao bimestral")
-	nameIdx := firstHeaderIndex(grid.headers, "atividade", "nome", "nome da atividade", "titulo")
+// v2ActivitiesForAB le a aba "atividades". As colunas "ab"/"avaliacao" e
+// "atividade"/"nome" sao obrigatorias - sem a primeira uma atividade
+// vazaria para todas as avaliacoes ao mesmo tempo, sem a segunda nao ha como
+// identificar a atividade. A coluna "aba"/"sheet"/"planilha" (onde ficam as
+// notas) e a coluna "ativo"/"status" (se a atividade ja foi lancada)
+// continuam opcionais de proposito: a primeira tem uma convencao valida de
+// atalho (nome da atividade = nome da aba) e a segunda e um recurso
+// intencionalmente opcional, nao uma adivinhacao de cabecalho.
+func v2ActivitiesForAB(grid *sheetGrid, exam string) ([]v2ActivityConfig, error) {
+	abIdx, ok := requiredHeaderIndex(grid.headers, "ab", "avaliacao", "avaliacao bimestral")
+	if !ok {
+		return nil, MissingHeaderError(v2ActivitiesSheet, "ab", "avaliacao")
+	}
+	nameIdx, ok := requiredHeaderIndex(grid.headers, "atividade", "nome", "nome da atividade", "titulo")
+	if !ok {
+		return nil, MissingHeaderError(v2ActivitiesSheet, "atividade", "nome")
+	}
 	sheetIdx := firstHeaderIndex(grid.headers, "aba", "sheet", "planilha")
 	weightIdx := firstHeaderIndex(grid.headers, "pesomaximo", "peso maximo", "peso máximo", "peso", "nota maxima")
 	activeIdx := firstHeaderIndex(grid.headers, "ativo", "ativa", "status", "lancada", "lançada")
-	if nameIdx < 0 {
-		nameIdx = 0
-	}
+
 	var activities []v2ActivityConfig
 	for rowIdx, row := range grid.rows {
-		if abIdx >= 0 && normalizeABKey(valueAt(row, abIdx)) != normalizeABKey(exam) {
+		if normalizeABKey(valueAt(row, abIdx)) != normalizeABKey(exam) {
 			continue
 		}
 		if activeIdx >= 0 && !activeSpreadsheetValue(valueAt(row, activeIdx), false) {
@@ -396,9 +427,17 @@ func v2ActivitiesForAB(grid *sheetGrid, exam string) []v2ActivityConfig {
 	sort.SliceStable(activities, func(i, j int) bool {
 		return activities[i].Order < activities[j].Order
 	})
-	return activities
+	return activities, nil
 }
 
+// v2BindSummaryColumns liga cada atividade com peso a coluna correspondente
+// na aba de notas ("nota <ab>"). Uma atividade sem coluna correspondente
+// ainda (ex. registrada em "atividades" mas sem nota lancada na planilha
+// resumo) fica sem SummaryCol e e renderizada como pendente - isso e um
+// estado valido do dia a dia, nao um erro de configuracao, entao
+// permanece tolerante (nao faz parte do escopo de "cabecalho obrigatorio":
+// aqui estamos comparando o nome de uma atividade com colunas de texto
+// livre, nao validando um cabecalho fixo esperado).
 func v2BindSummaryColumns(headers []string, activities []v2ActivityConfig) {
 	allowFinalGradeFallback := len(activities) == 1
 	for idx := range activities {
@@ -413,11 +452,15 @@ func v2BindSummaryColumns(headers []string, activities []v2ActivityConfig) {
 	}
 }
 
+func v2FinalGradeColumn(headers []string) int {
+	return firstHeaderIndex(headers, "nota final", "nota", "total")
+}
+
 func (c *SheetsClient) v2ActivityTable(ctx context.Context, activity v2ActivityConfig, summaryGrid *sheetGrid, summaryRowIdx int, groupValue string, user SessionUser) (TableResult, bool, error) {
 	summaryRow := summaryGrid.rows[summaryRowIdx]
 	grid, err := c.loadSheet(ctx, activity.SheetName)
 	if err != nil {
-		if canFallbackToLegacy(err) {
+		if isTolerableReadError(err) {
 			return v2ActivitySummaryTable(activity, summaryGrid, summaryRowIdx), true, nil
 		}
 		return TableResult{}, false, err
@@ -438,7 +481,7 @@ func (c *SheetsClient) v2ActivityTable(ctx context.Context, activity v2ActivityC
 			Complete:      false,
 			Scoreless:     true,
 			Status:        "Não pontua",
-			SchemaStatus:  mergeSchemaStatus(activity.SchemaStatus, grid.schemaStatus),
+			SchemaStatus:  schemaStatusV2,
 			SpreadsheetID: mergeSourceValue(activity.SpreadsheetID, grid.spreadsheetID),
 			Cards: []CardResult{{
 				Key:     "criterios",
@@ -462,7 +505,7 @@ func (c *SheetsClient) v2ActivityTable(ctx context.Context, activity v2ActivityC
 		Kind:          "activity",
 		Complete:      status == "Encerrado",
 		Status:        status,
-		SchemaStatus:  mergeSchemaStatus(activity.SchemaStatus, grid.schemaStatus),
+		SchemaStatus:  schemaStatusV2,
 		SpreadsheetID: mergeSourceValue(activity.SpreadsheetID, grid.spreadsheetID),
 		Cards:         []CardResult{card},
 	}, true, nil
@@ -566,6 +609,12 @@ func v2ActivityItems(grid *sheetGrid, maxRowIdx int, studentRowIdx int, weight f
 			CommentAuthor: author,
 		})
 	}
+	// A ordem das colunas na planilha nem sempre segue a ordem numerica das
+	// questoes/critérios - reordena para exibir sempre Questão 1, 2, 3...
+	// em sequência, independente de como a aba foi organizada.
+	sort.SliceStable(items, func(i, j int) bool {
+		return compareDetailLabels(items[i].Subtopic, items[j].Subtopic) < 0
+	})
 	return items
 }
 
@@ -611,10 +660,6 @@ func v2CriterionColumns(grid *sheetGrid, maxRowIdx int, studentRowIdx int) []int
 		columns = append(columns, colIdx)
 	}
 	return columns
-}
-
-func v2FinalGradeColumn(headers []string) int {
-	return firstHeaderIndex(headers, "nota final", "nota", "total")
 }
 
 func v2CriterionSourceMaximum(grid *sheetGrid, maxRowIdx int, colIdx int) float64 {
@@ -672,10 +717,16 @@ func v2AverageCard(grid *sheetGrid, row []string) *CardResult {
 	return &card
 }
 
+// firstHeaderIndex faz correspondencia exata e, se nao achar, aproximada por
+// substring - reservado para cabecalhos genuinamente opcionais (onde nao
+// existir e um estado valido, nao um erro de configuracao).
 func firstHeaderIndex(headers []string, candidates ...string) int {
 	return headerIndex(headers, false, candidates...)
 }
 
+// matchingHeaderIndex compara dois textos livres (rotulo da atividade x
+// cabecalho da planilha de notas) e nao um cabecalho contra uma lista fixa de
+// nomes aceitos - por isso usa aproximacao nos dois sentidos.
 func matchingHeaderIndex(headers []string, labels ...string) int {
 	return headerIndex(headers, true, labels...)
 }
@@ -702,6 +753,22 @@ func headerIndex(headers []string, bidirectionalContains bool, labels ...string)
 		}
 	}
 	return -1
+}
+
+// requiredHeaderIndex so aceita correspondencia exata com um dos nomes
+// aceitos - usado para os cabecalhos que o app agora exige (ver v2ABs /
+// v2ActivitiesForAB). Sem aproximacao por substring: um cabecalho "parecido"
+// mas escrito diferente deve falhar de forma clara, nao ser adivinhado.
+func requiredHeaderIndex(headers []string, candidates ...string) (int, bool) {
+	for _, label := range candidates {
+		wanted := normalizeHeader(label)
+		for idx, header := range headers {
+			if normalizeHeader(header) == wanted {
+				return idx, true
+			}
+		}
+	}
+	return -1, false
 }
 
 func activeSpreadsheetValue(value string, blankAllowed bool) bool {
@@ -752,6 +819,13 @@ func v2ActivitiesComplete(activities []v2ActivityConfig, tables []TableResult) b
 	return hasWeightedActivity
 }
 
+func activityTableComplete(table TableResult) bool {
+	if status := normalizeHeader(table.Status); status != "" {
+		return status == "encerrado"
+	}
+	return table.Complete
+}
+
 func normalizeABKey(value string) string {
 	normalized := normalizeHeader(value)
 	var builder strings.Builder
@@ -797,4 +871,64 @@ func indexOfRow(rows [][]string, target []string) int {
 		}
 	}
 	return -1
+}
+
+// findMaxRow, isMaxRowLabel, findStudentRow, rubricLabel e activityStatus
+// vieram do antigo activity_parser.go (parser legado): o parser em si foi
+// removido junto com o modelo de planilha legado, mas essas cinco funcoes
+// continuam em uso pelo modelo v2 (rubricas de atividade e localizacao da
+// linha do aluno).
+
+func findMaxRow(rows [][]string) int {
+	for rowIdx, row := range rows {
+		if isMaxRowLabel(valueAt(row, 0)) {
+			return rowIdx
+		}
+	}
+	return -1
+}
+
+func isMaxRowLabel(value string) bool {
+	label := normalizeHeader(value)
+	return strings.Contains(label, "nota maxima") ||
+		strings.Contains(label, "exemplo nota maxima") ||
+		strings.Contains(label, "maximo possivel") ||
+		strings.Contains(label, "pontuacao maxima") ||
+		strings.Contains(label, "pontuacao possivel")
+}
+
+func findStudentRow(grid *sheetGrid, start int, user SessionUser) int {
+	for rowIdx := start; rowIdx < len(grid.rows); rowIdx++ {
+		for _, colIdx := range identityCommentColumns(grid.headers) {
+			value := valueAt(grid.rows[rowIdx], colIdx)
+			if sameLookupValue(value, user.Name, true) || sameLookupValue(value, user.Matricula, false) {
+				return rowIdx
+			}
+		}
+	}
+	return -1
+}
+
+func rubricLabel(grid *sheetGrid, maxRowIdx int, colIdx int) string {
+	main := valueAt(grid.headers, colIdx)
+	detail := ""
+	if maxRowIdx > 0 {
+		detail = valueAt(grid.rows[maxRowIdx-1], colIdx)
+	}
+	if detail != "" {
+		if main != "" && normalizeHeader(main) != normalizeHeader(detail) {
+			return main + " / " + detail
+		}
+		return detail
+	}
+	return main
+}
+
+func activityStatus(items []activityItem) string {
+	for _, item := range items {
+		if strings.TrimSpace(item.NotaAlcancada) == "" {
+			return "Não encerrado"
+		}
+	}
+	return "Encerrado"
 }

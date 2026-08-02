@@ -54,7 +54,7 @@ func docsPayload() map[string]any {
 				"response": map[string]string{
 					"matricula":    "string",
 					"name":         "string",
-					"schemaStatus": "legacy|v2 optional",
+					"schemaStatus": "v2 (valor fixo)",
 				},
 				"result": "Cria sessão assinada depois de validar a matrícula na aba Base de dados de uma ou mais planilhas configuradas.",
 				"cache":  "no-store",
@@ -106,7 +106,7 @@ func docsPayload() map[string]any {
 				"path":     "/api/grades/all",
 				"auth":     true,
 				"aliases":  []string{"/api/index.go/grades/all"},
-				"result":   "Retorna todas as avaliações disponíveis. Na v2, usa somente ABs ativas da aba abs; no legado, retorna AB1/AB2.",
+				"result":   "Retorna todas as avaliações ativas na aba abs. Cada avaliação é buscada de forma independente; se uma falhar (ex. limite de requisições do Google), as demais continuam presentes na resposta e a avaliação afetada traz um campo error.",
 				"query":    map[string]string{"refresh": "1 opcional; limpa cache em memória"},
 				"cache":    "private, max-age=30, stale-while-revalidate=300, ETag e Vary: Cookie, Accept-Encoding",
 				"response": map[string]any{"<examKey>": gradeResponseSchema()},
@@ -143,7 +143,7 @@ func docsPayload() map[string]any {
 			"rowSelection":   "A matrícula resolve uma identidade e fixa a planilha internamente na sessão assinada. O spreadsheetId não é exposto nas respostas públicas.",
 			"feedbackSource": "Comentários vêm de cell notes, workbook/XLSX comments e Drive comments quando a service account consegue enxergar e mapear célula. Na v2, comentários de critério entram em Detail.comment; comentários da célula da nota final/atividade entram no card. O frontend renderiza comentários como Markdown seguro, sem HTML bruto nem imagens remotas.",
 			"rendering":      "O backend monta cards/detalhes render-ready. Critérios v2 usam a escala da rubrica; a nota da atividade vem da aba nota <ab> e médias são limitadas a 10.",
-			"versioning":     "SHEETS_RUNTIME_VERSION=v2/auto usa a aba abs e developer metadata. Em /api/grades/all, só ABs com status ativo=1 são retornadas na v2.",
+			"versioning":     "A aba abs define quais avaliações existem e estão ativas (coluna ab/avaliacao e ativo/status são obrigatórias). Em /api/grades/all, só ABs com status ativo=1 são retornadas.",
 		},
 		"security": map[string]any{
 			"readOnlySheets": "A service account é criada com escopos somente leitura para Sheets e Drive; não há chamada de update, append ou batchUpdate.",
@@ -166,7 +166,7 @@ func docsPayload() map[string]any {
 			"payloadControl":    "Fields restrito na Sheets API, export XLSX limitado a 25MiB, respostas públicas removem spreadsheetId e abas de controle v2 não disparam busca de comentários Drive/XLSX.",
 		},
 		"paa": map[string]any{
-			"plano":     "Resolver a matrícula em Base de dados, fixar spreadsheetId apenas na sessão assinada e escolher parser legado/v2 por runtime/schemaStatus.",
+			"plano":     "Resolver a matrícula em Base de dados e fixar spreadsheetId apenas na sessão assinada.",
 			"acesso":    "Validar cookie HMAC, aceitar POST apenas same-origin, usar service account read-only e nunca expor credenciais ou spreadsheetId no payload público.",
 			"auditoria": "Publicar schemaStatus, Digest SHA-256, ETag e X-Dbback-Content-SHA256 para rastrear versão, integridade e revalidação sem revelar dados sensíveis.",
 			"acao":      "Renderizar somente a linha do aluno autenticado, normalizada em cards/detalhes tipados para a UI.",
@@ -377,7 +377,7 @@ func gradeResponseSchema() map[string]any {
 		"exam":         "string",
 		"matricula":    "string",
 		"name":         "string",
-		"schemaStatus": "legacy|v2 optional",
+		"schemaStatus": "v2 (valor fixo)",
 		"tables": []map[string]any{
 			{
 				"key":          "string",
@@ -387,7 +387,7 @@ func gradeResponseSchema() map[string]any {
 				"complete":     "boolean",
 				"scoreless":    "boolean optional; true quando a atividade nao possui peso, recebe status Nao pontua e exibe apenas criterios percentuais",
 				"status":       "string optional",
-				"schemaStatus": "legacy|v2 optional",
+				"schemaStatus": "v2 (valor fixo)",
 				"cards": []map[string]any{
 					{
 						"key":           "string",

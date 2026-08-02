@@ -50,6 +50,10 @@ export type GradeResult = {
   schemaStatus?: string;
   tables: GradeTable[];
   studentStatus?: StudentStatus;
+  // Preenchido quando essa prova especifica falhou ao buscar dados (ex.
+  // limite de requisicoes do Google), sem derrubar as demais provas de uma
+  // resposta com varias provas (/api/grades/all).
+  error?: string;
 };
 
 export type SessionUser = {

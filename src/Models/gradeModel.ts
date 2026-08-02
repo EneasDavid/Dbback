@@ -7,28 +7,6 @@ type GradeCacheRef = {
   current: GradeCache;
 };
 
-type LegacyColumn = {
-  key?: string;
-  label?: string;
-  value?: string;
-  comment?: string;
-  commentAuthor?: string;
-};
-
-type LegacyItem = {
-  key?: string;
-  subtopic?: string;
-  notaMaxima?: string;
-  notaAlcancada?: string;
-  comentario?: string;
-  comentarioAutor?: string;
-};
-
-type LegacyGradeTable = GradeTable & {
-  columns?: LegacyColumn[];
-  items?: LegacyItem[];
-};
-
 export function storeGradeCache(
   current: GradeCache,
   incoming: GradeCache,
@@ -127,6 +105,23 @@ export function isSessionExpired(error: unknown) {
   return error instanceof Error && error.message.toLowerCase().includes('sessao expirada');
 }
 
+const TRANSIENT_GRADE_ERROR_HINTS = ['http 429', 'http 503', 'limite de requisi', 'service unavailable'];
+
+function isTransientGradeErrorMessage(message: string) {
+  const normalizedMessage = message.toLowerCase();
+  return TRANSIENT_GRADE_ERROR_HINTS.some((hint) => normalizedMessage.includes(hint));
+}
+
+// Erros temporários de leitura da planilha (ex. limite de requisições do
+// Google) recebem uma mensagem amigável e reaproveitável, em vez do texto
+// cru vindo do backend - o aluno não precisa saber o que é "HTTP 429".
+export function friendlyGradeError(message: string, status?: number) {
+  if (status === 429 || status === 503 || status === 504 || isTransientGradeErrorMessage(message)) {
+    return 'Não foi possível carregar as notas agora. Tentando novamente em segundo plano...';
+  }
+  return message;
+}
+
 function gradeOrderValue(grade?: GradeResult) {
   if (!grade) return Number.MAX_SAFE_INTEGER;
   const label = asText(grade.exam).toLowerCase();
@@ -136,9 +131,7 @@ function gradeOrderValue(grade?: GradeResult) {
 
 function normalizeGradeResult(grade: GradeResult): GradeResult {
   const tables = Array.isArray(grade.tables)
-    ? grade.tables
-        .filter(Boolean)
-        .map((table) => normalizeGradeTable(table as LegacyGradeTable))
+    ? grade.tables.filter(Boolean).map((table) => normalizeGradeTable(table))
     : [];
   return {
     ...grade,
@@ -146,8 +139,8 @@ function normalizeGradeResult(grade: GradeResult): GradeResult {
   };
 }
 
-function normalizeGradeTable(table: LegacyGradeTable): GradeTable {
-  const cards = Array.isArray(table.cards) && table.cards.length > 0 ? table.cards : legacyCards(table);
+function normalizeGradeTable(table: GradeTable): GradeTable {
+  const cards = Array.isArray(table.cards) ? table.cards : [];
   return {
     ...table,
     cards: cards
@@ -205,77 +198,6 @@ function normalizeGradeDetails(details?: GradeDetail[]) {
   });
 }
 
-function legacyCards(table: LegacyGradeTable): GradeCardPayload[] {
-  const columns = Array.isArray(table.columns) ? table.columns : [];
-  const items = Array.isArray(table.items) ? table.items : [];
-  if (items.length > 0) {
-    const details = legacyDetails(items);
-    const total = columns[0] ?? legacyTotalColumn(items);
-    if (!total) return [];
-    const label = asText(total.label) || 'Nota';
-    const value = asText(total.value);
-    const score = parseScore(value);
-    return [
-      {
-        key: asText(total.key) || 'nota',
-        label,
-        value,
-        displayValue: score !== null ? scoreComparisonDisplay(score, 1) : displayValue(label, value),
-        tone: scoreTone(label, value, displayValue(label, value)),
-        comment: total.comment,
-        commentAuthor: total.commentAuthor,
-        details,
-      },
-    ];
-  }
-  return columns
-    .filter((column) => isVisibleLegacyColumn(column))
-    .map((column, index) => {
-      const label = asText(column.label) || `Nota ${index + 1}`;
-      const value = asText(column.value);
-      return {
-        key: asText(column.key) || `column-${index}`,
-        label,
-        value,
-        displayValue: displayValue(label, value),
-        tone: scoreTone(label, value, displayValue(label, value)),
-        comment: column.comment,
-        commentAuthor: column.commentAuthor,
-      };
-    });
-}
-
-function legacyDetails(items: LegacyItem[]): GradeDetail[] {
-  return items
-    .filter((item) => normalized(asText(item.subtopic)) !== 'total')
-    .map((item, index) => {
-      const value = asText(item.notaAlcancada);
-      const max = parseScore(asText(item.notaMaxima)) ?? 0;
-      const obtained = parseScore(value);
-      const pending = value.trim() === '';
-      const ratio = !pending && obtained !== null && max > 0 ? Math.min((obtained / max) * 100, 100) : 0;
-      return {
-        key: asText(item.key) || `item-${index}`,
-        label: asText(item.subtopic).trim(),
-        value,
-        max,
-        displayScore: detailDisplayScore(value, max, pending),
-        ratio,
-        pending,
-        tone: scoreToneFromRatio(ratio, pending),
-        comment: item.comentario,
-        commentAuthor: item.comentarioAutor,
-      };
-    });
-}
-
-function legacyTotalColumn(items: LegacyItem[]): LegacyColumn | null {
-  const total = items.find((item) => normalized(asText(item.subtopic)) === 'total');
-  if (!total) return null;
-  const value = activityScore(asText(total.notaAlcancada), asText(total.notaMaxima));
-  return { key: 'nota', label: 'Nota', value, comment: total.comentario, commentAuthor: total.comentarioAutor };
-}
-
 function isPendingAverageCard(table: GradeTable, card: { label?: string; displayValue?: string; value?: string }) {
   if (!isSummaryTable(table.kind)) return false;
   const label = (card.label || '').toLowerCase();
@@ -298,18 +220,6 @@ function isVisibleSummaryCard(table: GradeTable, card: { label?: string }) {
       label.includes('nota');
   }
   return label.includes('prova') || label.includes('media') || label.includes('somatorio');
-}
-
-function isVisibleLegacyColumn(column: LegacyColumn) {
-  const label = normalized(asText(column.label));
-  return label !== '' &&
-    label !== 'grupo' &&
-    label !== 'equipe' &&
-    !label.includes('matricula') &&
-    !label.includes('nome do aluno') &&
-    label !== 'nome' &&
-    label !== 'aluno' &&
-    (asText(column.value).trim() !== '' || Boolean(column.comment?.trim()));
 }
 
 function displayValue(label: string, value: string) {
@@ -370,13 +280,6 @@ function parseDisplayScore(value: string) {
   return { value: left, max: right };
 }
 
-function activityScore(value: string, maximum: string) {
-  const score = parseScore(value);
-  const maxScore = parseScore(maximum);
-  if (score === null || maxScore === null || maxScore === 0) return value;
-  return formatScore(maxScore === 10 ? score / 10 : score / maxScore);
-}
-
 function isPendingValue(value: string) {
   const text = normalized(value);
   return text === '' || text.includes('nao corrigid') || text.includes('em correcao');
@@ -433,7 +336,7 @@ function hideAverageUntilActivitiesComplete(tables: GradeTable[]) {
 }
 
 function scoredActivityTable(table: GradeTable) {
-  return !table.scoreless && (table.kind === 'activity' || table.kind === 'project');
+  return !table.scoreless && table.kind === 'activity';
 }
 
 function activityTableComplete(table: GradeTable) {

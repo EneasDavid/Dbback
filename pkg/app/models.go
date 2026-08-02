@@ -11,6 +11,10 @@ type GradeResult struct {
 	SpreadsheetID string         `json:"spreadsheetId,omitempty"`
 	Tables        []TableResult  `json:"tables"`
 	StudentStatus *StudentStatus `json:"studentStatus,omitempty"`
+	// Error, quando preenchido, indica que essa prova especifica falhou ao
+	// buscar dados (ex. limite de requisicoes do Google) sem derrubar as
+	// demais provas de uma resposta com varias provas.
+	Error string `json:"error,omitempty"`
 }
 
 type GradeResults map[string]GradeResult

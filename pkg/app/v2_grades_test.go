@@ -89,7 +89,7 @@ func TestV2ABStateTreatsTextualProgressStatusAsInactive(t *testing.T) {
 	}
 }
 
-func TestV2ABStateInfersStatusColumnFromZeroOneValues(t *testing.T) {
+func TestV2ABStateRequiresExplicitStatusHeader(t *testing.T) {
 	grid := &sheetGrid{
 		headers: []string{"AB", ""},
 		rows: [][]string{
@@ -101,8 +101,64 @@ func TestV2ABStateInfersStatusColumnFromZeroOneValues(t *testing.T) {
 	_, ab1Active := v2ABState(grid, "ab1")
 	_, ab2Active := v2ABState(grid, "ab2")
 
-	if ab1Active || !ab2Active {
-		t.Fatalf("v2ABState() active states = %v/%v, want false/true", ab1Active, ab2Active)
+	if ab1Active || ab2Active {
+		t.Fatalf("v2ABState() active states = %v/%v, want both false without an explicit ativo/status header (no more inferring from 0/1 values)", ab1Active, ab2Active)
+	}
+}
+
+func TestV2ABsRequiresABHeader(t *testing.T) {
+	grid := &sheetGrid{
+		headers: []string{"Nome", "Status"},
+		rows:    [][]string{{"Avaliação 1", "1"}},
+	}
+
+	if _, err := v2ABs(grid); err == nil {
+		t.Fatal("v2ABs() error = nil, want missing header error for ab/avaliacao")
+	}
+}
+
+func TestV2ABsRequiresStatusHeader(t *testing.T) {
+	grid := &sheetGrid{
+		headers: []string{"AB", "Nome"},
+		rows:    [][]string{{"AB1", "AB1"}},
+	}
+
+	if _, err := v2ABs(grid); err == nil {
+		t.Fatal("v2ABs() error = nil, want missing header error for ativo/status")
+	}
+}
+
+func TestV2ActivitiesForABRequiresAtividadeHeader(t *testing.T) {
+	grid := &sheetGrid{
+		headers: []string{"AB", "Peso"},
+		rows:    [][]string{{"AB1", "1"}},
+	}
+
+	if _, err := v2ActivitiesForAB(grid, "ab1"); err == nil {
+		t.Fatal("v2ActivitiesForAB() error = nil, want missing header error for atividade/nome")
+	}
+}
+
+func TestV2ActivitiesForABRequiresABHeader(t *testing.T) {
+	grid := &sheetGrid{
+		headers: []string{"Atividade", "Peso"},
+		rows:    [][]string{{"Pesquisa", "1"}},
+	}
+
+	if _, err := v2ActivitiesForAB(grid, "ab1"); err == nil {
+		t.Fatal("v2ActivitiesForAB() error = nil, want missing header error for ab/avaliacao")
+	}
+}
+
+func TestMatriculaColumnRejectsNearMissHeader(t *testing.T) {
+	if idx := matriculaColumn([]string{"Matrícula do Aluno", "Nome"}); idx >= 0 {
+		t.Fatalf("matriculaColumn() = %d, want -1 for a near-miss header (no more substring fallback)", idx)
+	}
+}
+
+func TestNameColumnRejectsNearMissHeader(t *testing.T) {
+	if idx := nameColumn([]string{"Matrícula", "Apelido do Aluno"}); idx >= 0 {
+		t.Fatalf("nameColumn() = %d, want -1 for a near-miss header (no more substring fallback)", idx)
 	}
 }
 
@@ -115,8 +171,10 @@ func TestV2ResolveABUsesGenericABColumnValues(t *testing.T) {
 		},
 	}
 
-	ab, found := v2ResolveAB(grid, "av1|ab2")
-
+	ab, found, err := v2ResolveAB(grid, "av1|ab2")
+	if err != nil {
+		t.Fatalf("v2ResolveAB() error = %v", err)
+	}
 	if !found {
 		t.Fatal("v2ResolveAB() found = false, want true")
 	}
@@ -131,8 +189,10 @@ func TestV2ResolveABDefaultsToFirstABWhenRouteIsEmpty(t *testing.T) {
 		rows:    [][]string{{"AV1", "1"}, {"AV2", "1"}},
 	}
 
-	ab, found := v2ResolveAB(grid, "")
-
+	ab, found, err := v2ResolveAB(grid, "")
+	if err != nil {
+		t.Fatalf("v2ResolveAB() error = %v", err)
+	}
 	if !found || ab.Key != "av1" {
 		t.Fatalf("v2ResolveAB() = %#v/%v, want first AB", ab, found)
 	}
@@ -177,7 +237,10 @@ func TestV2ActivitiesForABUsesABAndWeight(t *testing.T) {
 		spreadsheetID: "sheet-a",
 	}
 
-	activities := v2ActivitiesForAB(grid, "ab1")
+	activities, err := v2ActivitiesForAB(grid, "ab1")
+	if err != nil {
+		t.Fatalf("v2ActivitiesForAB() error = %v", err)
+	}
 
 	if len(activities) != 1 {
 		t.Fatalf("activities len = %d, want 1: %#v", len(activities), activities)
@@ -193,7 +256,10 @@ func TestV2ActivitiesForABKeepsActivitiesWhenStatusColumnIsAbsent(t *testing.T) 
 		rows:    [][]string{{"pesquisa", "1", "Ab. 1"}, {"artigo", "1", "Ab. 1"}},
 	}
 
-	activities := v2ActivitiesForAB(grid, "ab1")
+	activities, err := v2ActivitiesForAB(grid, "ab1")
+	if err != nil {
+		t.Fatalf("v2ActivitiesForAB() error = %v", err)
+	}
 
 	if len(activities) != 2 {
 		t.Fatalf("activities len = %d, want 2: %#v", len(activities), activities)
@@ -210,7 +276,10 @@ func TestV2ActivitiesForABPreservesMissingWeight(t *testing.T) {
 		},
 	}
 
-	activities := v2ActivitiesForAB(grid, "ab1")
+	activities, err := v2ActivitiesForAB(grid, "ab1")
+	if err != nil {
+		t.Fatalf("v2ActivitiesForAB() error = %v", err)
+	}
 
 	if len(activities) != 3 {
 		t.Fatalf("activities len = %d, want 3: %#v", len(activities), activities)
@@ -233,7 +302,10 @@ func TestV2ActivitiesForABOnlyKeepsStatusOneWhenStatusColumnExists(t *testing.T)
 		},
 	}
 
-	activities := v2ActivitiesForAB(grid, "ab1")
+	activities, err := v2ActivitiesForAB(grid, "ab1")
+	if err != nil {
+		t.Fatalf("v2ActivitiesForAB() error = %v", err)
+	}
 
 	if len(activities) != 1 || activities[0].Label != "Atividade 3" {
 		t.Fatalf("activities = %#v, want only status 1 activity", activities)
@@ -291,7 +363,9 @@ func TestV2ActivityItemsUsesMaximoPossivelRowForQuestionWeights(t *testing.T) {
 	if len(items) != 8 {
 		t.Fatalf("items len = %d, want 8 criteria without group/final grade: %#v", len(items), items)
 	}
-	wantMaxima := []string{"0,03", "0,05", "0,05", "0,07", "0,03", "0,05", "0,03", "0,02"}
+	// Ordem canônica (não a ordem das colunas na planilha): Organização,
+	// Adequação, Questão 1..6.
+	wantMaxima := []string{"0,02", "0,03", "0,03", "0,05", "0,05", "0,07", "0,03", "0,05"}
 	for idx, want := range wantMaxima {
 		if items[idx].NotaMaxima != want {
 			t.Fatalf("items[%d].NotaMaxima = %q, want %q: %#v", idx, items[idx].NotaMaxima, want, items[idx])
@@ -311,11 +385,40 @@ func TestV2ActivityItemsUsesSubtopicRowForOfficialWeights(t *testing.T) {
 
 	items := v2ActivityItems(grid, 1, 2, 0.33)
 
-	wantMaxima := []string{"0,03", "0,05", "0,05", "0,07", "0,03", "0,05", "0,03", "0,02"}
+	// Ordem canônica: Organização, Adequação, Questão 1..6.
+	wantMaxima := []string{"0,02", "0,03", "0,03", "0,05", "0,05", "0,07", "0,03", "0,05"}
 	for idx, want := range wantMaxima {
 		if items[idx].NotaMaxima != want {
 			t.Fatalf("items[%d].NotaMaxima = %q, want %q: %#v", idx, items[idx].NotaMaxima, want, items[idx])
 		}
+	}
+}
+
+func TestV2ActivityItemsOrdersQuestionsRegardlessOfColumnOrder(t *testing.T) {
+	grid := &sheetGrid{
+		headers: []string{"grupo", "Questão 6", "Adequação", "Questão 2", "Questão 1", "Questão 4", "Questão 3", "Organização", "Questão 5"},
+		rows: [][]string{
+			{"maximo possivel", "1,5", "1", "1,5", "1", "2", "1,5", "0,5", "1"},
+			{"Grupo A", "1", "1", "1", "1", "1", "1", "0,5", "1"},
+		},
+	}
+
+	items := v2ActivityItems(grid, 0, 1, 1)
+
+	wantSubtopics := []string{"Organização", "Adequação", "Questão 1", "Questão 2", "Questão 3", "Questão 4", "Questão 5", "Questão 6"}
+	if len(items) != len(wantSubtopics) {
+		t.Fatalf("items len = %d, want %d: %#v", len(items), len(wantSubtopics), items)
+	}
+	for idx, want := range wantSubtopics {
+		if items[idx].Subtopic != want {
+			t.Fatalf("items[%d].Subtopic = %q, want %q (questoes devem sempre aparecer em ordem, independente da ordem das colunas na planilha): %#v", idx, items[idx].Subtopic, want, items)
+		}
+	}
+}
+
+func TestCompareDetailLabelsPreservesOrderForUnrecognizedCriteria(t *testing.T) {
+	if compareDetailLabels("Cobertura", "Manutenibilidade") != 0 {
+		t.Fatal("compareDetailLabels() != 0 for two unrecognized criteria, want stable/preserved order instead of alphabetical")
 	}
 }
 
@@ -330,8 +433,9 @@ func TestV2ActivityItemsPreservesRatioWhenCorrectingQuestionWeights(t *testing.T
 
 	items := v2ActivityItems(grid, 0, 1, 1)
 
-	wantMaxima := []string{"0,1", "0,15", "0,15", "0,2", "0,1", "0,05"}
-	wantValues := []string{"0,07", "0,11", "0,15", "0,1", "0,05", "0,03"}
+	// Ordem canônica: Organização, Adequação, Questão 1..4.
+	wantMaxima := []string{"0,05", "0,1", "0,1", "0,15", "0,15", "0,2"}
+	wantValues := []string{"0,03", "0,05", "0,07", "0,11", "0,15", "0,1"}
 	for idx := range wantMaxima {
 		if items[idx].NotaMaxima != wantMaxima[idx] || items[idx].NotaAlcancada != wantValues[idx] {
 			t.Fatalf("items[%d] = %#v, want value/max %s/%s", idx, items[idx], wantValues[idx], wantMaxima[idx])
@@ -434,7 +538,6 @@ func TestV2ActivitiesCompleteIgnoresScorelessActivities(t *testing.T) {
 
 func TestGradeForV2RendersScorelessActivityAsPercentagesWithoutGrade(t *testing.T) {
 	client := &SheetsClient{
-		cfg: Config{RuntimeVersion: "v2"},
 		cache: map[string]cachedGrid{
 			v2ABsSheet: {
 				expires: time.Now().Add(time.Hour),
@@ -509,7 +612,6 @@ func TestNotLaunchedActivityValueIsPending(t *testing.T) {
 
 func TestGradeForV2IncludesEveryActiveRegisteredActivity(t *testing.T) {
 	client := &SheetsClient{
-		cfg: Config{RuntimeVersion: "v2"},
 		cache: map[string]cachedGrid{
 			v2ABsSheet: {
 				expires: time.Now().Add(time.Hour),
@@ -602,115 +704,20 @@ func TestV2SummarySheetNameUsesNormalizedABKey(t *testing.T) {
 	}
 }
 
-func TestLegacyExamKeyKeepsLegacyRouteAliases(t *testing.T) {
-	if got := legacyExamKey("invalid|ab2"); got != "ab2" {
-		t.Fatalf("legacyExamKey() = %q, want ab2", got)
+func TestCanonicalExamKeyKeepsRouteAliases(t *testing.T) {
+	if got := canonicalExamKey("invalid|ab2"); got != "ab2" {
+		t.Fatalf("canonicalExamKey() = %q, want ab2", got)
 	}
 }
 
-func TestRuntimeForUserPreservesLegacySessionWithV2Config(t *testing.T) {
-	got := runtimeForUser(Config{RuntimeVersion: "v2"}, SessionUser{SchemaStatus: "legacy"})
-
-	if got != "legacy" {
-		t.Fatalf("runtimeForUser() = %q, want legacy", got)
-	}
-}
-
-func TestRuntimeForUserPreservesLegacySessionWithAutoConfig(t *testing.T) {
-	got := runtimeForUser(Config{RuntimeVersion: "auto"}, SessionUser{SchemaStatus: "legacy"})
-
-	if got != "legacy" {
-		t.Fatalf("runtimeForUser() = %q, want legacy", got)
-	}
-}
-
-func TestRuntimeForUserUsesForcedV2Config(t *testing.T) {
-	got := runtimeForUser(Config{RuntimeVersion: "v2"}, SessionUser{})
-
-	if got != "v2" {
-		t.Fatalf("runtimeForUser() = %q, want v2", got)
-	}
-}
-
-func TestConfiguredRuntimeKeepsExplicitLegacyUserOnLegacyTables(t *testing.T) {
-	client := autoClientWithEmptyV2AndLegacyGrade()
-
-	result, err := client.gradeForConfiguredRuntime(t.Context(), "ab1", SessionUser{Matricula: "123", Name: "Alice", SchemaStatus: "legacy"})
-	if err != nil {
-		t.Fatalf("gradeForConfiguredRuntime() error = %v", err)
-	}
-	if len(result.Tables) == 0 || result.Tables[0].Key != "legacy-ab1" {
-		t.Fatalf("gradeForConfiguredRuntime() = %#v, want legacy table", result)
-	}
-}
-
-func TestConfiguredRuntimeFallsBackToLegacyWhenAutoV2IsEmpty(t *testing.T) {
-	client := autoClientWithEmptyV2AndLegacyGrade()
-
-	result, err := client.gradeForConfiguredRuntime(t.Context(), "ab1", SessionUser{Matricula: "123", Name: "Alice"})
-	if err != nil {
-		t.Fatalf("gradeForConfiguredRuntime() error = %v", err)
-	}
-	if len(result.Tables) == 0 || result.Tables[0].Key != "legacy-ab1" {
-		t.Fatalf("gradeForConfiguredRuntime() = %#v, want legacy table", result)
-	}
-}
-
-func TestConfiguredRuntimeAllFallsBackToLegacyWhenAutoV2IsEmpty(t *testing.T) {
-	client := autoClientWithEmptyV2AndLegacyGrade()
-
-	results, err := client.gradesForConfiguredRuntime(t.Context(), []string{"ab1", "ab2"}, SessionUser{Matricula: "123", Name: "Alice"})
-	if err != nil {
-		t.Fatalf("gradesForConfiguredRuntime() error = %v", err)
-	}
-	if len(results["ab1"].Tables) == 0 || results["ab1"].Tables[0].Key != "legacy-ab1" {
-		t.Fatalf("gradesForConfiguredRuntime() = %#v, want legacy ab1 table", results)
-	}
-}
-
-func autoClientWithEmptyV2AndLegacyGrade() *SheetsClient {
-	return &SheetsClient{
-		cfg: Config{
-			RuntimeVersion: "auto",
-			AB1Tables:      []TableConfig{{Key: "legacy-ab1", Label: "Legacy AB1", SheetName: "Legacy AB1", Kind: "activity"}},
-		},
-		cache: map[string]cachedGrid{
-			v2ABsSheet: {
-				expires: time.Now().Add(time.Hour),
-				grid: &sheetGrid{
-					headers: []string{"AB", "status"},
-					rows:    [][]string{{"AB1", "1"}},
-				},
-			},
-			v2ActivitiesSheet: {
-				expires: time.Now().Add(time.Hour),
-				grid:    &sheetGrid{headers: []string{"atividade", "AB"}, rows: [][]string{{"Pesquisa", "AB1"}}},
-			},
-			"nota ab1": {
-				expires: time.Now().Add(time.Hour),
-				grid:    &sheetGrid{headers: []string{"Matrícula", "Pesquisa"}, rows: [][]string{}},
-			},
-			"Legacy AB1": {
-				expires: time.Now().Add(time.Hour),
-				grid: &sheetGrid{
-					headers: []string{"Grupo", "Critério"},
-					rows:    [][]string{{"Nota máxima", "1"}, {"Alice", "1"}},
-				},
-			},
-		},
-	}
-}
-
-func TestCandidateSpreadsheetIDsPrioritizesLegacyBases(t *testing.T) {
+func TestCandidateSpreadsheetIDsPrioritizesSessionThenV2ThenGeneric(t *testing.T) {
 	client := &SheetsClient{cfg: Config{
-		SpreadsheetIDs:       []string{"mixed-a", "v2-a", "legacy-a"},
-		LegacySpreadsheetIDs: []string{"legacy-a"},
-		V2SpreadsheetIDs:     []string{"v2-a"},
-		RuntimeVersion:       "v2",
+		SpreadsheetIDs:   []string{"mixed-a", "v2-a"},
+		V2SpreadsheetIDs: []string{"v2-a", "v2-b"},
 	}}
 
-	got := client.candidateSpreadsheetIDs(SessionUser{})
-	want := []string{"legacy-a", "v2-a", "mixed-a"}
+	got := client.candidateSpreadsheetIDs(SessionUser{SpreadsheetID: "session-a"})
+	want := []string{"session-a", "v2-a", "v2-b", "mixed-a"}
 	if len(got) != len(want) {
 		t.Fatalf("candidateSpreadsheetIDs() = %#v, want %#v", got, want)
 	}
@@ -723,7 +730,6 @@ func TestCandidateSpreadsheetIDsPrioritizesLegacyBases(t *testing.T) {
 
 func TestGradesForRuntimeV2UsesAbsKeysWhenAbsExists(t *testing.T) {
 	client := &SheetsClient{
-		cfg: Config{RuntimeVersion: "auto"},
 		cache: map[string]cachedGrid{
 			v2ABsSheet: {
 				expires: time.Now().Add(time.Hour),
@@ -757,7 +763,6 @@ func TestGradesForRuntimeV2UsesAbsKeysWhenAbsExists(t *testing.T) {
 
 func TestGradesForRuntimeV2ReturnsNoExamsWhenNoABStatusIsOne(t *testing.T) {
 	client := &SheetsClient{
-		cfg: Config{RuntimeVersion: "auto"},
 		cache: map[string]cachedGrid{
 			v2ABsSheet: {
 				expires: time.Now().Add(time.Hour),
@@ -778,105 +783,8 @@ func TestGradesForRuntimeV2ReturnsNoExamsWhenNoABStatusIsOne(t *testing.T) {
 	}
 }
 
-func TestConfiguredRuntimeV2DoesNotFallbackInactiveABToLegacy(t *testing.T) {
-	client := v2InactiveClientWithLegacyGrades()
-
-	result, err := client.gradeForConfiguredRuntime(t.Context(), "ab1", SessionUser{Matricula: "123", Name: "Alice"})
-	if err != nil {
-		t.Fatalf("gradeForConfiguredRuntime() error = %v", err)
-	}
-	if result.Active == nil || *result.Active || len(result.Tables) != 0 {
-		t.Fatalf("gradeForConfiguredRuntime() = %#v, want inactive empty v2 result", result)
-	}
-}
-
-func TestConfiguredRuntimeV2DoesNotFallbackInactiveABsToLegacy(t *testing.T) {
-	client := v2InactiveClientWithLegacyGrades()
-
-	results, err := client.gradesForConfiguredRuntime(t.Context(), []string{"ab1", "ab2"}, SessionUser{Matricula: "123", Name: "Alice"})
-	if err != nil {
-		t.Fatalf("gradesForConfiguredRuntime() error = %v", err)
-	}
-	if len(results) != 0 {
-		t.Fatalf("gradesForConfiguredRuntime() = %#v, want no inactive v2 exams", results)
-	}
-}
-
-func TestGradeForStopsAtInactiveV2Spreadsheet(t *testing.T) {
-	client := v2InactiveClientWithLegacyGrades()
-	user := SessionUser{Matricula: "123", Name: "Alice", SpreadsheetID: "v2-sheet", SchemaStatus: "v2"}
-
-	result, err := client.GradeFor(t.Context(), "ab1", user)
-	if err != nil {
-		t.Fatalf("GradeFor() error = %v", err)
-	}
-	if result.Active == nil || *result.Active || len(result.Tables) != 0 {
-		t.Fatalf("GradeFor() = %#v, want authoritative inactive v2 result", result)
-	}
-}
-
-func TestGradesForStopsAtInactiveV2Spreadsheet(t *testing.T) {
-	client := v2InactiveClientWithLegacyGrades()
-	user := SessionUser{Matricula: "123", Name: "Alice", SpreadsheetID: "v2-sheet", SchemaStatus: "v2"}
-
-	results, err := client.GradesFor(t.Context(), []string{"ab1", "ab2"}, user)
-	if err != nil {
-		t.Fatalf("GradesFor() error = %v", err)
-	}
-	if len(results) != 0 {
-		t.Fatalf("GradesFor() = %#v, want no inactive v2 exams", results)
-	}
-}
-
-func v2InactiveClientWithLegacyGrades() *SheetsClient {
-	return &SheetsClient{
-		cfg: Config{
-			SpreadsheetIDs:       []string{"v2-sheet", "legacy-sheet"},
-			LegacySpreadsheetIDs: []string{"legacy-sheet"},
-			V2SpreadsheetIDs:     []string{"v2-sheet"},
-			RuntimeVersion:       "v2",
-			LoginSheet:           "Base de dados",
-			AB1Tables:            []TableConfig{{Key: "legacy-ab1", Label: "Legacy AB1", SheetName: "Legacy AB1", Kind: "activity"}},
-			AB2Tables:            []TableConfig{{Key: "legacy-ab2", Label: "Legacy AB2", SheetName: "Legacy AB2", Kind: "activity"}},
-		},
-		cache: map[string]cachedGrid{
-			"Base de dados": {
-				expires: time.Now().Add(time.Hour),
-				grid: &sheetGrid{
-					headers:    []string{"Matricula", "Nome"},
-					rows:       [][]string{{"123", "Alice"}},
-					rowSources: []string{"legacy-sheet"},
-					rowSchemas: []string{"legacy"},
-				},
-			},
-			v2ABsSheet: {
-				expires: time.Now().Add(time.Hour),
-				grid: &sheetGrid{
-					headers: []string{"AB", "status"},
-					rows:    [][]string{{"AB1", "0"}, {"AB2", "0"}},
-				},
-			},
-			"Legacy AB1": {
-				expires: time.Now().Add(time.Hour),
-				grid: &sheetGrid{
-					headers: []string{"Grupo", "Critério"},
-					rows:    [][]string{{"Nota máxima", "1"}, {"Alice", "1"}},
-				},
-			},
-			"Legacy AB2": {
-				expires: time.Now().Add(time.Hour),
-				grid: &sheetGrid{
-					headers: []string{"Grupo", "Critério"},
-					rows:    [][]string{{"Nota máxima", "1"}, {"Alice", "1"}},
-				},
-			},
-		},
-	}
-}
-
 func TestGradeForV2ReturnsEmptyWhenSummarySheetDoesNotExist(t *testing.T) {
 	client := &SheetsClient{
-		cfg: Config{RuntimeVersion: "v2"},
 		cache: map[string]cachedGrid{
 			v2ABsSheet: {
 				expires: time.Now().Add(time.Hour),
@@ -908,7 +816,6 @@ func TestGradeForV2ReturnsEmptyWhenSummarySheetDoesNotExist(t *testing.T) {
 
 func TestV2ActivityTableIncludesTopicsAndComments(t *testing.T) {
 	client := &SheetsClient{
-		cfg: Config{RuntimeVersion: "v2"},
 		cache: map[string]cachedGrid{
 			v2ABsSheet: {
 				expires: time.Now().Add(time.Hour),
@@ -1000,7 +907,6 @@ func TestV2ActivityTableIncludesTopicsAndComments(t *testing.T) {
 
 func TestV2ActivityTableKeepsCriteriaWithoutHeaderCommentsWhenNoSimilarGroup(t *testing.T) {
 	client := &SheetsClient{
-		cfg: Config{RuntimeVersion: "v2"},
 		cache: map[string]cachedGrid{
 			v2ABsSheet: {
 				expires: time.Now().Add(time.Hour),
@@ -1079,7 +985,6 @@ func TestV2ActivityTableKeepsCriteriaWithoutHeaderCommentsWhenNoSimilarGroup(t *
 
 func TestV2ActivityTableUsesSummaryScoreWithoutRubricNormalization(t *testing.T) {
 	client := &SheetsClient{
-		cfg: Config{RuntimeVersion: "v2"},
 		cache: map[string]cachedGrid{
 			v2ABsSheet: {
 				expires: time.Now().Add(time.Hour),
@@ -1173,7 +1078,6 @@ func TestV2AverageCardHidesPendingValue(t *testing.T) {
 
 func TestV2ActivityTableUsesCriteriaScoreWhenSummaryIsPending(t *testing.T) {
 	client := &SheetsClient{
-		cfg: Config{RuntimeVersion: "v2"},
 		cache: map[string]cachedGrid{
 			v2ABsSheet: {
 				expires: time.Now().Add(time.Hour),
@@ -1244,7 +1148,6 @@ func TestV2ActivityTableUsesCriteriaScoreWhenSummaryIsPending(t *testing.T) {
 
 func TestV2ActivityTableFallsBackToSummaryFinalGradeColumn(t *testing.T) {
 	client := &SheetsClient{
-		cfg: Config{RuntimeVersion: "v2"},
 		cache: map[string]cachedGrid{
 			v2ABsSheet: {
 				expires: time.Now().Add(time.Hour),

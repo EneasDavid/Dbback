@@ -29,8 +29,8 @@ func TestLoginIdentityUsesFirstConfiguredBaseOccurrence(t *testing.T) {
 				grid: &sheetGrid{
 					headers:    []string{"Matricula", "Nome"},
 					rows:       [][]string{{"6,0", "Nova"}, {"6", "Antiga"}},
-					rowSources: []string{"v2-sheet", "v1-sheet"},
-					rowSchemas: []string{"v2", "legacy"},
+					rowSources: []string{"v2-sheet-a", "v2-sheet-b"},
+					rowSchemas: []string{"v2", "v2"},
 				},
 			},
 		},
@@ -40,27 +40,26 @@ func TestLoginIdentityUsesFirstConfiguredBaseOccurrence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoginIdentity() error = %v", err)
 	}
-	if identity.Name != "Nova" || identity.SpreadsheetID != "v2-sheet" || identity.SchemaStatus != "v2" {
-		t.Fatalf("LoginIdentity() = %#v, want first v2 occurrence", identity)
+	if identity.Name != "Nova" || identity.SpreadsheetID != "v2-sheet-a" || identity.SchemaStatus != "v2" {
+		t.Fatalf("LoginIdentity() = %#v, want first occurrence", identity)
 	}
 }
 
-func TestLoginIdentitySearchesLegacyFirst(t *testing.T) {
+func TestLoginIdentityReturnsRowSourceAndSchemaStatus(t *testing.T) {
 	client := &SheetsClient{
 		cfg: Config{
-			LoginSheet:           "Base de dados",
-			LegacySpreadsheetIDs: []string{"legacy-sheet"},
-			V2SpreadsheetIDs:     []string{"v2-sheet"},
-			SpreadsheetIDs:       []string{"legacy-sheet", "v2-sheet"},
+			LoginSheet:       "Base de dados",
+			V2SpreadsheetIDs: []string{"v2-sheet-a", "v2-sheet-b"},
+			SpreadsheetIDs:   []string{"v2-sheet-a", "v2-sheet-b"},
 		},
 		cache: map[string]cachedGrid{
 			"Base de dados": {
 				expires: time.Now().Add(time.Hour),
 				grid: &sheetGrid{
 					headers:    []string{"Matricula", "Nome"},
-					rows:       [][]string{{"23210542", "Legado User"}},
-					rowSources: []string{"legacy-sheet"},
-					rowSchemas: []string{"legacy"},
+					rows:       [][]string{{"23210542", "Aluno"}},
+					rowSources: []string{"v2-sheet-b"},
+					rowSchemas: []string{"v2"},
 				},
 			},
 		},
@@ -70,7 +69,7 @@ func TestLoginIdentitySearchesLegacyFirst(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoginIdentity() error = %v", err)
 	}
-	if identity.Name != "Legado User" || identity.SpreadsheetID != "legacy-sheet" || identity.SchemaStatus != "legacy" {
-		t.Fatalf("LoginIdentity() = %#v, want legacy base occurrence", identity)
+	if identity.Name != "Aluno" || identity.SpreadsheetID != "v2-sheet-b" || identity.SchemaStatus != "v2" {
+		t.Fatalf("LoginIdentity() = %#v, want row's own spreadsheet source and schema status", identity)
 	}
 }

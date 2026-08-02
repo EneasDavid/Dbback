@@ -298,17 +298,6 @@ func appendWorkbookComments(target map[string][]workbookCellComment, comments []
 	}
 }
 
-func configuredGradeSheetSet(cfg Config) map[string]bool {
-	names := map[string]bool{}
-	for _, table := range append(cfg.AB1Tables, cfg.AB2Tables...) {
-		name := strings.TrimSpace(table.SheetName)
-		if name != "" && name != strings.TrimSpace(cfg.LoginSheet) {
-			names[name] = true
-		}
-	}
-	return names
-}
-
 func sheetNameSet(sheetNames []string) map[string]bool {
 	names := map[string]bool{}
 	for _, sheetName := range sheetNames {

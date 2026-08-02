@@ -9,67 +9,32 @@ import (
 )
 
 type Config struct {
-	SpreadsheetID        string
-	SpreadsheetIDs       []string
-	LegacySpreadsheetIDs []string
-	V2SpreadsheetIDs     []string
-	RuntimeVersion       string
-	MetadataKey          string
-	MetadataValue        string
-	LoginSheet           string
-	AB1Tables            []TableConfig
-	AB2Tables            []TableConfig
-	SessionSecret        string
-	CookieSecure         bool
-	DocsUsername         string
-	DocsPassword         string
-	TurnstileSecret      string
-	ServiceJSON          string
-	ServiceFile          string
-	CacheTTL             time.Duration
-}
-
-type TableConfig struct {
-	Key          string
-	Label        string
-	SheetName    string
-	Kind         string
-	ScoreDivisor float64
-	Optional     bool
+	SpreadsheetID    string
+	SpreadsheetIDs   []string
+	V2SpreadsheetIDs []string
+	LoginSheet       string
+	SessionSecret    string
+	CookieSecure     bool
+	DocsUsername     string
+	DocsPassword     string
+	TurnstileSecret  string
+	ServiceJSON      string
+	ServiceFile      string
+	CacheTTL         time.Duration
 }
 
 func LoadConfig() Config {
-	legacySpreadsheetIDs := splitSpreadsheetIDs(os.Getenv("GOOGLE_SHEET_LEGACY_IDS"))
 	v2SpreadsheetIDs := splitSpreadsheetIDs(os.Getenv("GOOGLE_SHEET_V2_IDS"))
-	spreadsheetIDs := spreadsheetIDsFromEnv(legacySpreadsheetIDs, v2SpreadsheetIDs)
+	spreadsheetIDs := spreadsheetIDsFromEnv(v2SpreadsheetIDs)
 	return Config{
-		SpreadsheetID:        firstString(spreadsheetIDs),
-		SpreadsheetIDs:       spreadsheetIDs,
-		LegacySpreadsheetIDs: legacySpreadsheetIDs,
-		V2SpreadsheetIDs:     v2SpreadsheetIDs,
-		RuntimeVersion:       strings.ToLower(firstNonEmpty(os.Getenv("SHEETS_RUNTIME_VERSION"), "auto")),
-		MetadataKey:          firstNonEmpty(os.Getenv("GOOGLE_SHEET_METADATA_KEY"), "dbback_schema"),
-		MetadataValue:        firstNonEmpty(os.Getenv("GOOGLE_SHEET_METADATA_VALUE"), "v2"),
-		LoginSheet:           firstNonEmpty(os.Getenv("LOGIN_SHEET_NAME"), "Base de dados"),
-		AB1Tables: []TableConfig{
-			tableFromEnv("at1", "Atividade 1", "SHEET_AB1_PESQUISA", "AT. 1", "activity", 10),
-			tableFromEnv("at2", "Atividade 2", "SHEET_AB1_ARTIGO", "AT. 2", "activity", 10),
-			tableFromEnv("at3", "Atividade 3", "SHEET_AB1_LISTA", "AT. 3", "activity", 10),
-			optionalTable(tableFromEnv("notas-atividades-ab1", "Notas Atividades AB1", "SHEET_AB1_ATIVIDADES", "Notas Atividades AB1", "summary", 1)),
-			tableFromEnv("prova", "Prova AB1", "SHEET_AB1_PROVA", firstNonEmpty(os.Getenv("SHEET_AB1_NAME"), "Notas AB1"), "summary", 1),
-		},
-		AB2Tables: []TableConfig{
-			tableFromEnv("at4", "Atividade 4", "SHEET_AB2_LISTA", "AT. 4", "activity", 10),
-			optionalTable(tableFromEnv("at5", "Atividade 5", "SHEET_AB2_MAPEAMENTO", "AT. 5", "activity", 10)),
-			optionalTable(tableFromEnv("at6", "Atividade 6", "SHEET_AB2_SQL", "AT. 6", "activity", 10)),
-			tableFromEnv("projeto", "Projeto AB2", "SHEET_AB2_PROJETO", firstNonEmpty(os.Getenv("SHEET_AB2_NAME"), "Projeto AB2"), "project", 1),
-			optionalTable(tableFromEnv("trabalho", "Trabalho AB2", "SHEET_AB2_TRABALHO", "Trabalho AB2", "project", 1)),
-			optionalTable(tableFromEnv("notas-ab2", "Notas AB2", "SHEET_AB2_NOTAS", "Notas AB2", "ab2summary", 1)),
-		},
-		SessionSecret: os.Getenv("SESSION_SECRET"),
-		CookieSecure:  strings.EqualFold(firstNonEmpty(os.Getenv("COOKIE_SECURE"), "true"), "true"),
-		DocsUsername:  firstNonEmpty(os.Getenv("DOCS_USERNAME"), os.Getenv("DOCS_USER")),
-		DocsPassword:  firstNonEmpty(os.Getenv("DOCS_PASSWORD"), os.Getenv("DOCS_PASS")),
+		SpreadsheetID:    firstString(spreadsheetIDs),
+		SpreadsheetIDs:   spreadsheetIDs,
+		V2SpreadsheetIDs: v2SpreadsheetIDs,
+		LoginSheet:       firstNonEmpty(os.Getenv("LOGIN_SHEET_NAME"), "Base de dados"),
+		SessionSecret:    os.Getenv("SESSION_SECRET"),
+		CookieSecure:     strings.EqualFold(firstNonEmpty(os.Getenv("COOKIE_SECURE"), "true"), "true"),
+		DocsUsername:     firstNonEmpty(os.Getenv("DOCS_USERNAME"), os.Getenv("DOCS_USER")),
+		DocsPassword:     firstNonEmpty(os.Getenv("DOCS_PASSWORD"), os.Getenv("DOCS_PASS")),
 		TurnstileSecret: firstNonEmpty(
 			os.Getenv("TURNSTILE_SECRET_KEY"),
 			os.Getenv("CF_TURNSTILE_SECRET_KEY"),
@@ -85,7 +50,7 @@ func (c Config) Validate() error {
 		return NewHTTPError(500, "SESSION_SECRET nao configurado")
 	}
 	if len(c.SpreadsheetIDs) == 0 {
-		return NewHTTPError(500, "GOOGLE_SHEET_ID, GOOGLE_SHEET_IDS, GOOGLE_SHEET_LEGACY_IDS ou GOOGLE_SHEET_V2_IDS nao configurado")
+		return NewHTTPError(500, "GOOGLE_SHEET_ID, GOOGLE_SHEET_IDS ou GOOGLE_SHEET_V2_IDS nao configurado")
 	}
 	if c.ServiceJSON == "" {
 		if strings.TrimSpace(c.ServiceFile) != "" {
@@ -110,7 +75,7 @@ func spreadsheetIDsFromEnv(groups ...[]string) []string {
 		seen[item] = true
 		result = append(result, item)
 	}
-	// Ordem de busca: 1) LEGACY_IDS, 2) V2_IDS, 3) GOOGLE_SHEET_ID, 4) GOOGLE_SHEET_IDS (mista)
+	// Ordem de busca: 1) V2_IDS, 2) GOOGLE_SHEET_ID, 3) GOOGLE_SHEET_IDS (mista)
 	for _, group := range groups {
 		for _, item := range group {
 			add(item)
@@ -152,21 +117,6 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func tableFromEnv(key string, label string, envName string, fallback string, kind string, scoreDivisor float64) TableConfig {
-	return TableConfig{
-		Key:          key,
-		Label:        label,
-		SheetName:    firstNonEmpty(os.Getenv(envName), fallback),
-		Kind:         kind,
-		ScoreDivisor: scoreDivisor,
-	}
-}
-
-func optionalTable(table TableConfig) TableConfig {
-	table.Optional = true
-	return table
 }
 
 func serviceAccountJSON() string {

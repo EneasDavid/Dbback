@@ -8,14 +8,12 @@ import (
 	"time"
 
 	"google.golang.org/api/googleapi"
-	"google.golang.org/api/sheets/v4"
 )
 
-func TestSheetCacheTTLRefreshesV2GradeSheetsQuickly(t *testing.T) {
+func TestSheetCacheTTLRefreshesGradeSheetsQuickly(t *testing.T) {
 	client := &SheetsClient{cfg: Config{
-		CacheTTL:       7 * time.Hour,
-		LoginSheet:     "Base de dados",
-		RuntimeVersion: "v2",
+		CacheTTL:   7 * time.Hour,
+		LoginSheet: "Base de dados",
 	}}
 
 	for _, sheetName := range []string{v2ABsSheet, v2ActivitiesSheet, "nota ab2", "Pré entrega"} {
@@ -28,27 +26,10 @@ func TestSheetCacheTTLRefreshesV2GradeSheetsQuickly(t *testing.T) {
 	}
 }
 
-func TestSheetCacheTTLKeepsLegacyActivityCache(t *testing.T) {
-	client := &SheetsClient{cfg: Config{
-		CacheTTL:       7 * time.Hour,
-		LoginSheet:     "Base de dados",
-		RuntimeVersion: "legacy",
-	}}
-
-	if got := client.sheetCacheTTL("Pré entrega"); got != 7*time.Hour {
-		t.Fatalf("sheetCacheTTL(legacy activity) = %s, want 7h", got)
-	}
-}
-
-func TestCommentsCacheTTLRefreshesV2CommentsQuickly(t *testing.T) {
-	v2Client := &SheetsClient{cfg: Config{CacheTTL: 7 * time.Hour, RuntimeVersion: "v2"}}
-	if got := v2Client.commentsCacheTTL(); got != v2CommentsCacheTTL {
-		t.Fatalf("commentsCacheTTL(v2) = %s, want %s", got, v2CommentsCacheTTL)
-	}
-
-	legacyClient := &SheetsClient{cfg: Config{CacheTTL: 7 * time.Hour, RuntimeVersion: "legacy"}}
-	if got := legacyClient.commentsCacheTTL(); got != 7*time.Hour {
-		t.Fatalf("commentsCacheTTL(legacy) = %s, want 7h", got)
+func TestCommentsCacheTTLRefreshesQuickly(t *testing.T) {
+	client := &SheetsClient{cfg: Config{CacheTTL: 7 * time.Hour}}
+	if got := client.commentsCacheTTL(); got != v2CommentsCacheTTL {
+		t.Fatalf("commentsCacheTTL() = %s, want %s", got, v2CommentsCacheTTL)
 	}
 }
 
@@ -75,7 +56,7 @@ func TestRequiresDriveCommentsSkipsControlSheets(t *testing.T) {
 	}
 }
 
-func TestSheetNameMatchesLegacyActivityTabsWithDescriptions(t *testing.T) {
+func TestSheetNameMatchesActivityTabsWithDescriptions(t *testing.T) {
 	cases := []struct {
 		configured string
 		actual     string
@@ -125,35 +106,38 @@ func TestSheetReadErrorExplainsMissingSpreadsheetID(t *testing.T) {
 	}
 }
 
-func TestSchemaStatusForSpreadsheetMarksLegacyWhenMetadataDiffers(t *testing.T) {
-	client := &SheetsClient{cfg: Config{RuntimeVersion: "v2", MetadataKey: "dbback_schema", MetadataValue: "v2"}}
+func TestSheetReadErrorExplainsRateLimit(t *testing.T) {
+	err := sheetReadError(&googleapi.Error{Code: http.StatusTooManyRequests})
 
-	got := client.schemaStatusForSpreadsheet([]*sheets.DeveloperMetadata{
-		{MetadataKey: "dbback_schema", MetadataValue: "v1"},
-	})
-
-	if got != "legacy" {
-		t.Fatalf("schemaStatusForSpreadsheet() = %q, want legacy", got)
+	var httpErr HTTPError
+	if !errors.As(err, &httpErr) {
+		t.Fatalf("sheetReadError() type = %T, want HTTPError", err)
+	}
+	if httpErr.Status != http.StatusServiceUnavailable {
+		t.Fatalf("sheetReadError() status = %d, want %d", httpErr.Status, http.StatusServiceUnavailable)
+	}
+	if !strings.Contains(httpErr.Message, "limite de requisicoes") {
+		t.Fatalf("sheetReadError() message = %q, want rate limit guidance", httpErr.Message)
 	}
 }
 
-func TestSchemaStatusForSpreadsheetAcceptsConfiguredV2Metadata(t *testing.T) {
-	client := &SheetsClient{cfg: Config{RuntimeVersion: "v2", MetadataKey: "dbback_schema", MetadataValue: "v2"}}
-
-	got := client.schemaStatusForSpreadsheet([]*sheets.DeveloperMetadata{
-		{MetadataKey: "dbback_schema", MetadataValue: "v2"},
-	})
-
-	if got != "v2" {
-		t.Fatalf("schemaStatusForSpreadsheet() = %q, want v2", got)
+func TestRetryDelayForRateLimitHonorsRetryAfterHeader(t *testing.T) {
+	err := &googleapi.Error{
+		Code:   http.StatusTooManyRequests,
+		Header: http.Header{"Retry-After": []string{"1"}},
+	}
+	if got := retryDelayForRateLimit(err); got != time.Second {
+		t.Fatalf("retryDelayForRateLimit() = %s, want 1s", got)
 	}
 }
 
-func TestSchemaStatusForSpreadsheetLeavesMissingMetadataUndecided(t *testing.T) {
-	client := &SheetsClient{cfg: Config{RuntimeVersion: "v2", MetadataKey: "dbback_schema", MetadataValue: "v2"}}
-
-	if got := client.schemaStatusForSpreadsheet(nil); got != "" {
-		t.Fatalf("schemaStatusForSpreadsheet() = %q, want undecided", got)
+func TestRetryDelayForRateLimitCapsRetryAfterHeader(t *testing.T) {
+	err := &googleapi.Error{
+		Code:   http.StatusTooManyRequests,
+		Header: http.Header{"Retry-After": []string{"30"}},
+	}
+	if got := retryDelayForRateLimit(err); got > 1500*time.Millisecond {
+		t.Fatalf("retryDelayForRateLimit() = %s, want capped at 1.5s", got)
 	}
 }
 

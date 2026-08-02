@@ -4,6 +4,7 @@ import { EmptyState, ExamSwitch, GradeCard, InlineError, LoginView, ReaderGradeD
 import {
   cardsFor,
   clearGradeCache,
+  friendlyGradeError,
   gradeCacheKey,
   gradeKeys,
   gradeLabels,
@@ -17,11 +18,14 @@ import {
   storeGradeCache,
 } from '../Models/gradeModel';
 import type { GradeCache, GradeResult, SessionUser } from '../Models/types';
-import { api, apiSWR, clearApiValidators } from './apiController';
+import { ApiError, api, apiSWR, clearApiValidators } from './apiController';
 import { isPasskeyAbort, loginWithSavedPasskey, registerPasskey, supportsPasskeys } from './passkeyController';
 
 const EMPTY_STATE_MS = 5_000;
 const GRADES_REVALIDATE_MS = 30_000;
+// Depois desse tempo, uma prova lenta para de travar a tela: a busca
+// continua em segundo plano, mas o aluno já pode ver a outra prova.
+const GRADE_SOFT_TIMEOUT_MS = 2_000;
 const DEFAULT_EXAM = 'ab1';
 const ALL_GRADES_PATH = '/api/grades/all';
 const LAST_MATRICULA_KEY = 'dbback-last-matricula';

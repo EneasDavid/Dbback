@@ -1,6 +1,9 @@
 package app
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type HTTPError struct {
 	Status  int
@@ -13,4 +16,11 @@ func (e HTTPError) Error() string {
 
 func NewHTTPError(status int, message string) HTTPError {
 	return HTTPError{Status: status, Message: message}
+}
+
+// MissingHeaderError sinaliza que uma coluna obrigatoria nao foi encontrada
+// na aba indicada - usado no lugar de adivinhar a coluna por posicao ou por
+// aproximacao de texto.
+func MissingHeaderError(sheetName string, headerNames ...string) HTTPError {
+	return NewHTTPError(500, "cabeçalho obrigatório ausente: "+strings.Join(headerNames, " ou ")+" na aba "+sheetName)
 }

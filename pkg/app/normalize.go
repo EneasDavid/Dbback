@@ -71,28 +71,6 @@ func parseNumericID(value string) (int64, bool) {
 	return intValue, true
 }
 
-func matchesUser(row []string, nameIdx int, matriculaIdx int, user SessionUser) bool {
-	if nameIdx >= 0 && nameIdx < len(row) && sameLookupValue(row[nameIdx], user.Name, true) {
-		return true
-	}
-	if matriculaIdx >= 0 && matriculaIdx < len(row) && sameLookupValue(row[matriculaIdx], user.Matricula, false) {
-		return true
-	}
-	return false
-}
-
-func rowIdentityComment(grid *sheetGrid, rowIdx int) (string, string) {
-	if grid == nil || rowIdx < 0 || rowIdx >= len(grid.rowNotes) {
-		return "", ""
-	}
-	for _, colIdx := range identityCommentColumns(grid.headers) {
-		if comment := noteAt(grid.rowNotes[rowIdx], colIdx); comment != "" {
-			return comment, noteAt(grid.rowNoteAuthors[rowIdx], colIdx)
-		}
-	}
-	return "", ""
-}
-
 func identityCommentColumns(headers []string) []int {
 	candidates := []int{nameColumn(headers), groupColumn(headers), matriculaColumn(headers), 0}
 	seen := map[int]bool{}
@@ -105,23 +83,6 @@ func identityCommentColumns(headers []string) []int {
 		columns = append(columns, colIdx)
 	}
 	return columns
-}
-
-func excludesStudentFromGrades(comment string) bool {
-	normalized := normalizeHeader(comment)
-	return strings.Contains(normalized, "nao consta") ||
-		strings.Contains(normalized, "nao aparece") ||
-		strings.Contains(normalized, "nao encontrado")
-}
-
-func studentRow(row []string, nameIdx int, matriculaIdx int) bool {
-	if nameIdx >= 0 && strings.TrimSpace(valueAt(row, nameIdx)) != "" {
-		return true
-	}
-	if matriculaIdx >= 0 && strings.TrimSpace(valueAt(row, matriculaIdx)) != "" {
-		return true
-	}
-	return false
 }
 
 func noteAt(notes []string, idx int) string {
