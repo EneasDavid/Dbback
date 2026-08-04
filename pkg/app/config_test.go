@@ -32,7 +32,7 @@ func TestServiceAccountJSONAcceptsWrappedBase64(t *testing.T) {
 }
 
 func TestValidateExplainsMissingServiceAccountFileOnVercel(t *testing.T) {
-	t.Setenv("GOOGLE_SHEET_ID", "sheet-test-id")
+	t.Setenv("GOOGLE_SHEET_IDS", "sheet-test-id")
 	t.Setenv("SESSION_SECRET", "test-secret")
 	t.Setenv("GOOGLE_SERVICE_ACCOUNT_JSON", "")
 	t.Setenv("GOOGLE_SERVICE_ACCOUNT_JSON_BASE64", "")
@@ -53,9 +53,7 @@ func TestValidateExplainsMissingServiceAccountFileOnVercel(t *testing.T) {
 }
 
 func TestValidateExplainsMissingSpreadsheetID(t *testing.T) {
-	t.Setenv("GOOGLE_SHEET_ID", "")
 	t.Setenv("GOOGLE_SHEET_IDS", "")
-	t.Setenv("GOOGLE_SHEET_V2_IDS", "")
 	t.Setenv("SESSION_SECRET", "test-secret")
 	t.Setenv("GOOGLE_SERVICE_ACCOUNT_JSON", testServiceAccountJSON)
 	t.Setenv("GOOGLE_SERVICE_ACCOUNT_JSON_BASE64", "")
@@ -70,27 +68,22 @@ func TestValidateExplainsMissingSpreadsheetID(t *testing.T) {
 	if !errors.As(err, &httpErr) {
 		t.Fatalf("Validate() error type = %T, want HTTPError", err)
 	}
-	if !strings.Contains(httpErr.Message, "GOOGLE_SHEET_ID") {
-		t.Fatalf("Validate() message = %q, want GOOGLE_SHEET_ID guidance", httpErr.Message)
+	if !strings.Contains(httpErr.Message, "GOOGLE_SHEET_IDS") {
+		t.Fatalf("Validate() message = %q, want GOOGLE_SHEET_IDS guidance", httpErr.Message)
 	}
 }
 
 func TestLoadConfigAcceptsMultipleSpreadsheetIDs(t *testing.T) {
-	t.Setenv("GOOGLE_SHEET_ID", "generic-id")
 	t.Setenv("GOOGLE_SHEET_IDS", " sheet-a, sheet-b ;sheet-a\nsheet-c ")
-	t.Setenv("GOOGLE_SHEET_V2_IDS", "v2-a; sheet-b")
 
 	cfg := LoadConfig()
 
-	want := []string{"v2-a", "sheet-b", "generic-id", "sheet-a", "sheet-c"}
+	want := []string{"sheet-a", "sheet-b", "sheet-c"}
 	if strings.Join(cfg.SpreadsheetIDs, ",") != strings.Join(want, ",") {
-		t.Fatalf("SpreadsheetIDs = %#v, want %#v (order: V2_IDS, GOOGLE_SHEET_ID, GOOGLE_SHEET_IDS)", cfg.SpreadsheetIDs, want)
+		t.Fatalf("SpreadsheetIDs = %#v, want %#v", cfg.SpreadsheetIDs, want)
 	}
-	if cfg.SpreadsheetID != "v2-a" {
-		t.Fatalf("SpreadsheetID = %q, want first v2 id", cfg.SpreadsheetID)
-	}
-	if strings.Join(cfg.V2SpreadsheetIDs, ",") != "v2-a,sheet-b" {
-		t.Fatalf("V2SpreadsheetIDs = %#v", cfg.V2SpreadsheetIDs)
+	if cfg.SpreadsheetID != "sheet-a" {
+		t.Fatalf("SpreadsheetID = %q, want first id", cfg.SpreadsheetID)
 	}
 }
 

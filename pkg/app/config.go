@@ -9,32 +9,29 @@ import (
 )
 
 type Config struct {
-	SpreadsheetID    string
-	SpreadsheetIDs   []string
-	V2SpreadsheetIDs []string
-	LoginSheet       string
-	SessionSecret    string
-	CookieSecure     bool
-	DocsUsername     string
-	DocsPassword     string
-	TurnstileSecret  string
-	ServiceJSON      string
-	ServiceFile      string
-	CacheTTL         time.Duration
+	SpreadsheetID   string
+	SpreadsheetIDs  []string
+	LoginSheet      string
+	SessionSecret   string
+	CookieSecure    bool
+	DocsUsername    string
+	DocsPassword    string
+	TurnstileSecret string
+	ServiceJSON     string
+	ServiceFile     string
+	CacheTTL        time.Duration
 }
 
 func LoadConfig() Config {
-	v2SpreadsheetIDs := splitSpreadsheetIDs(os.Getenv("GOOGLE_SHEET_V2_IDS"))
-	spreadsheetIDs := spreadsheetIDsFromEnv(v2SpreadsheetIDs)
+	spreadsheetIDs := splitSpreadsheetIDs(os.Getenv("GOOGLE_SHEET_IDS"))
 	return Config{
-		SpreadsheetID:    firstString(spreadsheetIDs),
-		SpreadsheetIDs:   spreadsheetIDs,
-		V2SpreadsheetIDs: v2SpreadsheetIDs,
-		LoginSheet:       firstNonEmpty(os.Getenv("LOGIN_SHEET_NAME"), "Base de dados"),
-		SessionSecret:    os.Getenv("SESSION_SECRET"),
-		CookieSecure:     strings.EqualFold(firstNonEmpty(os.Getenv("COOKIE_SECURE"), "true"), "true"),
-		DocsUsername:     firstNonEmpty(os.Getenv("DOCS_USERNAME"), os.Getenv("DOCS_USER")),
-		DocsPassword:     firstNonEmpty(os.Getenv("DOCS_PASSWORD"), os.Getenv("DOCS_PASS")),
+		SpreadsheetID:  firstString(spreadsheetIDs),
+		SpreadsheetIDs: spreadsheetIDs,
+		LoginSheet:     firstNonEmpty(os.Getenv("LOGIN_SHEET_NAME"), "Base de dados"),
+		SessionSecret:  os.Getenv("SESSION_SECRET"),
+		CookieSecure:   strings.EqualFold(firstNonEmpty(os.Getenv("COOKIE_SECURE"), "true"), "true"),
+		DocsUsername:   firstNonEmpty(os.Getenv("DOCS_USERNAME"), os.Getenv("DOCS_USER")),
+		DocsPassword:   firstNonEmpty(os.Getenv("DOCS_PASSWORD"), os.Getenv("DOCS_PASS")),
 		TurnstileSecret: firstNonEmpty(
 			os.Getenv("TURNSTILE_SECRET_KEY"),
 			os.Getenv("CF_TURNSTILE_SECRET_KEY"),
@@ -50,7 +47,7 @@ func (c Config) Validate() error {
 		return NewHTTPError(500, "SESSION_SECRET nao configurado")
 	}
 	if len(c.SpreadsheetIDs) == 0 {
-		return NewHTTPError(500, "GOOGLE_SHEET_ID, GOOGLE_SHEET_IDS ou GOOGLE_SHEET_V2_IDS nao configurado")
+		return NewHTTPError(500, "GOOGLE_SHEET_IDS nao configurado")
 	}
 	if c.ServiceJSON == "" {
 		if strings.TrimSpace(c.ServiceFile) != "" {
@@ -64,41 +61,18 @@ func (c Config) Validate() error {
 	return nil
 }
 
-func spreadsheetIDsFromEnv(groups ...[]string) []string {
-	seen := map[string]bool{}
-	var result []string
-	add := func(item string) {
-		item = strings.TrimSpace(item)
-		if item == "" || seen[item] {
-			return
-		}
-		seen[item] = true
-		result = append(result, item)
-	}
-	// Ordem de busca: 1) V2_IDS, 2) GOOGLE_SHEET_ID, 3) GOOGLE_SHEET_IDS (mista)
-	for _, group := range groups {
-		for _, item := range group {
-			add(item)
-		}
-	}
-	for _, item := range splitSpreadsheetIDs(os.Getenv("GOOGLE_SHEET_ID")) {
-		add(item)
-	}
-	for _, item := range splitSpreadsheetIDs(os.Getenv("GOOGLE_SHEET_IDS")) {
-		add(item)
-	}
-	return result
-}
-
 func splitSpreadsheetIDs(raw string) []string {
+	seen := map[string]bool{}
 	var result []string
 	for _, item := range strings.FieldsFunc(raw, func(r rune) bool {
 		return r == ',' || r == ';' || r == '\n' || r == '\r' || r == '\t'
 	}) {
 		item = strings.TrimSpace(item)
-		if item != "" {
-			result = append(result, item)
+		if item == "" || seen[item] {
+			continue
 		}
+		seen[item] = true
+		result = append(result, item)
 	}
 	return result
 }

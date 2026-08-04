@@ -605,7 +605,7 @@ func sheetReadError(err error) error {
 		case http.StatusForbidden:
 			return NewHTTPError(http.StatusServiceUnavailable, "service account sem acesso a planilha; compartilhe a planilha com o client_email da credencial")
 		case http.StatusNotFound:
-			return NewHTTPError(http.StatusNotFound, "planilha nao encontrada; confira GOOGLE_SHEET_ID ou GOOGLE_SHEET_IDS")
+			return NewHTTPError(http.StatusNotFound, "planilha nao encontrada; confira GOOGLE_SHEET_IDS")
 		case http.StatusBadRequest:
 			return NewHTTPError(http.StatusBadRequest, "nao conseguiu ler as abas configuradas; confira os nomes das abas no ambiente")
 		case http.StatusTooManyRequests:

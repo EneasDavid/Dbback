@@ -101,8 +101,8 @@ func TestSheetReadErrorExplainsMissingSpreadsheetID(t *testing.T) {
 	if httpErr.Status != http.StatusNotFound {
 		t.Fatalf("sheetReadError() status = %d, want %d", httpErr.Status, http.StatusNotFound)
 	}
-	if !strings.Contains(httpErr.Message, "GOOGLE_SHEET_ID") {
-		t.Fatalf("sheetReadError() message = %q, want spreadsheet ID guidance", httpErr.Message)
+	if !strings.Contains(httpErr.Message, "GOOGLE_SHEET_IDS") {
+		t.Fatalf("sheetReadError() message = %q, want GOOGLE_SHEET_IDS guidance", httpErr.Message)
 	}
 }
 

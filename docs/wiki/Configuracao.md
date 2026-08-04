@@ -3,11 +3,7 @@
 ## Variaveis principais
 
 ```env
-GOOGLE_SHEET_ID=...
 GOOGLE_SHEET_IDS=...
-GOOGLE_SHEET_LEGACY_IDS=...
-GOOGLE_SHEET_V2_IDS=...
-SHEETS_RUNTIME_VERSION=auto
 LOGIN_SHEET_NAME=Base de dados
 SESSION_SECRET=<chave-forte>
 COOKIE_SECURE=true
@@ -16,7 +12,7 @@ TURNSTILE_SECRET_KEY=<secret-key-do-turnstile>
 VITE_TURNSTILE_SITE_KEY=<site-key-publica-do-turnstile>
 ```
 
-Use `GOOGLE_SHEET_LEGACY_IDS` e `GOOGLE_SHEET_V2_IDS` quando planilhas antigas e novas existirem ao mesmo tempo.
+Use `GOOGLE_SHEET_IDS` para todas as planilhas ativas, separando os IDs por vírgula, ponto e vírgula ou quebra de linha.
 
 O "nao sou um robo" do login e ativado quando as duas variaveis do Cloudflare Turnstile estao configuradas. A chave `VITE_TURNSTILE_SITE_KEY` aparece no navegador; `TURNSTILE_SECRET_KEY` fica privada no backend e valida o token antes de qualquer consulta a planilha. Sem essas chaves, o app nao renderiza o widget e o backend pula a validacao para facilitar desenvolvimento local.
 

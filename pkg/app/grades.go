@@ -219,7 +219,6 @@ func (c *SheetsClient) candidateSpreadsheetIDs(user SessionUser) []string {
 		}
 	}
 	add(user.SpreadsheetID)
-	addAll(c.cfg.V2SpreadsheetIDs)
 	addAll(c.cfg.SpreadsheetIDs)
 	return ids
 }

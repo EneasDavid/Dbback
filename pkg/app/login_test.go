@@ -48,9 +48,8 @@ func TestLoginIdentityUsesFirstConfiguredBaseOccurrence(t *testing.T) {
 func TestLoginIdentityReturnsRowSourceAndSchemaStatus(t *testing.T) {
 	client := &SheetsClient{
 		cfg: Config{
-			LoginSheet:       "Base de dados",
-			V2SpreadsheetIDs: []string{"v2-sheet-a", "v2-sheet-b"},
-			SpreadsheetIDs:   []string{"v2-sheet-a", "v2-sheet-b"},
+			LoginSheet:     "Base de dados",
+			SpreadsheetIDs: []string{"v2-sheet-a", "v2-sheet-b"},
 		},
 		cache: map[string]cachedGrid{
 			"Base de dados": {

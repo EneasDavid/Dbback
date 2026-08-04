@@ -101,15 +101,7 @@ GradesController -> JSON privado + ETag -> GradeModel -> GradeCard/DetailPanel
 Copie `env.example` para `.env` no desenvolvimento local e configure as variaveis do projeto. As principais sao:
 
 ```env
-GOOGLE_SHEET_ID=...
-# Compatibilidade antiga: lista mista opcional.
-# GOOGLE_SHEET_IDS=id_da_turma_1,id_da_turma_2
-# Preferido para bases separadas por versao:
-# GOOGLE_SHEET_LEGACY_IDS=id_legado_1,id_legado_2
-# GOOGLE_SHEET_V2_IDS=id_v2_1,id_v2_2
-# SHEETS_RUNTIME_VERSION=auto # auto, legacy ou v2
-# GOOGLE_SHEET_METADATA_KEY=dbback_schema
-# GOOGLE_SHEET_METADATA_VALUE=v2
+GOOGLE_SHEET_IDS=id_da_turma_1,id_da_turma_2
 LOGIN_SHEET_NAME=Base de dados
 SHEET_AB1_PESQUISA=AT. 1
 SHEET_AB1_ARTIGO=AT. 2
@@ -157,9 +149,7 @@ Compartilhe a planilha com o `client_email` da service account. Para comentarios
 
 ### V1 legado e V2
 
-A tag git local `v1-stable` aponta para o codigo estavel anterior a v2. Em runtime, `GOOGLE_SHEET_ID` e `GOOGLE_SHEET_IDS` continuam funcionando como configuracao antiga/mista. Para deixar varias planilhas online ao mesmo tempo e evitar tentativa desnecessaria do parser errado, prefira `GOOGLE_SHEET_LEGACY_IDS` para bases legadas e `GOOGLE_SHEET_V2_IDS` para bases v2, com IDs separados por virgula, ponto e virgula ou quebra de linha. Se mais de uma variavel estiver definida, o backend deduplica e consulta todas em ordem: legado primeiro, depois v2, depois mistas.
-
-Quando `SHEETS_RUNTIME_VERSION=v2`, a API consulta os metadados do proprio Google Sheets. A planilha e marcada como `v2` quando houver developer metadata com a chave `GOOGLE_SHEET_METADATA_KEY` e o valor `GOOGLE_SHEET_METADATA_VALUE`; qualquer divergencia fica marcada como `legacy` no payload.
+A tag git local `v1-stable` aponta para o codigo estavel anterior a v2. Em runtime, `GOOGLE_SHEET_IDS` define todas as planilhas ativas, com IDs separados por virgula, ponto e virgula ou quebra de linha. O backend deduplica os IDs e consulta as planilhas na ordem configurada.
 
 Na v2, as atividades nao saem mais da lista fixa `SHEET_AB1_*`. O backend le a aba `abs` para descobrir quais ABs estao ativas, le a aba `atividades` para descobrir as atividades de cada AB e seu `peso maximo`, le `nota <ab>` para a media e a nota final do aluno em cada atividade, e entao abre a aba da atividade para montar os criterios, grupos/matriculas e comentarios por subtopico. Somente linhas da aba `abs` com `status`/ativo igual a `1` entram em `/api/grades/all`.
 
@@ -176,7 +166,7 @@ Os comentários são colhidos automaticamente das notas de células do Google Sh
 
 Na v2, a nota principal do card da atividade vem da aba `nota <ab>`; se a coluna da atividade nao casar pelo nome, a API tenta a coluna `nota final` nessa mesma aba de resumo. A coluna `nota final` da aba da atividade nao aparece como criterio e nao entra no calculo das notas maximas dos criterios. Medias sao limitadas a 10 pontos no payload.
 
-Mesmo com `SHEETS_RUNTIME_VERSION=v2`, o parser legado continua disponivel como fallback. Se a estrutura v2 nao existir, se a AB estiver sem tabelas v2 renderizaveis ou se a planilha ainda estiver no formato antigo, a mesma requisicao tenta o fluxo legado configurado por `SHEET_AB1_*`/`SHEET_AB2_*`.
+O parser legado continua disponivel como fallback. Se a estrutura v2 nao existir, se a AB estiver sem tabelas v2 renderizaveis ou se a planilha ainda estiver no formato antigo, a mesma requisicao tenta o fluxo legado configurado por `SHEET_AB1_*`/`SHEET_AB2_*`.
 
 No login, a API procura a matricula em todas as planilhas configuradas e salva o `spreadsheetId` de origem somente na sessao assinada. As consultas de notas seguintes ficam presas a esse mesmo arquivo, evitando misturar dados da planilha antiga com os da nova sem expor o ID da planilha ao frontend.
 
@@ -238,7 +228,7 @@ Configure no provedor:
 
 ```env
 GOOGLE_SERVICE_ACCOUNT_JSON_BASE64=<saida>
-GOOGLE_SHEET_ID=<id>
+GOOGLE_SHEET_IDS=<id-ou-lista-de-ids>
 LOGIN_SHEET_NAME=Base de dados
 SESSION_SECRET=<chave-forte>
 COOKIE_SECURE=true

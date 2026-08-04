@@ -710,14 +710,13 @@ func TestCanonicalExamKeyKeepsRouteAliases(t *testing.T) {
 	}
 }
 
-func TestCandidateSpreadsheetIDsPrioritizesSessionThenV2ThenGeneric(t *testing.T) {
+func TestCandidateSpreadsheetIDsPrioritizesSessionThenConfiguredIDs(t *testing.T) {
 	client := &SheetsClient{cfg: Config{
-		SpreadsheetIDs:   []string{"mixed-a", "v2-a"},
-		V2SpreadsheetIDs: []string{"v2-a", "v2-b"},
+		SpreadsheetIDs: []string{"sheet-a", "sheet-b"},
 	}}
 
 	got := client.candidateSpreadsheetIDs(SessionUser{SpreadsheetID: "session-a"})
-	want := []string{"session-a", "v2-a", "v2-b", "mixed-a"}
+	want := []string{"session-a", "sheet-a", "sheet-b"}
 	if len(got) != len(want) {
 		t.Fatalf("candidateSpreadsheetIDs() = %#v, want %#v", got, want)
 	}
