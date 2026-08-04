@@ -145,9 +145,6 @@ export default function AppController() {
     setExam((currentExam) => {
       if (keys.length === 0) return currentExam;
       if (!keys.includes(currentExam)) return keys[0];
-      if (!hasRenderableGrade(visibleResults[currentExam])) {
-        return keys.find((key) => hasRenderableGrade(visibleResults[key])) || currentExam;
-      }
       return currentExam;
     });
 
