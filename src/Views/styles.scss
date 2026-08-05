@@ -50,47 +50,47 @@
 }
 
 :root[data-theme="dark"] {
-  color: #f5f5f7;
-  background: #000000;
+  color: #e8eef8;
+  background: #1a202c;
   color-scheme: dark;
-  --page: #000000;
-  --shell: rgba(28, 28, 30, 0.92);
-  --panel: rgba(44, 44, 46, 0.88);
-  --panel-solid: #1c1c1e;
-  --panel-soft: rgba(60, 60, 67, 0.6);
-  --text: #f5f5f7;
-  --text-secondary: #a1a1a6;
-  --muted: #86868b;
-  --muted-strong: #a1a1a6;
-  --border: rgba(255, 255, 255, 0.1);
-  --border-soft: rgba(255, 255, 255, 0.06);
-  --brand: #30b35e;
-  --brand-hover: #25a04d;
-  --brand-soft: rgba(48, 179, 94, 0.15);
-  --accent: #34c759;
-  --accent-soft: rgba(52, 199, 89, 0.15);
-  --accent-at4: #30b35e;
+  --page: #1a202c;
+  --shell: rgba(30, 41, 59, 0.92);
+  --panel: rgba(51, 65, 85, 0.88);
+  --panel-solid: #2d3748;
+  --panel-soft: rgba(71, 85, 105, 0.65);
+  --text: #e8eef8;
+  --text-secondary: #cbd5e1;
+  --muted: #94a3b8;
+  --muted-strong: #cbd5e1;
+  --border: rgba(139, 184, 234, 0.12);
+  --border-soft: rgba(139, 184, 234, 0.08);
+  --brand: #22c55e;
+  --brand-hover: #16a34a;
+  --brand-soft: rgba(34, 197, 94, 0.18);
+  --accent: #22c55e;
+  --accent-soft: rgba(34, 197, 94, 0.15);
+  --accent-at4: #22c55e;
   --brand-contrast: #ffffff;
-  --danger: #ff3b30;
-  --danger-bg: rgba(255, 59, 48, 0.18);
-  --danger-border: rgba(255, 59, 48, 0.2);
-  --success: #30b35e;
-  --success-bg: rgba(48, 179, 94, 0.15);
-  --warning: #ff9500;
-  --warning-bg: rgba(255, 149, 0, 0.15);
-  --score-badge-bg: rgba(48, 179, 94, 0.2);
-  --score-badge-text: #30b35e;
-  --score-badge-border: rgba(48, 179, 94, 0.25);
-  --progress-track: rgba(255, 255, 255, 0.1);
-  --progress-track-border: rgba(255, 255, 255, 0.08);
-  --pending-text: #86868b;
-  --pending-bg: rgba(133, 133, 137, 0.12);
-  --pending-border: rgba(133, 133, 137, 0.18);
-  --glass-line: rgba(255, 255, 255, 0.1);
-  --shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
-  --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.4);
-  --inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 -1px 0 rgba(0, 0, 0, 0.2);
-  --focus: 0 0 0 3px rgba(48, 179, 94, 0.25);
+  --danger: #ff5757;
+  --danger-bg: rgba(255, 87, 87, 0.15);
+  --danger-border: rgba(255, 87, 87, 0.22);
+  --success: #22c55e;
+  --success-bg: rgba(34, 197, 94, 0.15);
+  --warning: #facc15;
+  --warning-bg: rgba(250, 204, 21, 0.12);
+  --score-badge-bg: rgba(34, 197, 94, 0.22);
+  --score-badge-text: #86efac;
+  --score-badge-border: rgba(34, 197, 94, 0.28);
+  --progress-track: rgba(139, 184, 234, 0.12);
+  --progress-track-border: rgba(139, 184, 234, 0.1);
+  --pending-text: #94a3b8;
+  --pending-bg: rgba(148, 163, 184, 0.12);
+  --pending-border: rgba(148, 163, 184, 0.18);
+  --glass-line: rgba(139, 184, 234, 0.15);
+  --shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.25);
+  --inner-highlight: inset 0 1px 0 rgba(148, 184, 234, 0.12), inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+  --focus: 0 0 0 3px rgba(34, 197, 94, 0.28);
 }
 
 * {
@@ -110,7 +110,7 @@ html {
 }
 
 :root[data-theme="dark"] body {
-  background: linear-gradient(180deg, #0d1b2e 0%, var(--page) 52%, #030712 100%);
+  background: linear-gradient(180deg, #192841 0%, #1a202c 50%, #1e293b 100%);
 }
 
 :root[data-screen="login"],
@@ -160,7 +160,7 @@ input:focus-visible {
 }
 
 :root[data-theme="dark"] .login-shell {
-  background: linear-gradient(180deg, #0d1b2e 0%, var(--page) 58%, #030712 100%);
+  background: linear-gradient(180deg, #192841 0%, #1a202c 58%, #1e293b 100%);
 }
 
 .login-panel {
@@ -454,9 +454,9 @@ input:focus-visible {
 }
 
 :root[data-theme="dark"] .scroll-top-button {
-  border-color: rgba(220, 255, 232, 0.42);
-  background: linear-gradient(180deg, #2f9f66, #17613f);
-  box-shadow: 0 18px 42px rgba(47, 159, 102, 0.44), 0 0 0 1px rgba(255, 255, 255, 0.22), var(--inner-highlight);
+  border-color: rgba(34, 197, 94, 0.3);
+  background: linear-gradient(180deg, #22c55e, #16a34a);
+  box-shadow: 0 12px 32px rgba(34, 197, 94, 0.35), 0 0 0 1px rgba(34, 197, 94, 0.2), var(--inner-highlight);
 }
 
 :root[data-theme="dark"] .scroll-top-button.visible {
@@ -464,8 +464,8 @@ input:focus-visible {
 }
 
 :root[data-theme="dark"] .scroll-top-button.visible:hover {
-  background: linear-gradient(180deg, #39b875, #1b774c);
-  box-shadow: 0 20px 48px rgba(57, 184, 117, 0.52), 0 0 0 1px rgba(255, 255, 255, 0.28), var(--inner-highlight);
+  background: linear-gradient(180deg, #4ade80, #22c55e);
+  box-shadow: 0 16px 40px rgba(34, 197, 94, 0.42), 0 0 0 1px rgba(34, 197, 94, 0.28), var(--inner-highlight);
 }
 
 .scroll-top-button:disabled {
@@ -514,9 +514,9 @@ input:focus-visible {
 }
 
 :root[data-theme="dark"] .exam-switch {
-  border-color: rgba(169, 187, 210, 0.12);
-  background: linear-gradient(180deg, rgba(18, 42, 65, 0.28), rgba(5, 16, 31, 0.12));
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  border-color: rgba(139, 184, 234, 0.12);
+  background: rgba(51, 65, 85, 0.88);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(139, 184, 234, 0.1);
 }
 
 .exam-option {
