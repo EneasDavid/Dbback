@@ -1,6 +1,6 @@
 module feedback
 
-go 1.25.11
+go 1.26.5
 
 require (
 	github.com/fxamacker/cbor/v2 v2.9.2

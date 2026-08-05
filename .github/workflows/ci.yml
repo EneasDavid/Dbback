@@ -11,7 +11,7 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  GO_VERSION: "1.25.11"
+  GO_VERSION: "1.26.5"
 
 concurrency:
   group: quality-${{ github.workflow }}-${{ github.ref }}
