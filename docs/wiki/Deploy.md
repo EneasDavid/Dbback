@@ -6,7 +6,7 @@ No Vercel, use credencial Google em base64:
 
 ```env
 GOOGLE_SERVICE_ACCOUNT_JSON_BASE64=<saida-base64>
-GOOGLE_SHEET_ID=<id>
+GOOGLE_SHEET_V2_IDS=<id-ou-lista-de-ids>
 LOGIN_SHEET_NAME=Base de dados
 SESSION_SECRET=<chave-forte>
 COOKIE_SECURE=true

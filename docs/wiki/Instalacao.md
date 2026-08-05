@@ -4,7 +4,7 @@
 
 - Node.js 22
 - npm
-- Go 1.25.x
+- Go 1.26.5
 - Acesso a uma planilha Google Sheets compartilhada com a service account
 
 ## Preparar o ambiente
