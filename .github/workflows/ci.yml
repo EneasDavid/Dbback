@@ -61,7 +61,7 @@ jobs:
       - name: Vulnerability scan
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./api ./cmd/dev ./pkg/app
+          govulncheck ./...
 
   frontend:
     name: frontend checks
