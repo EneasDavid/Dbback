@@ -12,32 +12,32 @@ import (
 type CredentialProvider string
 
 const (
-	ProviderApple    CredentialProvider = "apple"
-	ProviderGoogle   CredentialProvider = "google"
-	ProviderGeneric  CredentialProvider = "webauthn"
-	ProviderUnknown  CredentialProvider = "unknown"
+	ProviderApple   CredentialProvider = "apple"
+	ProviderGoogle  CredentialProvider = "google"
+	ProviderGeneric CredentialProvider = "webauthn"
+	ProviderUnknown CredentialProvider = "unknown"
 )
 
 // Credential represents a saved WebAuthn credential
 type Credential struct {
-	ID           string                // Unique credential ID
-	Provider     CredentialProvider    // apple, google, or webauthn
-	PublicKeyID  string                // Hashed public key for comparision
-	PublicKey    []byte                // Encoded public key
-	Counter      uint32                // Attack prevention counter
-	CreatedAt    time.Time             // When credential was first used
-	LastUsedAt   time.Time             // When credential was last authenticated
-	Nickname     string                // User-friendly name
-	IsDefault    bool                  // Default credential for this device
-	UserSaved    bool                  // User explicitly saved this credential
-	DeviceInfo   string                // Device identifier (browser, OS)
+	ID          string             // Unique credential ID
+	Provider    CredentialProvider // apple, google, or webauthn
+	PublicKeyID string             // Hashed public key for comparision
+	PublicKey   []byte             // Encoded public key
+	Counter     uint32             // Attack prevention counter
+	CreatedAt   time.Time          // When credential was first used
+	LastUsedAt  time.Time          // When credential was last authenticated
+	Nickname    string             // User-friendly name
+	IsDefault   bool               // Default credential for this device
+	UserSaved   bool               // User explicitly saved this credential
+	DeviceInfo  string             // Device identifier (browser, OS)
 }
 
 // CredentialManager manages WebAuthn credentials with smart saving logic
 type CredentialManager struct {
-	store       map[string][]*Credential // userId -> credentials
-	mu          sync.RWMutex
-	sessionKey  string // For idempotency checks
+	store      map[string][]*Credential // userId -> credentials
+	mu         sync.RWMutex
+	sessionKey string // For idempotency checks
 }
 
 // NewCredentialManager creates a new manager
@@ -49,12 +49,12 @@ func NewCredentialManager() *CredentialManager {
 
 // CredentialInfo returned after authentication
 type CredentialInfo struct {
-	ID           string                // Credential ID
-	Provider     CredentialProvider    // Detected provider
-	IsKnown      bool                  // Already saved before
-	NeedsSaving  bool                  // Should ask user to save
-	SaveReason   string                // Why asking to save
-	LastCredID   string                // Last used credential ID (for comparison)
+	ID          string             // Credential ID
+	Provider    CredentialProvider // Detected provider
+	IsKnown     bool               // Already saved before
+	NeedsSaving bool               // Should ask user to save
+	SaveReason  string             // Why asking to save
+	LastCredID  string             // Last used credential ID (for comparison)
 }
 
 // AuthenticateAndAnalyze checks credential after successful authentication
@@ -272,14 +272,14 @@ func DetectProvider(cred *Credential) CredentialProvider {
 
 // CredentialSnapshot for audit logging
 type CredentialSnapshot struct {
-	UserID        string
-	CredentialID  string
-	Provider      CredentialProvider
-	Action        string // "authenticated", "saved", "skipped", "deleted"
-	Timestamp     time.Time
-	DeviceInfo    string
-	Success       bool
-	ErrorMessage  string
+	UserID       string
+	CredentialID string
+	Provider     CredentialProvider
+	Action       string // "authenticated", "saved", "skipped", "deleted"
+	Timestamp    time.Time
+	DeviceInfo   string
+	Success      bool
+	ErrorMessage string
 }
 
 // AuditLog stores credential events
@@ -327,9 +327,9 @@ func (al *AuditLog) GetEvents(userID string, limit int) []*CredentialSnapshot {
 
 // Stats returns statistics about credentials
 type CredentialStats struct {
-	TotalUsers        int
-	TotalCredentials  int
-	SavedCredentials  int
+	TotalUsers           int
+	TotalCredentials     int
+	SavedCredentials     int
 	ProviderDistribution map[CredentialProvider]int
 	AverageSavedPerUser  float64
 }

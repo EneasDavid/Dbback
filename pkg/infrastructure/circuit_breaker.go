@@ -11,38 +11,38 @@ import (
 type CircuitState string
 
 const (
-	StateClosed    CircuitState = "closed"    // Normal operation
-	StateOpen      CircuitState = "open"      // Failing fast
-	StateHalfOpen  CircuitState = "half_open" // Testing recovery
+	StateClosed   CircuitState = "closed"    // Normal operation
+	StateOpen     CircuitState = "open"      // Failing fast
+	StateHalfOpen CircuitState = "half_open" // Testing recovery
 )
 
 // CircuitBreaker implements the circuit breaker pattern to prevent cascading failures
 type CircuitBreaker struct {
-	name              string
-	state             CircuitState
-	failureCount      int
-	successCount      int
-	lastFailureTime   time.Time
-	lastStateChange   time.Time
-	mu                sync.RWMutex
-	failureThreshold  int
-	successThreshold  int
-	timeout           time.Duration
-	maxConcurrent     int
-	activeRequests    int
-	onStateChange     func(oldState, newState CircuitState)
+	name             string
+	state            CircuitState
+	failureCount     int
+	successCount     int
+	lastFailureTime  time.Time
+	lastStateChange  time.Time
+	mu               sync.RWMutex
+	failureThreshold int
+	successThreshold int
+	timeout          time.Duration
+	maxConcurrent    int
+	activeRequests   int
+	onStateChange    func(oldState, newState CircuitState)
 }
 
 // NewCircuitBreaker creates a new circuit breaker
 func NewCircuitBreaker(name string, failureThreshold int, timeout time.Duration) *CircuitBreaker {
 	return &CircuitBreaker{
-		name:              name,
-		state:             StateClosed,
-		failureThreshold:  failureThreshold,
-		successThreshold:  failureThreshold / 2, // Half the failures needed to recover
-		timeout:           timeout,
-		maxConcurrent:     100,
-		lastStateChange:   time.Now(),
+		name:             name,
+		state:            StateClosed,
+		failureThreshold: failureThreshold,
+		successThreshold: failureThreshold / 2, // Half the failures needed to recover
+		timeout:          timeout,
+		maxConcurrent:    100,
+		lastStateChange:  time.Now(),
 	}
 }
 

@@ -11,12 +11,12 @@ import (
 
 // RetryPolicy defines retry behavior
 type RetryPolicy struct {
-	MaxAttempts      int           // Max number of attempts
-	InitialDelay     time.Duration // Initial backoff delay
-	MaxDelay         time.Duration // Maximum backoff delay
-	BackoffMultiplier float64      // Multiplier for exponential backoff
-	JitterFraction   float64       // Jitter as fraction of delay (0-1)
-	IsRetryable      func(error) bool
+	MaxAttempts       int           // Max number of attempts
+	InitialDelay      time.Duration // Initial backoff delay
+	MaxDelay          time.Duration // Maximum backoff delay
+	BackoffMultiplier float64       // Multiplier for exponential backoff
+	JitterFraction    float64       // Jitter as fraction of delay (0-1)
+	IsRetryable       func(error) bool
 }
 
 // DefaultRetryPolicy provides sensible defaults
@@ -36,10 +36,10 @@ func DefaultRetryPolicy() *RetryPolicy {
 
 // RetryResult contains result of retry attempt
 type RetryResult struct {
-	Attempt      int
-	Error        error
-	LastError    error
-	DelayBefore  time.Duration
+	Attempt       int
+	Error         error
+	LastError     error
+	DelayBefore   time.Duration
 	TotalDuration time.Duration
 }
 
@@ -150,11 +150,11 @@ func (re *RetryableError) Error() string {
 
 // RetryQueue manages multiple concurrent retries
 type RetryQueue struct {
-	queue    chan func()
-	workers  int
-	done     chan struct{}
-	active   int
-	mu       sync.Mutex
+	queue   chan func()
+	workers int
+	done    chan struct{}
+	active  int
+	mu      sync.Mutex
 }
 
 // NewRetryQueue creates a queue with worker goroutines
@@ -213,10 +213,10 @@ func (rq *RetryQueue) Stop() {
 
 // Fallback provides alternative data when primary fails
 type Fallback struct {
-	primary     func(context.Context) (interface{}, error)
-	secondary   func(context.Context) (interface{}, error)
+	primary      func(context.Context) (interface{}, error)
+	secondary    func(context.Context) (interface{}, error)
 	maxStaleness time.Duration
-	lastSuccess time.Time
+	lastSuccess  time.Time
 	cachedData   interface{}
 	mu           sync.RWMutex
 }
@@ -228,10 +228,10 @@ func NewFallback(
 	maxStaleness time.Duration,
 ) *Fallback {
 	return &Fallback{
-		primary:       primary,
-		secondary:     secondary,
-		maxStaleness:  maxStaleness,
-		lastSuccess:   time.Now(),
+		primary:      primary,
+		secondary:    secondary,
+		maxStaleness: maxStaleness,
+		lastSuccess:  time.Now(),
 	}
 }
 
@@ -266,12 +266,12 @@ func (f *Fallback) Get(ctx context.Context) (interface{}, bool, error) {
 
 // Stats for retry attempts
 type RetryStats struct {
-	TotalAttempts   int64
+	TotalAttempts      int64
 	SuccessfulAttempts int64
-	FailedAttempts  int64
-	TotalRetries    int64
-	AverageAttempts float64
-	MaxBackoffReached int64
+	FailedAttempts     int64
+	TotalRetries       int64
+	AverageAttempts    float64
+	MaxBackoffReached  int64
 }
 
 // StatsCollector collects retry statistics

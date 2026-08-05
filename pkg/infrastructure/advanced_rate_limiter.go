@@ -11,9 +11,9 @@ import (
 // TokenBucket implements the token bucket algorithm for rate limiting
 type TokenBucket struct {
 	name          string
-	capacity      float64       // max tokens
-	refillRate    float64       // tokens per second
-	tokens        float64       // current tokens
+	capacity      float64 // max tokens
+	refillRate    float64 // tokens per second
+	tokens        float64 // current tokens
 	lastRefill    time.Time
 	mu            sync.Mutex
 	rejectedCount int64
@@ -160,13 +160,13 @@ func (lb *LeakyBucket) Stats() map[string]interface{} {
 	defer lb.mu.Unlock()
 
 	return map[string]interface{}{
-		"name":         lb.name,
-		"queue_size":   len(lb.queue),
-		"queue_cap":    cap(lb.queue),
-		"accepted":     lb.accepted,
-		"rejections":   lb.rejections,
-		"leak_rate":    lb.leakRate.String(),
-		"fill_ratio":   float64(len(lb.queue)) / float64(cap(lb.queue)),
+		"name":       lb.name,
+		"queue_size": len(lb.queue),
+		"queue_cap":  cap(lb.queue),
+		"accepted":   lb.accepted,
+		"rejections": lb.rejections,
+		"leak_rate":  lb.leakRate.String(),
+		"fill_ratio": float64(len(lb.queue)) / float64(cap(lb.queue)),
 	}
 }
 

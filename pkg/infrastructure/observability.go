@@ -16,14 +16,14 @@ type StructuredLogger struct {
 
 // LogEntry represents a structured log entry
 type LogEntry struct {
-	Timestamp   time.Time              `json:"timestamp"`
-	Component   string                 `json:"component"`
-	Level       string                 `json:"level"`
-	Message     string                 `json:"message"`
-	Fields      map[string]interface{} `json:"fields,omitempty"`
-	TraceID     string                 `json:"trace_id,omitempty"`
-	Error       string                 `json:"error,omitempty"`
-	Duration    float64                `json:"duration_ms,omitempty"`
+	Timestamp time.Time              `json:"timestamp"`
+	Component string                 `json:"component"`
+	Level     string                 `json:"level"`
+	Message   string                 `json:"message"`
+	Fields    map[string]interface{} `json:"fields,omitempty"`
+	TraceID   string                 `json:"trace_id,omitempty"`
+	Error     string                 `json:"error,omitempty"`
+	Duration  float64                `json:"duration_ms,omitempty"`
 }
 
 // NewStructuredLogger creates a new structured logger
@@ -71,32 +71,32 @@ func (sl *StructuredLogger) Debug(message string, fields map[string]interface{})
 
 // Profiler captures performance metrics
 type Profiler struct {
-	name       string
-	startTime  time.Time
-	metrics    *RuntimeMetrics
-	mu         sync.Mutex
+	name      string
+	startTime time.Time
+	metrics   *RuntimeMetrics
+	mu        sync.Mutex
 }
 
 // RuntimeMetrics captures Go runtime metrics
 type RuntimeMetrics struct {
-	Timestamp        time.Time
-	Goroutines       int
-	HeapAlloc        uint64
-	HeapSys          uint64
-	HeapIdle         uint64
-	HeapInuse        uint64
-	HeapReleased     uint64
-	HeapObjects      uint64
-	StackInuse       uint64
-	StackSys         uint64
-	MSpanInuse       uint64
-	MCacheInuse      uint64
-	MallocCount      uint64
-	FreeCount        uint64
-	LiveObjects      uint64
-	PauseTotalNs     uint64
-	PauseCount       uint32
-	GCCPUFraction    float64
+	Timestamp     time.Time
+	Goroutines    int
+	HeapAlloc     uint64
+	HeapSys       uint64
+	HeapIdle      uint64
+	HeapInuse     uint64
+	HeapReleased  uint64
+	HeapObjects   uint64
+	StackInuse    uint64
+	StackSys      uint64
+	MSpanInuse    uint64
+	MCacheInuse   uint64
+	MallocCount   uint64
+	FreeCount     uint64
+	LiveObjects   uint64
+	PauseTotalNs  uint64
+	PauseCount    uint32
+	GCCPUFraction float64
 }
 
 // NewProfiler creates a new profiler
@@ -144,27 +144,27 @@ func (p *Profiler) Stop() *ProfileResult {
 	duration := time.Since(p.startTime)
 
 	return &ProfileResult{
-		Name:              p.name,
-		Duration:          duration,
-		StartMetrics:      p.metrics,
-		EndMetrics:        endMetrics,
-		MemoryDelta:       int64(endMetrics.HeapAlloc) - int64(p.metrics.HeapAlloc),
-		GoroutineDelta:    endMetrics.Goroutines - p.metrics.Goroutines,
-		AllocationsDelta:  int64(endMetrics.MallocCount) - int64(p.metrics.MallocCount),
-		DeallocsDelta:     int64(endMetrics.FreeCount) - int64(p.metrics.FreeCount),
+		Name:             p.name,
+		Duration:         duration,
+		StartMetrics:     p.metrics,
+		EndMetrics:       endMetrics,
+		MemoryDelta:      int64(endMetrics.HeapAlloc) - int64(p.metrics.HeapAlloc),
+		GoroutineDelta:   endMetrics.Goroutines - p.metrics.Goroutines,
+		AllocationsDelta: int64(endMetrics.MallocCount) - int64(p.metrics.MallocCount),
+		DeallocsDelta:    int64(endMetrics.FreeCount) - int64(p.metrics.FreeCount),
 	}
 }
 
 // ProfileResult contains profiling results
 type ProfileResult struct {
-	Name              string
-	Duration          time.Duration
-	StartMetrics      *RuntimeMetrics
-	EndMetrics        *RuntimeMetrics
-	MemoryDelta       int64
-	GoroutineDelta    int
-	AllocationsDelta  int64
-	DeallocsDelta     int64
+	Name             string
+	Duration         time.Duration
+	StartMetrics     *RuntimeMetrics
+	EndMetrics       *RuntimeMetrics
+	MemoryDelta      int64
+	GoroutineDelta   int
+	AllocationsDelta int64
+	DeallocsDelta    int64
 }
 
 // String returns human-readable profile result
